@@ -408,6 +408,11 @@ type Ethash struct {
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
+	//minning params
+	powTargetTimespan int64
+	powLimit int64
+	powTargetSpacing int64
+
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
@@ -429,6 +434,9 @@ func New(config Config) *Ethash {
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeter(),
+		powTargetTimespan: 24 * 60 * 60,
+		powTargetSpacing: 5 * 60,
+		powLimit: 1600000,
 	}
 }
 

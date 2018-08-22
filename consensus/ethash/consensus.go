@@ -17,8 +17,7 @@
 package ethash
 
 import (
-	"bytes"
-	"errors"
+		"errors"
 	"fmt"
 	"math/big"
 	"runtime"
@@ -31,7 +30,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
-	set "gopkg.in/fatih/set.v0"
+	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -287,8 +287,34 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
+//func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+//	return CalcDifficulty(chain.Config(), time, parent)
+//}
+
 func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
-	return CalcDifficulty(chain.Config(), time, parent)
+	var difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
+
+	if(((parent.Number.Int64() + 1)) % difficultyAdjustInterval)!= 0{
+		return parent.Difficulty
+	}else {
+
+		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() +1 - difficultyAdjustInterval)).Time.Int64()))
+		if(actualTimespan < (uint64)(ethash.powTargetTimespan / 4)){
+			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+		}
+		if(actualTimespan > (uint64)(ethash.powTargetTimespan / 4)){
+			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+		}
+		var powLimit int64 = ethash.powLimit
+		var newDifficulty *big.Int= parent.Difficulty
+		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
+		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
+		if(newDifficulty.Int64() < powLimit){
+			newDifficulty = new(big.Int).SetInt64(powLimit)
+		}
+		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
+		return newDifficulty
+	}
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
@@ -478,21 +504,15 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 		return errInvalidDifficulty
 	}
 	// Recompute the digest and PoW value and verify against the header
-	number := header.Number.Uint64()
+//	number := header.Number.Uint64()
 
-	cache := ethash.cache(number)
-	size := datasetSize(number)
-	if ethash.config.PowMode == ModeTest {
-		size = 32 * 1024
-	}
-	digest, result := hashimotoLight(size, cache.cache, header.HashNoNonce().Bytes(), header.Nonce.Uint64())
+//	cache := ethash.cache(number)
+//	size := datasetSize(number)
+
+	result := hashimotoLight(header.HashNoNonce().Bytes(), header.Nonce.Uint64())
 	// Caches are unmapped in a finalizer. Ensure that the cache stays live
 	// until after the call to hashimotoLight so it's not unmapped while being used.
-	runtime.KeepAlive(cache)
-
-	if !bytes.Equal(header.MixDigest[:], digest) {
-		return errInvalidMixDigest
-	}
+//	runtime.KeepAlive(cache)
 	target := new(big.Int).Div(maxUint256, header.Difficulty)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
