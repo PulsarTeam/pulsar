@@ -434,9 +434,9 @@ func New(config Config) *Ethash {
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeter(),
-		powTargetTimespan: 24 * 60 * 60,
-		powTargetSpacing: 5 * 60,
-		powLimit: 1600000,
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
 	}
 }
 
