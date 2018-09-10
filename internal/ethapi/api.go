@@ -1122,7 +1122,7 @@ type SendTxArgs struct {
 
 	//add options for Ds-Pow
 	TxType  uint8     `json:"txType"`
-	Fee     *uint32   `json:"delegateFee"`
+	Fee     uint32   `json:"delegateFee"`
 }
 
 // setDefaults is a helper function that fills in default values for unspecified tx fields.
