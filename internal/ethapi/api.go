@@ -1119,6 +1119,10 @@ type SendTxArgs struct {
 	// newer name and should be preferred by clients.
 	Data  *hexutil.Bytes `json:"data"`
 	Input *hexutil.Bytes `json:"input"`
+
+	//add options for Ds-Pow
+	TxType  uint8     `json:"txType"`
+	Fee     *uint32   `json:"delegateFee"`
 }
 
 // setDefaults is a helper function that fills in default values for unspecified tx fields.
