@@ -83,6 +83,8 @@ type Header struct {
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
 	Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
+	PosProduction *big.Int     `json:"posProduction"    gencodec:"required"`
+	PowProduction *big.Int     `json:"powProduction"    gencodec:"required"`
 }
 
 // field type overrides for gencodec
