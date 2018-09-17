@@ -20,6 +20,6 @@ func getLastCycleDepositAmount()(*big.Int,error)  {
 	return new(big.Int),nil
 }
 
-func getLastCycleDepositors()(uint64,error)  {
+func getLastCycleDelegateMiners()(uint64,error)  {
 	return 0,nil
 }
