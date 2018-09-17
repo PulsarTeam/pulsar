@@ -16,6 +16,10 @@ func getDepositors(address common.Address)([]Depositor, error)  {
 	return depositors,nil
 }
 
-func getLastCycleDepositAmount()(*big.Int)  {
-	return new(big.Int)
+func getLastCycleDepositAmount()(*big.Int,error)  {
+	return new(big.Int),nil
+}
+
+func getLastCycleDepositors()(uint64,error)  {
+	return 0,nil
 }
