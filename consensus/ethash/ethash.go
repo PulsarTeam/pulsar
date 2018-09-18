@@ -20,6 +20,9 @@ package ethash
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/delegateminers"
+	"github.com/ethereum/go-ethereum/core/types"
 	"math"
 	"math/big"
 	"math/rand"
@@ -32,7 +35,7 @@ import (
 	"time"
 	"unsafe"
 
-	mmap "github.com/edsrzf/mmap-go"
+	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -495,6 +498,72 @@ func NewFullFaker() *Ethash {
 // in the same process.
 func NewShared() *Ethash {
 	return &Ethash{shared: sharedEthash}
+}
+
+// calculate the pos difficulty target.
+func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Header) *big.Int {
+	depositors, _ := delegateminers.GetDepositors(minerAddr)
+	count := len(depositors)
+	posLocalSum := big.NewInt(0)
+	for i := 0; i < count; i++ {
+		posLocalSum= new(big.Int).Add(posLocalSum, depositors[i].Amount)
+	}
+	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount()
+	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners()
+	target := new(big.Int) .Div(maxUint256, header.Difficulty)
+	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
+	y := new(big.Int).Mul(x, posLocalSum)
+	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
+	posTarget := new(big.Int).Div(z, posNetworkSum)
+	return posTarget
+}
+
+// returns the pos weight in a certain epoch.
+func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) {
+	powProduction := ethash.GetPowProduction(chain, header)
+	posProduction := ethash.GetPosProduction(chain, header)
+	t := big.NewInt(0)
+	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
+		return
+	}
+	w := new(big.Int).Div(powProduction, new(big.Int).Add(powProduction, posProduction))
+	pw := uint32(w.Uint64())
+	header.PosWeight = pw
+}
+
+// returns the total pow production in a certain cycle.
+func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
+	t := ethash.GetCycle()
+	p := header.Number.Uint64() / t
+	if p == 0 {
+		return big.NewInt(0)
+	}
+	var i uint64
+	sumPow := big.NewInt(0)
+	for i = (p - 1) * t; i < p * t; i++ {
+		sumPow.Add(sumPow, header.PowProduction)
+	}
+	return sumPow
+}
+
+// returns the total pos production in a certain cycle.
+func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
+	t := ethash.GetCycle()
+	p := header.Number.Uint64() / t
+	if p == 0 {
+		return big.NewInt(0)
+	}
+	var i uint64
+	sumPos := big.NewInt(0)
+	for i = (p - 1) * t; i < p * t; i++ {
+		sumPos.Add(sumPos, header.PosProduction)
+	}
+	return sumPos
+}
+
+// returns the cycle.
+func (ethash *Ethash)GetCycle() uint64 {
+	return uint64(ethash.powTargetTimespan / ethash.powTargetSpacing)
 }
 
 // cache tries to retrieve a verification cache for the specified block number
