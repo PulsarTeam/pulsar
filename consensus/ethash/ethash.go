@@ -517,7 +517,13 @@ func NewFullFaker() *Ethash {
 // NewShared creates a full sized ethash PoW shared between all requesters running
 // in the same process.
 func NewShared() *Ethash {
-	return &Ethash{shared: sharedEthash}
+//	return &Ethash{shared: sharedEthash}
+	return &Ethash{
+		shared: sharedEthash,
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
+	}
 }
 
 // calculate the pos difficulty target.
