@@ -40,6 +40,7 @@ var (
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
+	InterestRate           *big.Int = big.NewInt(100)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -295,7 +296,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	return nil
 }
 
-// CalcDifficulty is the difficulty adjustment algorithm. It returns
+// CCalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 //func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
@@ -556,11 +557,30 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 // setting the final state and assembling the block.
 func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
+
+	var err error = nil
+	powProduction := calculatePowRewards(chain.Config(), state, header, uncles)
+	if header.PowProduction == nil {
+		header.PowProduction = accumulatePowRewards(chain.Config(), state, header, uncles)
+	} else if  powProduction != header.PowProduction {
+		err = errors.New(`pow production check error!`)
+	}
+
+	//miner := state.GetAgencyMiner(header.Coinbase)
+	//if miner.Type = 1 {
+
+		posProduction := calculatePosRewards(chain.Config(), state, header, uncles)
+		if header.PosProduction == nil {
+			header.PosProduction = accumulatePosRewards(chain.Config(), state, header, uncles)
+		} else if posProduction != header.PosProduction {
+			// error!
+			err = errors.New(`pos production check error!`)
+		}
+	//}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
-	return types.NewBlock(header, txs, uncles, receipts), nil
+	return types.NewBlock(header, txs, uncles, receipts), err
 }
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -569,10 +589,10 @@ var (
 	big32 = big.NewInt(32)
 )
 
-// AccumulateRewards credits the coinbase of the given block with the mining
+// AccumulatePowRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulatePowRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if config.IsByzantium(header.Number) {
@@ -581,6 +601,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	// Accumulate the rewards for the miner and any included uncles
 	reward := new(big.Int).Set(blockReward)
 	r := new(big.Int)
+	total := new(big.Int)
 	for _, uncle := range uncles {
 		r.Add(uncle.Number, big8)
 		r.Sub(r, header.Number)
@@ -588,8 +609,92 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		r.Div(r, big8)
 		state.AddBalance(uncle.Coinbase, r)
 
+		total.Add(total,r)
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
 	state.AddBalance(header.Coinbase, reward)
+	total.Add(total, reward)
+	return total
+}
+
+
+// CalculateRewards calculate all the POW mining reward of the block(include uncles' rewards).
+// The total reward consists of the static block reward and rewards for
+// included uncles. The coinbase of each uncle block is also rewarded.
+func calculatePowRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+	// Select the correct block reward based on chain progression
+	blockReward := FrontierBlockReward
+	if config.IsByzantium(header.Number) {
+		blockReward = ByzantiumBlockReward
+	}
+	// Accumulate the rewards for the miner and any included uncles
+	reward := new(big.Int).Set(blockReward)
+	r := new(big.Int)
+	total := new(big.Int)
+	for _, uncle := range uncles {
+		r.Add(uncle.Number, big8)
+		r.Sub(r, header.Number)
+		r.Mul(r, blockReward)
+		r.Div(r, big8)
+		total.Add(total,r)
+
+		r.Div(blockReward, big32)
+		reward.Add(reward, r)
+	}
+
+	total.Add(total, reward)
+	return total
+}
+
+
+
+// AccumulatePosRewards credits the coinbase of the given block with the mining
+// reward. The total reward consists of the static block reward and rewards for
+// included uncles. The coinbase of each uncle block is also rewarded.
+func accumulatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+
+	// InterestRate
+
+	// delegate := state.GetAgencyMiner(header.Coinbase)
+
+	// stakeholders :=  delegate.getAllStakeholders(deleagte)
+
+	total := new(big.Int)
+	//feeTotal := new(big.Int)
+
+	//for _, stakeholder := range stakeholders {
+	//	rewardStakeRaw = stakeholder.DepositBalance * (InterestRate/10000000000)
+	//	delegateFee = rewardStakeRaw * (stakeholder.FeeRatio/100)
+	//	rewardStake = rewardStakeRaw - delegateFee
+	//	feeTotal.Add(feeTotal, delegateFee)
+	//	total.Add(total,rewardStakeRaw)
+	//	state.AddBalance(stakeholder.Coinbase, rewardStake)
+	//}
+	//state.AddBalance(header.Coinbase, feeTotal)
+	return total
+}
+
+// CalculatePosRewards calculate all the POS reward of the block(the stake reward).
+// The total reward consists of the stake rewards paid to the stake holders and
+// the delegate fee paid to delegate miners.
+func calculatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+
+	// InterestRate
+
+	// delegate := state.GetAgencyMiner(header.Coinbase)
+
+	// stakeholders :=  delegate.getAllStakeholders(deleagte)
+
+	total := new(big.Int)
+	//feeTotal := new(big.Int)
+
+	//for _, stakeholder := range stakeholders {
+	//	rewardStakeRaw = stakeholder.DepositBalance * (InterestRate/10000000000)
+	//	delegateFee = rewardStakeRaw * (stakeholder.FeeRatio/100)
+	//	rewardStake = rewardStakeRaw - delegateFee
+	//	feeTotal.Add(feeTotal, delegateFee)
+	//	total.Add(total,rewardStakeRaw)
+	//}
+	return total
 }
