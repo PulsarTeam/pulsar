@@ -72,6 +72,23 @@ func (s *PublicEthereumAPI) ProtocolVersion() hexutil.Uint {
 	return hexutil.Uint(s.b.ProtocolVersion())
 }
 
+//For Ds-pow: GetAllDelegateMiners return a list of all delegate miners
+func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error){
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	fields := map[common.Address]interface{}{}
+	minerList := state.GetAllDelegateMiners()
+
+	for addr, miner := range minerList{
+		fields[addr] = miner
+	}
+
+	return fields, state.Error()
+}
+
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:
 // - startingBlock: block number this node started to synchronise from
@@ -609,6 +626,9 @@ type CallArgs struct {
 	GasPrice hexutil.Big     `json:"gasPrice"`
 	Value    hexutil.Big     `json:"value"`
 	Data     hexutil.Bytes   `json:"data"`
+	//for Ds-Pow
+	TxType 	 byte  		     `json:"txType"`
+	Fee      hexutil.Uint 	 `json:"delegateFee"`
 }
 
 func (s *PublicBlockChainAPI) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
@@ -637,7 +657,7 @@ func (s *PublicBlockChainAPI) doCall(ctx context.Context, args CallArgs, blockNr
 	}
 
 	// Create new call message
-	msg := types.NewMessage(addr, args.To, 0, args.Value.ToInt(), gas, gasPrice, args.Data, false)
+	msg := types.NewMessage(addr, args.To, 0, args.Value.ToInt(), gas, gasPrice, args.Data, false, args.TxType, (uint32)(args.Fee))
 
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
@@ -872,6 +892,9 @@ type RPCTransaction struct {
 	V                *hexutil.Big    `json:"v"`
 	R                *hexutil.Big    `json:"r"`
 	S                *hexutil.Big    `json:"s"`
+	//for Ds-Pow
+	TxType 		 hexutil.Uint  	     `json:"txType"`
+	Fee          hexutil.Uint 	     `json:"delegateFee"`
 }
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
@@ -884,6 +907,12 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 	from, _ := types.Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
 
+	var fee uint32
+	if tx.TxType() == params.DelegateMinerRegisterTx{
+		fee, _ = tx.Fee()
+	}else{
+		fee = 0
+	}
 	result := &RPCTransaction{
 		From:     from,
 		Gas:      hexutil.Uint64(tx.Gas()),
@@ -896,6 +925,9 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		V:        (*hexutil.Big)(v),
 		R:        (*hexutil.Big)(r),
 		S:        (*hexutil.Big)(s),
+			//for ds-pow
+		TxType:   (hexutil.Uint)(tx.TxType()),
+		Fee:      (hexutil.Uint)(fee),
 	}
 	if blockHash != (common.Hash{}) {
 		result.BlockHash = blockHash
@@ -1176,7 +1208,7 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 	if args.To == nil {
 		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
 	}
-	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, args.TxType, args.Fee)
 }
 
 // submitTransaction is a helper function that submits tx to txPool and logs a message.

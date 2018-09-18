@@ -21,6 +21,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/state"
 )
 
 // StateDB is an EVM database for full state querying.
@@ -30,6 +31,16 @@ type StateDB interface {
 	SubBalance(common.Address, *big.Int)
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
+	/**
+	 * @brief Default account deposit balance to a delegate miner.
+	 * @param from: the deposit balance account
+	 * @param to: the delegate miner account who accept the deposit
+	 * @param balance: the deposit amount.
+	 * @param blockNumber: the future mature block.
+	*/
+	Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error
+	SetAccountType(common.Address, uint8, uint32)
+	GetAllDelegateMiners()map[common.Address]state.DMView
 
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)

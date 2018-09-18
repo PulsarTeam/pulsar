@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -58,6 +59,10 @@ type txdata struct {
 
 	// This is only used when marshaling to JSON.
 	Hash *common.Hash `json:"hash" rlp:"-"`
+
+	//for Ds-Pow
+	TxType uint8  `json:"txType"`
+	Fee    uint32 `json:"delegateFee"`
 }
 
 type txdataMarshaling struct {
@@ -69,17 +74,20 @@ type txdataMarshaling struct {
 	V            *hexutil.Big
 	R            *hexutil.Big
 	S            *hexutil.Big
+	//for Ds-Pow
+	TxType 		 hexutil.Uint
+	Fee          hexutil.Uint
 }
 
-func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
+func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, txType byte, fee uint32) *Transaction {
+	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data, txType, fee)
 }
 
 func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data)
+	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data, params.NormalTx, 0)
 }
 
-func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
+func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, txType byte, fee uint32) *Transaction {
 	if len(data) > 0 {
 		data = common.CopyBytes(data)
 	}
@@ -93,6 +101,9 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 		V:            new(big.Int),
 		R:            new(big.Int),
 		S:            new(big.Int),
+		//for Ds-Pow
+		TxType:       txType,
+		Fee:		  fee,
 	}
 	if amount != nil {
 		d.Amount.Set(amount)
@@ -173,6 +184,15 @@ func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.data.Pri
 func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amount) }
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
+//for Ds-Pow
+func (tx *Transaction) TxType() uint8   { return tx.data.TxType }
+func (tx *Transaction) Fee() (uint32, error) {
+	if tx.data.TxType == params.DelegateMinerRegisterTx{
+		return tx.data.Fee, nil
+	}
+
+	return 0, errors.New("This is not a transaction for miner regester to be a delegate one!")
+}
 
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
@@ -221,6 +241,9 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
 		checkNonce: true,
+		//for Ds-Pow
+		txType:     tx.data.TxType,
+		fee:        tx.data.Fee,
 	}
 
 	var err error
@@ -387,9 +410,12 @@ type Message struct {
 	gasPrice   *big.Int
 	data       []byte
 	checkNonce bool
+	//for Ds-Pow
+	txType uint8
+	fee    uint32
 }
 
-func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool) Message {
+func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool, txType uint8, fee uint32) Message {
 	return Message{
 		from:       from,
 		to:         to,
@@ -399,6 +425,8 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		gasPrice:   gasPrice,
 		data:       data,
 		checkNonce: checkNonce,
+		txType:		txType,
+		fee:		fee,
 	}
 }
 
@@ -410,3 +438,13 @@ func (m Message) Gas() uint64          { return m.gasLimit }
 func (m Message) Nonce() uint64        { return m.nonce }
 func (m Message) Data() []byte         { return m.data }
 func (m Message) CheckNonce() bool     { return m.checkNonce }
+//for Ds-Pow
+func (m Message) TxType() uint8   { return m.txType }
+func (m Message) Fee() (uint32, error) {
+	if m.txType == params.DelegateMinerRegisterTx{
+		return m.fee, nil
+	}
+
+    err := errors.New("this is not a Message for miner register to be a delegate one")
+	return 0, err
+}
