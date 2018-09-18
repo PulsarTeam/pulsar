@@ -7,7 +7,7 @@ import (
 
 type Depositor struct {
 	Addr common.Address
-	Amount    big.Int
+	Amount    *big.Int
 }
 
 type DelegateMiner struct {

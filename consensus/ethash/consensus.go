@@ -57,6 +57,7 @@ var (
 	errInvalidDifficulty = errors.New("non-positive difficulty")
 	errInvalidMixDigest  = errors.New("invalid mix digest")
 	errInvalidPoW        = errors.New("invalid proof-of-work")
+	errInvalidPosWeight  = errors.New("invalid pos weight")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -245,6 +246,16 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
 	}
+
+	// Verify the pos weight
+	pos := ethash.GetPosProduction(chain, header)
+	pow := ethash.GetPowProduction(chain, header)
+	y := new(big.Int).Add(pos, pow)
+	w := new(big.Int).Div(pos, y)
+	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
+		return fmt.Errorf("invalid pos weight: have %v, max %v", header.PosWeight, w)
+	}
+
 	// Verify that the gas limit is <= 2^63-1
 	cap := uint64(0x7fffffffffffffff)
 	if header.GasLimit > cap {
@@ -526,6 +537,16 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}
+
+	// verify pos weight
+	pos := ethash.GetPosProduction(chain, header)
+	pow := ethash.GetPowProduction(chain, header)
+	y := new(big.Int).Add(pos, pow)
+	w := new(big.Int).Div(pos, y)
+	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
+		return errInvalidPosWeight
+	}
+
 	return nil
 }
 
