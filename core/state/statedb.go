@@ -626,3 +626,20 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
 }
+
+func (s *StateDB)Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error{
+	return nil
+}
+
+func (s *StateDB)SetAccountType(common.Address, uint8, uint32){
+
+}
+
+func (s *StateDB)GetAllDelegateMiners()map[common.Address]DMView{
+	dm := make(map[common.Address]DMView)
+	var addr common.Address
+	var pos *big.Int
+	dm[addr] = DMView{1, pos}
+
+	return dm
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 var _ = (*txdataMarshaling)(nil)
@@ -25,6 +26,10 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 		R            *hexutil.Big    `json:"r" gencodec:"required"`
 		S            *hexutil.Big    `json:"s" gencodec:"required"`
 		Hash         *common.Hash    `json:"hash" rlp:"-"`
+
+		//for Ds-Pow
+		TxType 		 hexutil.Uint  	  `json:"txType"`
+		Fee          hexutil.Uint 	  `json:"delegateFee"`
 	}
 	var enc txdata
 	enc.AccountNonce = hexutil.Uint64(t.AccountNonce)
@@ -37,6 +42,9 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 	enc.R = (*hexutil.Big)(t.R)
 	enc.S = (*hexutil.Big)(t.S)
 	enc.Hash = t.Hash
+	//for Ds-Pow
+	enc.TxType = (hexutil.Uint)(t.TxType)
+	enc.Fee = (hexutil.Uint)(t.Fee)
 	return json.Marshal(&enc)
 }
 
@@ -52,6 +60,10 @@ func (t *txdata) UnmarshalJSON(input []byte) error {
 		R            *hexutil.Big    `json:"r" gencodec:"required"`
 		S            *hexutil.Big    `json:"s" gencodec:"required"`
 		Hash         *common.Hash    `json:"hash" rlp:"-"`
+
+		//for Ds-Pow
+		TxType 		 hexutil.Uint  	  `json:"txType"`
+		Fee          hexutil.Uint 	  `json:"delegateFee"`
 	}
 	var dec txdata
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -95,5 +107,12 @@ func (t *txdata) UnmarshalJSON(input []byte) error {
 	if dec.Hash != nil {
 		t.Hash = dec.Hash
 	}
+	//for Ds-Pow
+	t.TxType = (uint8)(dec.TxType)
+	if t.TxType == params.DelegateMinerRegisterTx && t.Fee > params.MaxDelegateFeeLimit{
+		return errors.New("delegate miner's fee too large")
+	}
+	t.Fee = (uint32)(dec.Fee)
+
 	return nil
 }

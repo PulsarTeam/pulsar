@@ -408,7 +408,7 @@ type Ethash struct {
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
-	//minning params
+	//mining params
 	powTargetTimespan int64
 	powLimit int64
 	powTargetSpacing int64
@@ -460,6 +460,7 @@ func NewFaker() *Ethash {
 	return &Ethash{
 		config: Config{
 			PowMode: ModeFake,
+
 		},
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,

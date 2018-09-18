@@ -88,6 +88,17 @@ type stateObject struct {
 	deleted   bool
 }
 
+type DepositData struct {
+	Balance *big.Int
+	BlockNumber *big.Int
+}
+
+// View of Delegate Miner
+type DMView struct {
+	FeeRatio uint32
+	DepositBalance *big.Int
+}
+
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
