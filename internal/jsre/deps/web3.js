@@ -3765,6 +3765,9 @@ var inputTransactionFormatter = function (options){
         options[key] = utils.fromDecimal(options[key]);
     });
 
+    options.txType = options.txType
+    options.delegateFee = utils.fromDecimal(options.delegateFee)
+
     return options;
 };
 

@@ -443,7 +443,14 @@ func New(config Config) *Ethash {
 // NewTester creates a small sized ethash PoW scheme useful only for testing
 // purposes.
 func NewTester() *Ethash {
-	return New(Config{CachesInMem: 1, PowMode: ModeTest})
+	return &Ethash{
+		config: Config{
+			PowMode: ModeTest,
+		},
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
+	}
 }
 
 // NewFaker creates a ethash consensus engine with a fake PoW scheme that accepts
@@ -454,6 +461,9 @@ func NewFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
 	}
 }
 
@@ -465,6 +475,9 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
 		fakeFail: fail,
 	}
 }
@@ -477,6 +490,9 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
 		fakeDelay: delay,
 	}
 }
@@ -488,6 +504,9 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
+		powTargetTimespan: 14 * 24 * 60 * 60,
+		powTargetSpacing: 15,
+		powLimit: 131072,
 	}
 }
 
