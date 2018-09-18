@@ -304,7 +304,14 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 //}
 
 func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+	//return new(big.Int).SetInt64(10000)
+
+	//fmt.Println(ethash.powTargetTimespan, ethash.powTargetSpacing)
+	//ethash.powTargetSpacing = 15
+
 	var difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
+
+	//var difficultyAdjustInterval int64 = 100
 
 	if(((parent.Number.Int64() + 1)) % difficultyAdjustInterval)!= 0{
 		return parent.Difficulty
@@ -327,6 +334,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
 		return newDifficulty
 	}
+
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns

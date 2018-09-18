@@ -10,10 +10,14 @@ type Depositor struct {
 	Amount    *big.Int
 }
 
+type DelegateMiner struct {
+	Depositors []Depositor
+	Fee uint64
+}
 
-func GetDepositors(address common.Address)([]Depositor, error)  {
-	depositors := []Depositor{}
-	return depositors,nil
+func GetDepositors(address common.Address)(DelegateMiner, error)  {
+	delegateMiner := DelegateMiner{}
+	return delegateMiner,nil
 }
 
 func GetLastCycleDepositAmount()(*big.Int,error)  {

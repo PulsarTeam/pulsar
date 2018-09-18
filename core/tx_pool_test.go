@@ -72,8 +72,13 @@ func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Tr
 	return pricedTransaction(nonce, gaslimit, big.NewInt(1), key)
 }
 
+func specialTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey, txType uint8, fee uint32)*types.Transaction{
+	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil, txType, fee), types.HomesteadSigner{}, key)
+	return tx
+}
+
 func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
+	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil, params.NormalTx, 0), types.HomesteadSigner{}, key)
 	return tx
 }
 
@@ -257,6 +262,28 @@ func TestInvalidTransactions(t *testing.T) {
 	if err := pool.AddLocal(tx); err != nil {
 		t.Error("expected", nil, "got", err)
 	}
+
+	//max fee
+	local, _ := crypto.GenerateKey()
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
+	if err := pool.AddRemote(tx); err != ErrFeeLimit{
+		t.Error("expected", ErrFeeLimit, "got", err)
+	}
+	if err := pool.AddLocal(tx); err != ErrFeeLimit{
+		t.Error("expected", ErrFeeLimit, "got", err)
+	}
+
+	//type error
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
+	from, _ = deriveSender(tx)
+	pool.currentState.SetBalance(from, big.NewInt(0))
+	if err := pool.AddRemote(tx); err != ErrBalanceForRegister{
+		t.Error("expected", ErrFeeLimit, "got", err)
+	}
+	if err := pool.AddLocal(tx); err != ErrBalanceForRegister{
+		t.Error("expected", ErrFeeLimit, "got", err)
+	}
+
 }
 
 func TestTransactionQueue(t *testing.T) {
@@ -319,7 +346,7 @@ func TestTransactionNegativeValue(t *testing.T) {
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
-	tx, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(-1), 100, big.NewInt(1), nil), types.HomesteadSigner{}, key)
+	tx, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(-1), 100, big.NewInt(1), nil, params.NormalTx, 0), types.HomesteadSigner{}, key)
 	from, _ := deriveSender(tx)
 	pool.currentState.AddBalance(from, big.NewInt(1))
 	if err := pool.AddRemote(tx); err != ErrNegativeValue {
@@ -373,9 +400,9 @@ func TestTransactionDoubleNonce(t *testing.T) {
 	resetState()
 
 	signer := types.HomesteadSigner{}
-	tx1, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 100000, big.NewInt(1), nil), signer, key)
-	tx2, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(2), nil), signer, key)
-	tx3, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(1), nil), signer, key)
+	tx1, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 100000, big.NewInt(1), nil, params.NormalTx, 0), signer, key)
+	tx2, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(2), nil, params.NormalTx, 0), signer, key)
+	tx3, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(1), nil, params.NormalTx, 0), signer, key)
 
 	// Add the first two transaction, ensure higher priced stays only
 	if replace, err := pool.add(tx1, false); err != nil || replace {

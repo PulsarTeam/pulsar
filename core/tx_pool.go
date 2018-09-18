@@ -76,6 +76,15 @@ var (
 	// than some meaningful limit a user might use. This is not a consensus error
 	// making the transaction invalid, rather a DOS protection.
 	ErrOversizedData = errors.New("oversized data")
+
+	//ErrFeeLimit is returned if a DelegateMinerRegisterTx requested too large fee.
+	ErrFeeLimit = errors.New("fee too large")
+
+	//ErrTxTypematch is return if a op get fee from a tx which is not a DelegateMinerRegisterTx
+	ErrTxTypematch = errors.New("transaction is not a DelegateMinerRegisterTx")
+
+	//ErrBalanceForRegister is return if a miner want to be a delegate miner but it's balance is 0
+	ErrBalanceForRegister = errors.New("balance should not zero if want to be a delegate miner")
 )
 
 var (
@@ -571,6 +580,30 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
+	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should not larger than params.MaxDelegateFeeLimit
+	//notice: at first stage, wo not check times of this op, at the second stage, this op should happen one time for a miner
+	if tx.TxType() == params.DelegateMinerRegisterTx{
+		balance := pool.currentState.GetBalance(from)
+		if balance.Sign() < 0 || balance.Sign() == 0{
+			return ErrBalanceForRegister
+		}
+		fee, err := tx.Fee()
+		if err != nil{
+			return ErrTxTypematch
+		}
+		if fee > params.MaxDelegateFeeLimit{
+			return ErrFeeLimit
+		}
+	}
+	//for Ds-pow: if this is a DelegateStakesTx, the shareholder should not make the transaction many times,
+	//and the delegate miner should not make this transaction
+	//\\if tx.TxType() == params.DelegateStakesTx{
+	//\\
+	//\\}
+	//for Ds-pow: if this is a DelegateStakesCancel
+	//\\if tx.TxType() == params.DelegateStakesCancel{
+	//\\
+	//\\}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
