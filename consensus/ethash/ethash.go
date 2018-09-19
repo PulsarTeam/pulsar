@@ -450,6 +450,7 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -479,6 +480,7 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -494,6 +496,7 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -508,6 +511,7 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -520,6 +524,7 @@ func NewShared() *Ethash {
 //	return &Ethash{shared: sharedEthash}
 	return &Ethash{
 		shared: sharedEthash,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
