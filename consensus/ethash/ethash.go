@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-//	"github.com/ethereum/go-ethereum/core/delegateminers"
+	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
 	"math/big"
@@ -450,6 +450,7 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -479,6 +480,7 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -494,6 +496,7 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -508,6 +511,7 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -520,6 +524,7 @@ func NewShared() *Ethash {
 //	return &Ethash{shared: sharedEthash}
 	return &Ethash{
 		shared: sharedEthash,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -528,11 +533,11 @@ func NewShared() *Ethash {
 
 // calculate the pos difficulty target.
 func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Header) *big.Int {
-	/*depositors, _ := delegateminers.GetDepositors(minerAddr)
-	count := len(depositors)
+	miner, _ := delegateminers.GetDepositors(minerAddr)
+	count := len(miner.Depositors)
 	posLocalSum := big.NewInt(0)
 	for i := 0; i < count; i++ {
-		posLocalSum= new(big.Int).Add(posLocalSum, depositors[i].Amount)
+		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 	}
 	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount()
 	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners()
@@ -541,8 +546,7 @@ func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Head
 	y := new(big.Int).Mul(x, posLocalSum)
 	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
 	posTarget := new(big.Int).Div(z, posNetworkSum)
-	return posTarget*/
-	return new(big.Int)
+	return posTarget
 }
 
 // returns the pos weight in a certain epoch.
