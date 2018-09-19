@@ -251,6 +251,9 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	pos := ethash.GetPosProduction(chain, header)
 	pow := ethash.GetPowProduction(chain, header)
 	y := new(big.Int).Add(pos, pow)
+	if y.Cmp(big.NewInt(0)) == 0 {
+		return fmt.Errorf("division by zero")
+	}
 	w := new(big.Int).Div(pos, y)
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return fmt.Errorf("invalid pos weight: have %v, max %v", header.PosWeight, w)
@@ -543,6 +546,9 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	pow := ethash.GetPowProduction(chain, header)
 	y := new(big.Int).Add(pos, pow)
 	w := new(big.Int).Div(pos, y)
+	if y.Cmp(big.NewInt(0)) == 0 {
+		return fmt.Errorf("division by zero")
+	}
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
 	}
