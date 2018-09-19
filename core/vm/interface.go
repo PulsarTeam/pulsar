@@ -21,7 +21,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/state"
 )
 
 // StateDB is an EVM database for full state querying.
@@ -31,16 +30,39 @@ type StateDB interface {
 	SubBalance(common.Address, *big.Int)
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
+
 	/**
-	 * @brief Default account deposit balance to a delegate miner.
+	 * @brief Default account deposit balance to a delegate miner
 	 * @param from: the deposit balance account
 	 * @param to: the delegate miner account who accept the deposit
 	 * @param balance: the deposit amount.
 	 * @param blockNumber: the future mature block.
-	*/
+	 */
 	Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error
-	SetAccountType(common.Address, uint8, uint32)
-	GetAllDelegateMiners()map[common.Address]state.DMView
+
+	/**
+	 * @brief Default account withdraw balance from the delegate miner
+	 * @param from: the withdraw issue account (default account)
+	 * @param to: the delegate miner account who store the deposit
+	 */
+	Withdraw(from common.Address, to common.Address) error
+
+	/**
+	 * @brief Set Account type
+	 * @param account: the account to be set
+	 * @param aType: state.DefaultAccount, state.DelegateMiner, defined in dspow_defs.go
+	 * @param feeRatio: make sense only if the type is DelegateMiner. feeRatio/1,000,000
+	 */
+	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32)
+
+	/**
+	 * @brief Get all registered (before current block number) delegate miners
+	 * @return The map of all delegate miners address and view.
+	 */
+	GetAllDelegateMiners() map[common.Address]common.DMView
+
+	GetAccountType(common.Address) common.AccountType
+	GetDepositMap(common.Address) map[common.Address]common.DepositData
 
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)

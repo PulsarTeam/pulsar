@@ -36,14 +36,6 @@ type revision struct {
 	journalIndex int
 }
 
-var (
-	// emptyState is the known hash of an empty state trie entry.
-	emptyState = crypto.Keccak256Hash(nil)
-
-	// emptyCode is the known hash of the empty EVM bytecode.
-	emptyCode = crypto.Keccak256Hash(nil)
-)
-
 // StateDBs within the ethereum protocol are used to store anything
 // within the merkle trie. StateDBs take care of caching and storing
 // nested states. It's the general query interface to retrieve:
@@ -257,7 +249,18 @@ func (self *StateDB) StorageTrie(addr common.Address) Trie {
 		return nil
 	}
 	cpy := stateObject.deepCopy(self)
-	return cpy.updateTrie(self.db)
+	return cpy.updateStorageTrie(self.db)
+}
+
+// StakeTrie returns the stake trie of an account.
+// The return value is a copy and is nil for non-existent accounts.
+func (self *StateDB) StakeTrie(addr common.Address) Trie {
+	stateObject := self.getStateObject(addr)
+	if stateObject == nil {
+		return nil
+	}
+	cpy := stateObject.deepCopy(self)
+	return cpy.updateStakeTrie(self.db)
 }
 
 func (self *StateDB) HasSuicided(addr common.Address) bool {
@@ -286,6 +289,103 @@ func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
 	if stateObject != nil {
 		stateObject.SubBalance(amount)
 	}
+}
+
+func (self *StateDB) Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error {
+	if balance.Sign() <= 0 || blockNumber.Sign() <= 0 {
+		panic(fmt.Sprintf("invalid parameter: balance: %v, blockNumber: %v\n", balance, blockNumber))
+	}
+	fromObj := self.GetOrNewStateObject(from)
+	toObj := self.GetOrNewStateObject(to)
+	if fromObj == nil || toObj == nil {
+		return fmt.Errorf("object not found")
+	}
+	if fromObj.getType() == common.DelegateMiner || toObj.getType() != common.DelegateMiner {
+		return fmt.Errorf("account type is not allowed to deposit")
+	}
+	if result := fromObj.Balance().Cmp(balance); result < 0 {
+		return fmt.Errorf("account doesn't have enough balance to deposit")
+	}
+	if data := toObj.getDepositData(self.db, &from); !data.Empty() {
+		return fmt.Errorf("re-deposit is not allowed")
+	}
+
+	// All are OK.
+	toObj.setDeposit(fromObj, balance, blockNumber)
+	return nil
+}
+
+func (self *StateDB) Withdraw(from common.Address, to common.Address) error {
+	fromObj := self.GetOrNewStateObject(from)
+	toObj := self.GetOrNewStateObject(to)
+	if fromObj == nil || toObj == nil {
+		return fmt.Errorf("object not found")
+	}
+	if fromObj.getType() == common.DelegateMiner || toObj.getType() != common.DelegateMiner {
+		return fmt.Errorf("account type is not allowed to deposit")
+	}
+	if data := toObj.getDepositData(self.db, &from); data.Empty() {
+		return fmt.Errorf("has not deposited before")
+	}
+
+	// All are OK
+	toObj.rmDeposit(fromObj)
+	return nil
+}
+
+func (self *StateDB) SetAccountType(addr common.Address, aType common.AccountType, feeRatio uint32) {
+	if !common.AccountTypeValidity(aType) {
+		panic(fmt.Sprintf("Wrong account type: %d\n", aType))
+	}
+	obj := self.GetOrNewStateObject(addr)
+	if obj != nil {
+		obj.setType(aType, feeRatio)
+	}
+}
+
+func (self* StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
+	result := make(map[common.Address]common.DMView)
+	it := trie.NewIterator(self.trie.NodeIterator(nil))
+	var key common.Address
+	for it.Next() {
+		key.SetBytes(self.trie.GetKey(it.Key))
+		value := self.GetOrNewStateObject(key)
+		if value != nil && value.data.Type == common.DelegateMiner {
+			result[key] = common.DMView{
+				FeeRatio: value.data.FeeRatio,
+				DepositBalance: value.data.DepositBalance,
+			}
+		}
+	}
+	return result
+}
+
+func (self* StateDB) GetAccountType(addr common.Address) common.AccountType {
+	var aType common.AccountType = common.DefaultAccount
+	obj := self.GetOrNewStateObject(addr)
+	if obj != nil {
+		aType = obj.data.Type
+	}
+	return aType
+}
+
+func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]common.DepositData {
+	result := make(map[common.Address]common.DepositData)
+	obj := self.GetOrNewStateObject(addr)
+	if obj != nil && obj.data.Type == common.DelegateMiner {
+		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
+			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
+			var key common.Address
+			for it.Next() {
+				key.SetBytes(self.trie.GetKey(it.Key))
+				value := obj.getDepositData(self.db, &key)
+				if !value.Empty() {
+					result[key] = value
+				}
+			}
+		}
+	}
+	return result
 }
 
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {
@@ -380,7 +480,7 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 		return nil
 	}
 	// Insert into the live set.
-	obj := newObject(self, addr, data)
+	obj := newObject(self, addr, &data)
 	self.setStateObject(obj)
 	return obj
 }
@@ -401,8 +501,9 @@ func (self *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 // createObject creates a new state object. If there is an existing account with
 // the given address, it is overwritten and returned as the second return value.
 func (self *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
+	var account = createAccount(common.DefaultAccount)
 	prev = self.getStateObject(addr)
-	newobj = newObject(self, addr, Account{})
+	newobj = newObject(self, addr, account)
 	newobj.setNonce(0) // sets the object to dirty
 	if prev == nil {
 		self.journal.append(createObjectChange{account: &addr})
@@ -441,7 +542,7 @@ func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common
 		cb(h, value)
 	}
 
-	it := trie.NewIterator(so.getTrie(db.db).NodeIterator(nil))
+	it := trie.NewIterator(so.getStorageTrie(db.db).NodeIterator(nil))
 	for it.Next() {
 		// ignore cached values
 		key := common.BytesToHash(db.trie.GetKey(it.Key))
@@ -547,7 +648,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
 			s.deleteStateObject(stateObject)
 		} else {
-			stateObject.updateRoot(s.db)
+			stateObject.updateStorageRoot(s.db)
 			s.updateStateObject(stateObject)
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
@@ -614,32 +715,18 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {
 			return nil
 		}
-		if account.Root != emptyState {
-			s.db.TrieDB().Reference(account.Root, parent)
+		if account.StorageRoot != trie.EmptyState {
+			s.db.TrieDB().Reference(account.StorageRoot, parent)
 		}
 		code := common.BytesToHash(account.CodeHash)
-		if code != emptyCode {
+		if code != crypto.EmptyKeccak256Hash {
 			s.db.TrieDB().Reference(code, parent)
+		}
+		if account.Type == common.DelegateMiner && account.StakeRoot != trie.EmptyState {
+			s.db.TrieDB().Reference(account.StakeRoot, parent)
 		}
 		return nil
 	})
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
-}
-
-func (s *StateDB)Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error{
-	return nil
-}
-
-func (s *StateDB)SetAccountType(common.Address, uint8, uint32){
-
-}
-
-func (s *StateDB)GetAllDelegateMiners()map[common.Address]DMView{
-	dm := make(map[common.Address]DMView)
-	var addr common.Address
-	var pos *big.Int
-	dm[addr] = DMView{1, pos}
-
-	return dm
 }

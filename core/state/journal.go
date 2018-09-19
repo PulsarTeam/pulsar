@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"fmt"
 )
 
 // journalEntry is a modification entry in the state change journal that can be
@@ -116,6 +117,24 @@ type (
 		prevcode, prevhash []byte
 	}
 
+	// Account type change: Default Account <-> Delegate Miner
+	typeChange struct {
+		account *common.Address
+		prevType common.AccountType
+	}
+
+	// Default account deposit balance change
+	depositChange struct {
+		account *common.Address
+		prev *big.Int
+	}
+
+	depositSinkChange struct {
+		account *common.Address
+		from *common.Address
+		prev *big.Int
+	}
+
 	// Changes to other state values.
 	refundChange struct {
 		prev uint64
@@ -201,6 +220,41 @@ func (ch storageChange) revert(s *StateDB) {
 
 func (ch storageChange) dirtied() *common.Address {
 	return ch.account
+}
+
+func (ch typeChange) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch typeChange) revert(s *StateDB) {
+	s.getStateObject(*ch.account).data.Type = ch.prevType
+}
+
+func (ch depositChange) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch depositChange) revert(s *StateDB) {
+	obj := s.getStateObject(*ch.account)
+	current := obj.Balance()
+	result := new(big.Int).Sub(ch.prev, current)
+	if result.Cmp(obj.DepositBalance()) != 0 {
+		panic(fmt.Errorf(
+			"Deposit data is not matched: Prevous: %v, Current: %v, Deposit: %v\n",
+			ch.prev, current, obj.DepositBalance()))
+	}
+	obj.setBalance(ch.prev)
+	obj.data.DepositBalance.SetUint64(0)
+}
+
+func (ch depositSinkChange) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch depositSinkChange) revert(s *StateDB) {
+	obj := s.getStateObject(*ch.account)
+	delete(obj.dirtyStake, *ch.from)
+	obj.data.DepositBalance = ch.prev
 }
 
 func (ch refundChange) revert(s *StateDB) {

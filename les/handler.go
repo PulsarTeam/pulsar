@@ -746,7 +746,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 						if err != nil {
 							continue
 						}
-						trie, _ = statedb.Database().OpenStorageTrie(common.BytesToHash(req.AccKey), account.Root)
+						trie, _ = statedb.Database().OpenAccountTrie(common.BytesToHash(req.AccKey), account.StorageRoot)
 					} else {
 						trie, _ = statedb.Database().OpenTrie(header.Root)
 					}
@@ -811,7 +811,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				if err != nil {
 					continue
 				}
-				trie, _ = statedb.Database().OpenStorageTrie(common.BytesToHash(req.AccKey), account.Root)
+				trie, _ = statedb.Database().OpenAccountTrie(common.BytesToHash(req.AccKey), account.StorageRoot)
 			} else {
 				trie, _ = statedb.Database().OpenTrie(root)
 			}

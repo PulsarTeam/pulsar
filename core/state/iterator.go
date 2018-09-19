@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // NodeIterator is an iterator to traverse the entire state trie post-order,
@@ -108,7 +109,7 @@ func (it *NodeIterator) step() error {
 	if err := rlp.Decode(bytes.NewReader(it.stateIt.LeafBlob()), &account); err != nil {
 		return err
 	}
-	dataTrie, err := it.state.db.OpenStorageTrie(common.BytesToHash(it.stateIt.LeafKey()), account.Root)
+	dataTrie, err := it.state.db.OpenAccountTrie(common.BytesToHash(it.stateIt.LeafKey()), account.StorageRoot)
 	if err != nil {
 		return err
 	}
@@ -116,7 +117,7 @@ func (it *NodeIterator) step() error {
 	if !it.dataIt.Next(true) {
 		it.dataIt = nil
 	}
-	if !bytes.Equal(account.CodeHash, emptyCodeHash) {
+	if !bytes.Equal(account.CodeHash, crypto.EmptyKeccak256) {
 		it.codeHash = common.BytesToHash(account.CodeHash)
 		addrHash := common.BytesToHash(it.stateIt.LeafKey())
 		it.code, err = it.state.db.ContractCode(addrHash, common.BytesToHash(account.CodeHash))

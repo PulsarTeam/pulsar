@@ -43,8 +43,8 @@ type Database interface {
 	// OpenTrie opens the main account trie.
 	OpenTrie(root common.Hash) (Trie, error)
 
-	// OpenStorageTrie opens the storage trie of an account.
-	OpenStorageTrie(addrHash, root common.Hash) (Trie, error)
+	// OpenAccountTrie opens the trie of an account.
+	OpenAccountTrie(addrHash, root common.Hash) (Trie, error)
 
 	// CopyTrie returns an independent copy of the given trie.
 	CopyTrie(Trie) Trie
@@ -119,8 +119,8 @@ func (db *cachingDB) pushTrie(t *trie.SecureTrie) {
 	}
 }
 
-// OpenStorageTrie opens the storage trie of an account.
-func (db *cachingDB) OpenStorageTrie(addrHash, root common.Hash) (Trie, error) {
+// OpenAccountTrie opens the trie of an account.
+func (db *cachingDB) OpenAccountTrie(addrHash, root common.Hash) (Trie, error) {
 	return trie.NewSecure(root, db.db, 0)
 }
 
