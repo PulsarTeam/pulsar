@@ -22,8 +22,11 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/delegateminers"
+<<<<<<< HEAD
 
 	//	"github.com/ethereum/go-ethereum/core/delegateminers"
+=======
+>>>>>>> bc5e194c560e64bb9be540e4acd7dbd2e6b3e690
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
 	"math/big"
@@ -452,6 +455,7 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -481,6 +485,7 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -496,6 +501,7 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -510,6 +516,7 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
@@ -522,6 +529,7 @@ func NewShared() *Ethash {
 //	return &Ethash{shared: sharedEthash}
 	return &Ethash{
 		shared: sharedEthash,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
