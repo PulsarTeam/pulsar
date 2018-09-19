@@ -252,7 +252,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	pow := ethash.GetPowProduction(chain, header)
 	y := new(big.Int).Add(pos, pow)
 	if y.Cmp(big.NewInt(0)) == 0 {
-		return fmt.Errorf("division by zero")
+		y = big.NewInt(-1)
 	}
 	w := new(big.Int).Div(pos, y)
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
@@ -547,7 +547,7 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	y := new(big.Int).Add(pos, pow)
 	w := new(big.Int).Div(pos, y)
 	if y.Cmp(big.NewInt(0)) == 0 {
-		return fmt.Errorf("division by zero")
+		y = big.NewInt(-1)
 	}
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
