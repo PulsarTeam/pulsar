@@ -119,6 +119,9 @@ type CallMsg struct {
 	GasPrice *big.Int        // wei <-> gas exchange ratio
 	Value    *big.Int        // amount of wei sent along with the call
 	Data     []byte          // input data, usually an ABI-encoded contract method invocation
+	//for Ds-Pow
+	TxType   uint8
+	Fee      uint32
 }
 
 // A ContractCaller provides contract calls, essentially transactions that are executed by
