@@ -22,11 +22,6 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/delegateminers"
-<<<<<<< HEAD
-
-	//	"github.com/ethereum/go-ethereum/core/delegateminers"
-=======
->>>>>>> bc5e194c560e64bb9be540e4acd7dbd2e6b3e690
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
 	"math/big"
