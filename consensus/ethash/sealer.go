@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"fmt"
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
@@ -69,6 +70,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
+			//fmt.Println("=====> threads ", threads)
 			ethash.mine(block, id, nonce, abort, found)
 		}(i, uint64(ethash.rand.Int63()))
 	}
@@ -77,12 +79,15 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 	select {
 	case <-stop:
 		// Outside abort, stop all miner threads
+		//fmt.Println("=====> stop")
 		close(abort)
 	case result = <-found:
 		// One of the threads found a block, abort all others
+		//fmt.Println("=====> found")
 		close(abort)
 	case <-ethash.update:
 		// Thread count was changed on user request, restart
+		//fmt.Println("=====> update")
 		close(abort)
 		pend.Wait()
 		return ethash.Seal(chain, block, stop)
@@ -95,6 +100,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
 func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+	//fmt.Println("enter ============================================!!!!, id ", id)
 	// Extract some data from the header
 	var (
 		header  = block.Header()
@@ -115,7 +121,9 @@ search:
 		case <-abort:
 			// Mining terminated, update stats and abort
 			logger.Trace("Ethash nonce search aborted", "attempts", nonce-seed)
+			//fmt.Println("find!!!!!!!!!!, id", id)
 			ethash.hashrate.Mark(attempts)
+			//fmt.Println("after find!!!!!!!!!!, id", id)
 			break search
 
 		default:
@@ -138,16 +146,19 @@ search:
 				// Seal and return a block (if still needed)
 				select {
 				case found <- block.WithSeal(header):
+					//fmt.Println("0 ============================================!!!!, id = ", id)
 					logger.Trace("Ethash nonce found and reported", "attempts", nonce-seed, "nonce", nonce)
 				case <-abort:
+					//fmt.Println("1 ============================================!!!!, id = ", id)
 					logger.Trace("Ethash nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
 				}
 				break search
+				fmt.Println("after break!!!!, id = ", id)
 			}
 			nonce++
 		}
 	}
 	// Datasets are unmapped in a finalizer. Ensure that the dataset stays live
 	// during sealing so it's not unmapped while being read.
-//	runtime.KeepAlive(dataset)
+	//runtime.KeepAlive(dataset)
 }
