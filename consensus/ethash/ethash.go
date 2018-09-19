@@ -533,11 +533,11 @@ func NewShared() *Ethash {
 
 // calculate the pos difficulty target.
 func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Header) *big.Int {
-	depositors, _ := delegateminers.GetDepositors(minerAddr)
-	count := len(depositors)
+	miner, _ := delegateminers.GetDepositors(minerAddr)
+	count := len(miner.Depositors)
 	posLocalSum := big.NewInt(0)
 	for i := 0; i < count; i++ {
-		posLocalSum= new(big.Int).Add(posLocalSum, depositors[i].Amount)
+		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 	}
 	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount()
 	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners()

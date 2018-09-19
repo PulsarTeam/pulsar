@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"fmt"
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
@@ -65,7 +64,6 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 	if threads < 0 {
 		threads = 0 // Allows disabling local mining without extra logic around local/remote
 	}
-	fmt.Println("cpu num", threads)
 	var pend sync.WaitGroup
 	for i := 0; i < threads; i++ {
 		pend.Add(1)
