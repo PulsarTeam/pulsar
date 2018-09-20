@@ -1184,6 +1184,11 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 		return errors.New(`Both "data" and "input" are set and not equal. Please use "input" to pass transaction call data.`)
 	}
 	if args.To == nil {
+		//for delegate miner register
+		if args.TxType == params.DelegateMinerRegisterTx{
+			return nil
+		}
+
 		// Contract creation
 		var input []byte
 		if args.Data != nil {
@@ -1206,8 +1211,12 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 		input = *args.Input
 	}
 	if args.To == nil {
-		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+		if args.TxType != params.DelegateMinerRegisterTx {
+			args.Fee = 0
+		}
+		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, args.TxType, args.Fee)
 	}
+
 	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, args.TxType, args.Fee)
 }
 
