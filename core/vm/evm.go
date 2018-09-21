@@ -467,7 +467,7 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 		}
 		//deposit stakes to a delegateMiner
 		//evm.StateDB.SetAccountType(msg.From(), common.DefaultAccount, 0)
-		evm.StateDB.Deposit(msg.From(), *(msg.To()), msg.Value(), evm.Context.BlockNumber)
+		err = evm.StateDB.Deposit(msg.From(), *(msg.To()), msg.Value(), evm.Context.BlockNumber)
 	//\\case params.DelegateStakesCancel:
 
 	default:
