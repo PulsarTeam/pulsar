@@ -263,16 +263,18 @@ func (self *stateObject) updateStorageTrie(db Database) Trie {
 // updateStakeTrie writes cached storage modifications into the object's storage trie.
 func (self *stateObject) updateStakeTrie(db Database) Trie {
 	tr := self.getStakeTrie(db)
-	for key, value := range self.dirtyStake {
-		if value.Empty() {
-			self.setError(tr.TryDelete(key[:]))
-			continue
+	if len(self.dirtyStake) > 0 {
+		for key, value := range self.dirtyStake {
+			if value.Empty() {
+				self.setError(tr.TryDelete(key[:]))
+				continue
+			}
+			// Encoding []byte cannot fail, ok to ignore the error.
+			v, _ := rlp.EncodeToBytes(&value)
+			self.setError(tr.TryUpdate(key[:], v))
 		}
-		// Encoding []byte cannot fail, ok to ignore the error.
-		v, _ := rlp.EncodeToBytes(&value)
-		self.setError(tr.TryUpdate(key[:], v))
+		self.dirtyStake = make(DepositCache) // clear map
 	}
-	self.dirtyStake = make(DepositCache) // clear map
 	return tr
 }
 

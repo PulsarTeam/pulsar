@@ -649,6 +649,9 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			s.deleteStateObject(stateObject)
 		} else {
 			stateObject.updateStorageRoot(s.db)
+			if stateObject.data.Type == common.DelegateMiner {
+				stateObject.updateStakeRoot(s.db)
+			}
 			s.updateStateObject(stateObject)
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
