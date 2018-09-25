@@ -542,10 +542,11 @@ func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Head
 	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount()
 	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners()
 	target := new(big.Int) .Div(maxUint256, header.Difficulty)
-	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
+	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight/10000)))
 	y := new(big.Int).Mul(x, posLocalSum)
 	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
 	posTarget := new(big.Int).Div(z, posNetworkSum)
+
 	return posTarget
 }
 

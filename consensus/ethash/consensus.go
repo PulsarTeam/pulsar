@@ -19,6 +19,7 @@ package ethash
 import (
 		"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"math/big"
 	"runtime"
 	"time"
@@ -316,28 +317,32 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
-	if(((parent.Number.Int64() + 1)) % difficultyAdjustInterval)!= 0{
+	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
-	}else {
-
+	} else {
 		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() +1 - difficultyAdjustInterval)).Time.Int64()))
-		if(actualTimespan < (uint64)(ethash.powTargetTimespan / 4)){
+		if actualTimespan < (uint64)(ethash.powTargetTimespan / 4) {
 			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 		}
-		if(actualTimespan > (uint64)(ethash.powTargetTimespan / 4)){
+		if actualTimespan > (uint64)(ethash.powTargetTimespan / 4) {
 			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 		}
 		var powLimit int64 = ethash.powLimit
-		var newDifficulty *big.Int= parent.Difficulty
+		var newDifficulty *big.Int = parent.Difficulty
 		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
 		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
-		if(newDifficulty.Int64() < powLimit){
+		if newDifficulty.Int64() < powLimit {
 			newDifficulty = new(big.Int).SetInt64(powLimit)
 		}
 		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
+
+		minerCounts,_ := delegateminers.GetLastCycleDelegateMiners()
+		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
+			return parent.Difficulty
+		}
+
 		return newDifficulty
 	}
-
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
