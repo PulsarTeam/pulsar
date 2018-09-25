@@ -532,15 +532,20 @@ func NewShared() *Ethash {
 }
 
 // calculate the pos difficulty target.
-func (ethash *Ethash) CalcPosTarget(minerAddr common.Address, header *types.Header) *big.Int {
+func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
 	miner, _ := delegateminers.GetDepositors(minerAddr)
+	// get the state by header's root
+	s, err := chain.GetState(header.Root)
+	if err != nil {
+		return big.NewInt(-1)
+	}
 	count := len(miner.Depositors)
 	posLocalSum := big.NewInt(0)
 	for i := 0; i < count; i++ {
 		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 	}
-	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount()
-	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners()
+	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(s)
+	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(s)
 	target := new(big.Int) .Div(maxUint256, header.Difficulty)
 	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight/10000)))
 	y := new(big.Int).Mul(x, posLocalSum)

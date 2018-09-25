@@ -47,6 +47,9 @@ type ChainReader interface {
 
 	// GetBlock retrieves a block from the database by hash and number.
 	GetBlock(hash common.Hash, number uint64) *types.Block
+
+	// GetState retrieves the blockchain state by hash
+	GetState(hash common.Hash) (*state.StateDB, error)
 }
 
 // Engine is an algorithm agnostic consensus engine.

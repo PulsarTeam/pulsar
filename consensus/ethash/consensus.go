@@ -338,7 +338,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		}
 		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
 
-		minerCounts,_ := delegateminers.GetLastCycleDelegateMiners()
+		minerCounts, _ := delegateminers.GetLastCycleDelegateMiners()
 		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
 			return parent.Difficulty
 		}
