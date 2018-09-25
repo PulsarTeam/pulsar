@@ -33,7 +33,9 @@ func NewStateSync(root common.Hash, database trie.DatabaseReader) *trie.Sync {
 			return err
 		}
 		syncer.AddSubTrie(obj.StorageRoot, 64, parent, nil)
-		// TODO: dspow
+		if obj.Type == common.DelegateMiner {
+			syncer.AddSubTrie(obj.StakeRoot, 64, parent, nil)
+		}
 		syncer.AddRawEntry(common.BytesToHash(obj.CodeHash), 64, parent)
 		return nil
 	}
