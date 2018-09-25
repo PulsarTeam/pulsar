@@ -7,8 +7,6 @@ import (
 	"errors"
 )
 
-const  CYCLE  = 2 * 24 * 60 * 60 / 15
-
 type Depositor struct {
 	Addr common.Address
 	Amount    *big.Int
@@ -36,12 +34,17 @@ func GetDepositors(state *state.StateDB, address common.Address)(DelegateMiner, 
 }
 
 func GetLastCycleDepositAmount(state *state.StateDB)(*big.Int,error)  {
-
-
-
-	return new(big.Int),nil
+	var err error = nil
+	var miners = state.GetAllDelegateMiners()
+	var amount uint64
+	for _, v := range miners{
+		amount += v.DepositBalance.Uint64()
+	}
+	return new(big.Int).SetUint64(amount),err
 }
 
 func GetLastCycleDelegateMiners(state *state.StateDB)(uint64,error)  {
-	return 0,nil
+	var miners = state.GetAllDelegateMiners()
+	var minersAmount = len(miners)
+	return (uint64)(minersAmount),nil
 }
