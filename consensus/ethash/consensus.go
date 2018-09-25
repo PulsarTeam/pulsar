@@ -42,6 +42,8 @@ var (
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 	InterestRate           *big.Int = big.NewInt(100)
+	InterestRatePrecision  *big.Int	= big.NewInt(10000000000)
+	FeeRatioPrecision  *big.Int	= big.NewInt(100)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -674,24 +676,48 @@ func calculatePowRewards(config *params.ChainConfig, state *state.StateDB, heade
 // included uncles. The coinbase of each uncle block is also rewarded.
 func accumulatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
 
-	// InterestRate
+	delegateMiner, err := delegateminers.GetDepositors(header.Coinbase)
+	if err != nil {
+		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
+	}
+	stakeholders := delegateMiner.Depositors
 
-	// delegate := state.GetAgencyMiner(header.Coinbase)
+	//--dummy code just for test-----------------------------------------
+	//mnt1, _ := new(big.Int).SetString("100000000000000000000", 10)
+	//mnt2, _ := new(big.Int).SetString("1000000000000000000000", 10)
+	//mnt3, _ := new(big.Int).SetString("10000000000000000000000", 10)
+	//mnt4, _ := new(big.Int).SetString("100000000000000000000000", 10)
+	//
+	//stakeholders := []delegateminers.Depositor{
+	//	delegateminers.Depositor{common.HexToAddress("0x63264d76b9131085e1b7f2ef55600b55c81d58de"),mnt1},
+	//	delegateminers.Depositor{common.HexToAddress("0x4877884e5d156603514b9790ca7db3b357054f88"),mnt2},
+	//	delegateminers.Depositor{common.HexToAddress("0x4cc7df7fda9eccb1ef72e77045b54a16f9076e99"),mnt3},
+	//	delegateminers.Depositor{common.HexToAddress("0xf7fc37c340096ea854ebc0fc29a60a9e799e971a"),mnt4},
+	//}
+    //-------------------------------------------------------------------
 
-	// stakeholders :=  delegate.getAllStakeholders(deleagte)
+	//FeeRatio := delegateMiner.Fee
+	FeeRatio := big.NewInt(1)
 
 	total := new(big.Int)
-	//feeTotal := new(big.Int)
+	feeTotal := new(big.Int)
 
-	//for _, stakeholder := range stakeholders {
-	//	rewardStakeRaw = stakeholder.DepositBalance * (InterestRate/10000000000)
-	//	delegateFee = rewardStakeRaw * (stakeholder.FeeRatio/100)
-	//	rewardStake = rewardStakeRaw - delegateFee
-	//	feeTotal.Add(feeTotal, delegateFee)
-	//	total.Add(total,rewardStakeRaw)
-	//	state.AddBalance(stakeholder.Coinbase, rewardStake)
-	//}
-	//state.AddBalance(header.Coinbase, feeTotal)
+	for _, stakeholder := range stakeholders {
+		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
+		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount,InterestRate)
+		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
+
+		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee.Div(delegateFee, FeeRatioPrecision)
+
+		//rewardStake = rewardStakeRaw - delegateFee
+		rewardStake := new(big.Int).Sub(rewardStakeRaw, delegateFee)
+		feeTotal.Add(feeTotal, delegateFee)
+		total.Add(total,rewardStakeRaw)
+		state.AddBalance(stakeholder.Addr, rewardStake)
+	}
+	state.AddBalance(header.Coinbase, feeTotal)
 	return total
 }
 
@@ -700,21 +726,29 @@ func accumulatePosRewards(config *params.ChainConfig, state *state.StateDB, head
 // the delegate fee paid to delegate miners.
 func calculatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
 
-	// InterestRate
+	delegateMiner, err := delegateminers.GetDepositors(header.Coinbase)
+	if err != nil {
+		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
+	}
+	stakeholders := delegateMiner.Depositors
 
-	// delegate := state.GetAgencyMiner(header.Coinbase)
-
-	// stakeholders :=  delegate.getAllStakeholders(deleagte)
+	//FeeRatio := delegateMiner.Fee
+	FeeRatio := big.NewInt(1)
 
 	total := new(big.Int)
-	//feeTotal := new(big.Int)
+	feeTotal := new(big.Int)
 
-	//for _, stakeholder := range stakeholders {
-	//	rewardStakeRaw = stakeholder.DepositBalance * (InterestRate/10000000000)
-	//	delegateFee = rewardStakeRaw * (stakeholder.FeeRatio/100)
-	//	rewardStake = rewardStakeRaw - delegateFee
-	//	feeTotal.Add(feeTotal, delegateFee)
-	//	total.Add(total,rewardStakeRaw)
-	//}
+	for _, stakeholder := range stakeholders {
+		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
+		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount,InterestRate)
+		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
+
+		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee.Div(delegateFee, FeeRatioPrecision)
+
+		feeTotal.Add(feeTotal, delegateFee)
+		total.Add(total,rewardStakeRaw)
+	}
 	return total
 }
