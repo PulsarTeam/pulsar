@@ -535,9 +535,11 @@ func NewShared() *Ethash {
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
 	var state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
 	miner, _ := delegateminers.GetDepositors(state, minerAddr)
+	var cycleLen int64 = 2000
 	// get the state by header's root
-	parentBlock := chain.GetBlock(header.ParentHash, new(big.Int).Sub(header.Number,big.NewInt(1)).Uint64())
-	s, err := chain.GetState(parentBlock.Root())
+	curCycleNum := new(big.Int).Div(header.Number, big.NewInt(cycleLen))
+	block := chain.GetBlock(header.ParentHash, new(big.Int).Sub(curCycleNum, big.NewInt(cycleLen)).Uint64())
+	s, err := chain.GetState(block.Root())
 	if err != nil {
 		return big.NewInt(-1)
 	}
