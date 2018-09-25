@@ -337,8 +337,8 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 			newDifficulty = new(big.Int).SetInt64(powLimit)
 		}
 		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
-
-		minerCounts, _ := delegateminers.GetLastCycleDelegateMiners()
+		state,_ := chain.GetState(parent.Root)
+		minerCounts, _ := delegateminers.GetLastCycleDelegateMiners(state)
 		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
 			return parent.Difficulty
 		}
@@ -591,9 +591,9 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	//miner := state.GetAgencyMiner(header.Coinbase)
 	//if miner.Type = 1 {
 
-		posProduction := calculatePosRewards(chain.Config(), state, header, uncles)
+		posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
 		if header.PosProduction == nil {
-			header.PosProduction = accumulatePosRewards(chain.Config(), state, header, uncles)
+			header.PosProduction = accumulatePosRewards(chain ,chain.Config(), state, header, uncles)
 		} else if posProduction != header.PosProduction {
 			// error!
 			err = errors.New(`pos production check error!`)
@@ -674,9 +674,9 @@ func calculatePowRewards(config *params.ChainConfig, state *state.StateDB, heade
 // AccumulatePosRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-
-	delegateMiner, err := delegateminers.GetDepositors(header.Coinbase)
+func accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+	state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
+	delegateMiner, err := delegateminers.GetDepositors(state, header.Coinbase)
 	if err != nil {
 		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
 	}
@@ -724,9 +724,9 @@ func accumulatePosRewards(config *params.ChainConfig, state *state.StateDB, head
 // CalculatePosRewards calculate all the POS reward of the block(the stake reward).
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
-func calculatePosRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-
-	delegateMiner, err := delegateminers.GetDepositors(header.Coinbase)
+func calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+	state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
+	delegateMiner, err := delegateminers.GetDepositors(state, header.Coinbase)
 	if err != nil {
 		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
 	}

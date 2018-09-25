@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/core/state"
 )
 
 type testerVote struct {
@@ -85,6 +86,9 @@ func (r *testerChainReader) GetHeaderByNumber(number uint64) *types.Header {
 		return rawdb.ReadHeader(r.db, rawdb.ReadCanonicalHash(r.db, 0), 0)
 	}
 	panic("not supported")
+}
+func (r *testerChainReader)GetState(hash common.Hash) (*state.StateDB, error){
+	return nil,nil
 }
 
 // Tests that voting is evaluated correctly for various simple and complex scenarios.

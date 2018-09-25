@@ -533,7 +533,8 @@ func NewShared() *Ethash {
 
 // calculate the pos difficulty target.
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
-	miner, _ := delegateminers.GetDepositors(minerAddr)
+	var state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
+	miner, _ := delegateminers.GetDepositors(state, minerAddr)
 	// get the state by header's root
 	parentBlock := chain.GetBlock(header.ParentHash, new(big.Int).Sub(header.Number,big.NewInt(1)).Uint64())
 	s, err := chain.GetState(parentBlock.Root())

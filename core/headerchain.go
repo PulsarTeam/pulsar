@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/hashicorp/golang-lru"
+	"github.com/ethereum/go-ethereum/core/state"
 )
 
 const (
@@ -497,4 +498,8 @@ func (hc *HeaderChain) Engine() consensus.Engine { return hc.engine }
 // a header chain does not have blocks available for retrieval.
 func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return nil
+}
+
+func (hc *HeaderChain)GetState(hash common.Hash) (*state.StateDB, error){
+	return nil,nil
 }
