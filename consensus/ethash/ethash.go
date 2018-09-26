@@ -578,30 +578,30 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 
 // returns the total pow production in a certain cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	t := ethash.GetCycle()
-	p := header.Number.Uint64() / t
-	if p == 0 {
+	cycle := ethash.GetCycle()
+	cycleNum := header.Number.Uint64() / cycle
+	if cycleNum == 0 {
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPow := big.NewInt(0)
-	for i = (p - 1) * t; i < p * t; i++ {
-		sumPow.Add(sumPow, header.PowProduction)
+	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+		sumPow.Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
 	}
 	return sumPow
 }
 
 // returns the total pos production in a certain cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	t := ethash.GetCycle()
-	p := header.Number.Uint64() / t
-	if p == 0 {
+	cycle := ethash.GetCycle()
+	cycleNum := header.Number.Uint64() / cycle
+	if cycleNum == 0 {
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPos := big.NewInt(0)
-	for i = (p - 1) * t; i < p * t; i++ {
-		sumPos.Add(sumPos, header.PosProduction)
+	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+		sumPos.Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
 	}
 	return sumPos
 }
