@@ -594,7 +594,7 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 		posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
 		if header.PosProduction == nil {
 			header.PosProduction = accumulatePosRewards(chain ,chain.Config(), state, header, uncles)
-		} else if posProduction != header.PosProduction {
+		} else if posProduction.Cmp(header.PosProduction) != 0 {
 			// error!
 			err = errors.New(`pos production check error!`)
 		}
