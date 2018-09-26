@@ -87,7 +87,7 @@ var (
 	ErrBalanceForRegister = errors.New("balance should not zero if want to be a delegate miner")
 
 	//ErrToDelegateType is return if one try to delegate to a normal account
-	ErrToDelegateType = errors.New("should delegate to a normal account")
+	ErrToDelegateType = errors.New("should not delegate to a normal account")
 
 	//ErrMinerDelegate is return if a delegate miner try to delegate to another mine
 	ErrMinerDelegate = errors.New("delegate miner should not delegate to another miner")
