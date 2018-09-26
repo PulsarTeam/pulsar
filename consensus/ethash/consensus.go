@@ -582,25 +582,21 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 
 	var err error = nil
 	powProduction := calculatePowRewards(chain.Config(), state, header, uncles)
-	if powProduction == nil {
-		err = errors.New("calculatePowRewards error")
-	}
-
 	if header.PowProduction == nil {
 		header.PowProduction = accumulatePowRewards(chain.Config(), state, header, uncles)
-	} else if  powProduction.Cmp(header.PowProduction) != 0 {
-		err = errors.New(`pow production check error!`)
+	} else if powProduction != nil && powProduction.Cmp(header.PowProduction) == 0 {
+		accumulatePowRewards(chain.Config(), state, header, uncles)
+	} else {
+		err = errors.New("pow production check error")
 	}
 
 	posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
-	if posProduction == nil {
-		err = errors.New("calculatePosRewards error!")
-	}
 	if header.PosProduction == nil {
-		header.PosProduction = accumulatePosRewards(chain ,chain.Config(), state, header, uncles)
-	} else if posProduction.Cmp(header.PosProduction) != 0 {
-		// error!
-		err = errors.New(`pos production check error!`)
+		header.PosProduction = accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+	} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
+		accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+	} else {
+		err = errors.New("pos production check error")
 	}
 
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
