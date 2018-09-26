@@ -85,6 +85,12 @@ var (
 
 	//ErrBalanceForRegister is return if a miner want to be a delegate miner but it's balance is 0
 	ErrBalanceForRegister = errors.New("balance should not zero if want to be a delegate miner")
+
+	//ErrToDelegateType is return if one try to delegate to a normal account
+	ErrToDelegateType = errors.New("should delegate to a normal account")
+
+	//ErrMinerDelegate is return if a delegate miner try to delegate to another mine
+	ErrMinerDelegate = errors.New("delegate miner should not delegate to another miner")
 )
 
 var (
@@ -597,9 +603,16 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	//for Ds-pow: if this is a DelegateStakesTx, the shareholder should not make the transaction many times,
 	//and the delegate miner should not make this transaction
-	//\\if tx.TxType() == params.DelegateStakesTx{
-	//\\
-	//\\}
+	if tx.TxType() == params.DelegateStakesTx{
+		to := tx.To()
+		if pool.currentState.GetAccountType(*to) != common.DelegateMiner{
+			return ErrToDelegateType
+		}
+
+		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
+			return ErrMinerDelegate
+		}
+	}
 	//for Ds-pow: if this is a DelegateStakesCancel
 	//\\if tx.TxType() == params.DelegateStakesCancel{
 	//\\
