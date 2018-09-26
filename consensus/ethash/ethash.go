@@ -538,23 +538,21 @@ func NewShared() *Ethash {
 
 // calculate the pos target.
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
-	var state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
-	miner, _ := delegateminers.GetDepositors(state, minerAddr)
-	var cycleLen int64 = 2000
-	// get the state by block root
-	curCycleNum := new(big.Int).Div(header.Number, big.NewInt(cycleLen))
-	block := chain.GetBlock(header.ParentHash, new(big.Int).Sub(curCycleNum, big.NewInt(cycleLen)).Uint64())
-	state, err := chain.GetState(block.Root())
-	if err != nil {
+	stat, e := ethash.GetAvailableDb(chain, header)
+	if e != nil {
 		return big.NewInt(-1)
 	}
+	miner, _ := delegateminers.GetDepositors(stat, minerAddr)
+
 	count := len(miner.Depositors)
 	posLocalSum := big.NewInt(0)
 	for i := 0; i < count; i++ {
 		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 	}
-	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(state)
-	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(state)
+
+	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
+	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
+
 	// calc the pos target
 	target := new(big.Int) .Div(maxUint256, header.Difficulty)
 	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight/10000)))
