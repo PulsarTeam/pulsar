@@ -536,7 +536,7 @@ func NewShared() *Ethash {
 	}
 }
 
-// calculate the pos difficulty target.
+// calculate the pos target.
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
 	var state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
 	miner, _ := delegateminers.GetDepositors(state, minerAddr)
@@ -544,7 +544,7 @@ func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr commo
 	// get the state by block root
 	curCycleNum := new(big.Int).Div(header.Number, big.NewInt(cycleLen))
 	block := chain.GetBlock(header.ParentHash, new(big.Int).Sub(curCycleNum, big.NewInt(cycleLen)).Uint64())
-	s, err := chain.GetState(block.Root())
+	state, err := chain.GetState(block.Root())
 	if err != nil {
 		return big.NewInt(-1)
 	}
@@ -553,12 +553,16 @@ func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr commo
 	for i := 0; i < count; i++ {
 		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 	}
-	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(s)
-	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(s)
+	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(state)
+	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(state)
+	// calc the pos target
 	target := new(big.Int) .Div(maxUint256, header.Difficulty)
 	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight/10000)))
 	y := new(big.Int).Mul(x, posLocalSum)
 	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
+	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
+		return big.NewInt(-1)
+	}
 	posTarget := new(big.Int).Div(z, posNetworkSum)
 
 	return posTarget
@@ -573,36 +577,37 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 		return
 	}
 	w := new(big.Int).Div(powProduction, new(big.Int).Add(powProduction, posProduction))
-	pw := uint32(w.Uint64())
+	pw := uint32(w.Uint64()) * 10000
 	header.PosWeight = pw
 }
 
 // returns the total pow production in a certain cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	t := ethash.dsPowCycle
-	p := header.Number.Uint64() / t
-	if p == 0 {
+	cycle := ethash.dsPowCycle
+	cycleNum := header.Number.Uint64() / cycle
+	if cycleNum == 0 {
+
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPow := big.NewInt(0)
-	for i = (p - 1) * t; i < p * t; i++ {
-		sumPow.Add(sumPow, header.PowProduction)
+	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+		sumPow.Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
 	}
 	return sumPow
 }
 
 // returns the total pos production in a certain cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	t := ethash.dsPowCycle
-	p := header.Number.Uint64() / t
-	if p == 0 {
+	cycle := ethash.dsPowCycle
+	cycleNum := header.Number.Uint64() / cycle
+	if cycleNum == 0 {
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPos := big.NewInt(0)
-	for i = (p - 1) * t; i < p * t; i++ {
-		sumPos.Add(sumPos, header.PosProduction)
+	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+		sumPos.Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
 	}
 	return sumPos
 }
