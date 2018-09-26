@@ -584,21 +584,18 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	powProduction := calculatePowRewards(chain.Config(), state, header, uncles)
 	if header.PowProduction == nil {
 		header.PowProduction = accumulatePowRewards(chain.Config(), state, header, uncles)
-	} else if  powProduction != header.PowProduction {
+	} else if  powProduction.Cmp(header.PowProduction) != 0{
 		err = errors.New(`pow production check error!`)
 	}
+	
+	posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
+	if header.PosProduction == nil {
+		header.PosProduction = accumulatePosRewards(chain ,chain.Config(), state, header, uncles)
+	} else if posProduction.Cmp(header.PosProduction) != 0 {
+		// error!
+		err = errors.New(`pos production check error!`)
+	}
 
-	//miner := state.GetAgencyMiner(header.Coinbase)
-	//if miner.Type = 1 {
-
-		posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
-		if header.PosProduction == nil {
-			header.PosProduction = accumulatePosRewards(chain ,chain.Config(), state, header, uncles)
-		} else if posProduction.Cmp(header.PosProduction) != 0 {
-			// error!
-			err = errors.New(`pos production check error!`)
-		}
-	//}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
