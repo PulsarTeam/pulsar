@@ -385,7 +385,10 @@ func (bc *BlockChain) State() (*state.StateDB, error) {
 func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
 	return state.New(root, bc.stateCache)
 }
-
+//
+func (bc *BlockChain)GetState(root common.Hash) (*state.StateDB, error) {
+	return state.New(root, bc.stateCache)
+}
 // Reset purges the entire blockchain, restoring it to its genesis state.
 func (bc *BlockChain) Reset() error {
 	return bc.ResetWithGenesisBlock(bc.genesisBlock)
