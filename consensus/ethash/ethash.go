@@ -41,6 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hashicorp/golang-lru/simplelru"
+	"github.com/ethereum/go-ethereum/core/state"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -416,6 +417,9 @@ type Ethash struct {
 	powLimit int64
 	powTargetSpacing int64
 
+	//Delegate available cycle
+	dsPowCycle uint64
+
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
@@ -440,6 +444,7 @@ func New(config Config) *Ethash {
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
+		dsPowCycle: 2 * 24 * 60 * 60 / 15,
 	}
 }
 
@@ -578,9 +583,10 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 
 // returns the total pow production in a certain cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.GetCycle()
+	cycle := ethash.dsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum == 0 {
+
 		return big.NewInt(0)
 	}
 	var i uint64
@@ -593,7 +599,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 
 // returns the total pos production in a certain cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.GetCycle()
+	cycle := ethash.dsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum == 0 {
 		return big.NewInt(0)
@@ -604,11 +610,6 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 		sumPos.Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
 	}
 	return sumPos
-}
-
-// returns the cycle.
-func (ethash *Ethash)GetCycle() uint64 {
-	return uint64(ethash.powTargetTimespan / ethash.powTargetSpacing)
 }
 
 // cache tries to retrieve a verification cache for the specified block number
@@ -698,3 +699,18 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 func SeedHash(block uint64) []byte {
 	return seedHash(block)
 }
+
+//based Dspowcycle calculate available stateDb
+func (ethash *Ethash) GetAvailableDb(chain consensus.ChainReader, header *types.Header) (*state.StateDB, error) {
+	var err error = nil
+	cylce := header.Number.Uint64() / ethash.dsPowCycle
+	if(cylce < 1){
+		err = errors.New(`no available DelegateData!`)
+		return nil,err
+	}
+	number := cylce * ethash.dsPowCycle
+	headAvai := chain.GetHeaderByNumber(number)
+	var state, _ = chain.GetState(chain.GetBlock(headAvai.ParentHash, headAvai.Number.Uint64() - 1).Root())
+	return state,err
+}
+
