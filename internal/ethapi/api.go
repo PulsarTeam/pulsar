@@ -98,6 +98,10 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, /*blockNr rpc
 		return nil, err
 	}
 
+	if state.GetAccountType(addr) != common.DelegateMiner{
+		return nil, errors.New("can not use this command on a normal account!")
+	}
+
 	fields := map[common.Address]interface{}{}
 	stakeHoldersList := state.GetDepositMap(addr)
 
