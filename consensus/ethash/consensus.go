@@ -591,11 +591,11 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	}
 
 	if state.GetAccountType(header.Coinbase)==common.DelegateMiner {
-		posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
+		posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles)
 		if header.PosProduction == nil {
-			header.PosProduction = accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+			header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
 		} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
-			accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+			ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
 		} else {
 			err = errors.New("pos production check error")
 		}
