@@ -566,7 +566,7 @@ func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr commo
 	return posTarget
 }
 
-// returns the pos weight in a certain epoch.
+// returns the pos weight in a certain cycle.
 func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) {
 	powProduction := ethash.GetPowProduction(chain, header)
 	posProduction := ethash.GetPosProduction(chain, header)
@@ -580,32 +580,31 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	header.PosWeight = pw
 }
 
-// returns the total pow production in a certain cycle.
+// returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
 	cycle := ethash.dsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
-	if cycleNum == 0 {
-
+	if cycleNum <= 1 {
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPow := big.NewInt(0)
-	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
 		sumPow.Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
 	}
 	return sumPow
 }
 
-// returns the total pos production in a certain cycle.
+// returns the total pos production in the previous mature cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
 	cycle := ethash.dsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
-	if cycleNum == 0 {
+	if cycleNum <= 1 {
 		return big.NewInt(0)
 	}
 	var i uint64
 	sumPos := big.NewInt(0)
-	for i = (cycleNum - 1) * cycle; i < cycleNum * cycle; i++ {
+	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
 		sumPos.Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
 	}
 	return sumPos
