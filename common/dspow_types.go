@@ -26,8 +26,8 @@ func FeeRatioValidity(feeRatio uint32) bool {
 }
 
 type DepositData struct {
-	Balance *big.Int
-	BlockNumber *big.Int
+	Balance *big.Int `json:"depositBalance" gencodec:"required"`
+	BlockNumber *big.Int `json:"depositBlockNumber" gencodec:"required"`
 }
 
 func (this DepositData) Empty() bool {

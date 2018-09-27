@@ -17,7 +17,6 @@
 package ethapi
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -44,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"bytes"
 )
 
 const (
@@ -88,6 +88,32 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 
 	return fields, state.Error()
 }
+
+//For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
+func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, /*blockNr rpc.BlockNumber, */addr common.Address)(map[common.Address]interface{}, error){
+	//\\error, should modify
+	blockNr := rpc.LatestBlockNumber
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	fields := map[common.Address]interface{}{}
+	stakeHoldersList := state.GetDepositMap(addr)
+
+	for addr, stakeholder := range stakeHoldersList{
+		fields[addr] = stakeholder
+	}
+
+	return fields, state.Error()
+}
+
+/*
+func (s *PublicEthereumAPI)GetAllStakeHoldersLatest(ctx context.Context, addr common.Address)(map[common.Address]interface{}, error){
+	blockNr := rpc.LatestBlockNumber
+	return s.GetAllStakeHolders(ctx, addr, blockNr)
+}
+*/
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:
