@@ -574,8 +574,9 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
 		return
 	}
-	w := new(big.Int).Div(powProduction, new(big.Int).Add(powProduction, posProduction))
-	pw := uint32(w.Uint64()) * 10000
+	x := new(big.Int).Mul(powProduction, big.NewInt(10000))
+	weight := new(big.Int).Div(x, new(big.Int).Add(powProduction, posProduction))
+	pw := uint32(weight.Uint64())
 	header.PosWeight = pw
 }
 
