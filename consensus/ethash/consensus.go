@@ -676,10 +676,12 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	state, _ = ethash.GetAvailableDb(chain, header)
-	delegateMiner, err := delegateminers.GetDepositors(state, header.Coinbase)
+	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
 	if err != nil {
 		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
+	}
+	if delegateMiner==nil {
+		return new(big.Int)
 	}
 	stakeholders := delegateMiner.Depositors
 
@@ -725,10 +727,12 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	state, _ = ethash.GetAvailableDb(chain,header)
-	delegateMiner, err := delegateminers.GetDepositors(state, header.Coinbase)
+	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
 	if err != nil {
 		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
+	}
+	if delegateMiner==nil {
+		return new(big.Int)
 	}
 	stakeholders := delegateMiner.Depositors
 

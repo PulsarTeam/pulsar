@@ -41,7 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hashicorp/golang-lru/simplelru"
-	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/consensus/availabledb"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -417,8 +417,7 @@ type Ethash struct {
 	powLimit int64
 	powTargetSpacing int64
 
-	//Delegate available cycle
-	dsPowCycle uint64
+	availableDb *availabledb.AvailableDb
 
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
@@ -444,7 +443,7 @@ func New(config Config) *Ethash {
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
-		dsPowCycle: 2 * 24 * 60 * 60 / 15,
+		availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
 	}
 }
 
@@ -538,11 +537,13 @@ func NewShared() *Ethash {
 
 // calculate the pos target.
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
-	stat, e := ethash.GetAvailableDb(chain, header)
-	if e != nil {
-		return big.NewInt(-1)
+	stat, miner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
+	if err != nil {
+		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
 	}
-	miner, _ := delegateminers.GetDepositors(stat, minerAddr)
+	if miner==nil {
+		return new(big.Int)
+	}
 
 	count := len(miner.Depositors)
 	posLocalSum := big.NewInt(0)
@@ -582,7 +583,7 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 
 // returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.dsPowCycle
+	cycle := ethash.availableDb.DsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
@@ -597,7 +598,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 
 // returns the total pos production in the previous mature cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.dsPowCycle
+	cycle := ethash.availableDb.DsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
@@ -697,18 +698,3 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 func SeedHash(block uint64) []byte {
 	return seedHash(block)
 }
-
-//based Dspowcycle calculate available stateDb
-func (ethash *Ethash) GetAvailableDb(chain consensus.ChainReader, header *types.Header) (*state.StateDB, error) {
-	var err error = nil
-	cylce := header.Number.Uint64() / ethash.dsPowCycle
-	if(cylce < 2){
-		err = errors.New(`no available DelegateData!`)
-		return nil,err
-	}
-	number := (cylce - 1) * ethash.dsPowCycle
-	headAvai := chain.GetHeaderByNumber(number)
-	var state, _ = chain.GetState(chain.GetBlock(headAvai.ParentHash, headAvai.Number.Uint64() - 1).Root())
-	return state,err
-}
-

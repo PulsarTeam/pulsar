@@ -4,6 +4,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"math/big"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/availabledb"
 	"errors"
 )
 
@@ -17,20 +20,26 @@ type DelegateMiner struct {
 	Fee uint32
 }
 
-func GetDepositors(state *state.StateDB, address common.Address)(DelegateMiner, error)  {
+func GetDelegateMiner(ethash *availabledb.AvailableDb, chain consensus.ChainReader, header *types.Header, address common.Address)(*state.StateDB,*DelegateMiner, error)  {
 	var err error = nil
+
+	var state, stateErr = ethash.GetAvailableDb(chain,header)
+    if state==nil {
+        return nil, nil, stateErr
+	}
+
 	var depositorMap = state.GetDepositMap(address)
 	var miners = state.GetAllDelegateMiners()
 	miner ,ok := miners[address]
 	if (!ok){
 		err = errors.New(`no miner!`)
 	}
-	delegateMiner := DelegateMiner{Fee: miner.FeeRatio}
+	delegateMiner := &DelegateMiner{Fee: miner.FeeRatio}
 	for k, v := range depositorMap{
 		depositor := Depositor{Addr:k, Amount:v.Balance}
 		delegateMiner.Depositors = append(delegateMiner.Depositors, depositor)
 	}
-	return delegateMiner,err
+	return state, delegateMiner,err
 }
 
 func GetLastCycleDepositAmount(state *state.StateDB)(*big.Int,error)  {

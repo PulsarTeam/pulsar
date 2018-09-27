@@ -108,3 +108,9 @@ type PoW interface {
 	// Hashrate returns the current mining hashrate of a PoW consensus engine.
 	Hashrate() float64
 }
+
+type AvailableDb interface {
+
+	// Get the available stateDb
+	GetAvailableDb(chain ChainReader, header *types.Header) (*state.StateDB, error)
+}
