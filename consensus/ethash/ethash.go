@@ -702,11 +702,11 @@ func SeedHash(block uint64) []byte {
 func (ethash *Ethash) GetAvailableDb(chain consensus.ChainReader, header *types.Header) (*state.StateDB, error) {
 	var err error = nil
 	cylce := header.Number.Uint64() / ethash.dsPowCycle
-	if(cylce < 1){
+	if(cylce < 2){
 		err = errors.New(`no available DelegateData!`)
 		return nil,err
 	}
-	number := cylce * ethash.dsPowCycle
+	number := (cylce - 1) * ethash.dsPowCycle
 	headAvai := chain.GetHeaderByNumber(number)
 	var state, _ = chain.GetState(chain.GetBlock(headAvai.ParentHash, headAvai.Number.Uint64() - 1).Root())
 	return state,err
