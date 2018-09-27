@@ -538,7 +538,7 @@ func NewShared() *Ethash {
 
 // calculate the pos target.
 func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
-	var state, _ = chain.GetState(chain.GetBlock(header.ParentHash, header.Number.Uint64() - 1).Root())
+	var state, _ = ethash.GetAvailableDb(chain,header)
 	miner, _ := delegateminers.GetDepositors(state, minerAddr)
 	var cycleLen int64 = 2000
 	// get the state by block root
