@@ -590,15 +590,16 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 		err = errors.New("pow production check error")
 	}
 
-	posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles)
-	if header.PosProduction == nil {
-		header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
-	} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
-		ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
-	} else {
-		err = errors.New("pos production check error")
+	if state.GetAccountType(header.Coinbase)==common.DelegateMiner {
+		posProduction := calculatePosRewards(chain, chain.Config(), state, header, uncles)
+		if header.PosProduction == nil {
+			header.PosProduction = accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+		} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
+			accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+		} else {
+			err = errors.New("pos production check error")
+		}
 	}
-
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
@@ -696,8 +697,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 	//}
     //-------------------------------------------------------------------
 
-	//FeeRatio := delegateMiner.Fee
-	FeeRatio := big.NewInt(1)
+	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
@@ -732,8 +732,7 @@ func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *p
 	}
 	stakeholders := delegateMiner.Depositors
 
-	//FeeRatio := delegateMiner.Fee
-	FeeRatio := big.NewInt(1)
+	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
