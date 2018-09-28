@@ -96,6 +96,8 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       *hexutil.Big
 	Extra      hexutil.Bytes
+	PosProduction *hexutil.Big
+	PowProduction *hexutil.Big
 	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
@@ -121,13 +123,16 @@ func (h *Header) HashNoNonce() common.Hash {
 		h.GasUsed,
 		h.Time,
 		h.Extra,
+		h.PosWeight,
+		h.PosProduction,
+		h.PowProduction,
 	})
 }
 
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return common.StorageSize(unsafe.Sizeof(*h)) + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+h.Time.BitLen())/8)
+	return common.StorageSize(unsafe.Sizeof(*h)) + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+h.Time.BitLen()+h.PosProduction.BitLen()+h.PowProduction.BitLen())/8)
 }
 
 func rlpHash(x interface{}) (h common.Hash) {
@@ -252,6 +257,12 @@ func CopyHeader(h *Header) *Header {
 	if cpy.Number = new(big.Int); h.Number != nil {
 		cpy.Number.Set(h.Number)
 	}
+	if cpy.PosProduction = new(big.Int); h.PosProduction != nil {
+		cpy.PosProduction.Set(h.PosProduction)
+	}
+	if cpy.PowProduction = new(big.Int); h.PowProduction != nil {
+		cpy.PowProduction.Set(h.PowProduction)
+	}
 	if len(h.Extra) > 0 {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
@@ -308,6 +319,9 @@ func (b *Block) Number() *big.Int     { return new(big.Int).Set(b.header.Number)
 func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
 func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
+func (b *Block) PosWeight() uint32      { return b.header.PosWeight }
+func (b *Block) PosProduction() *big.Int { return new(big.Int).Set(b.header.PosProduction) }
+func (b *Block) PowProduction() *big.Int { return new(big.Int).Set(b.header.PowProduction) }
 func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
