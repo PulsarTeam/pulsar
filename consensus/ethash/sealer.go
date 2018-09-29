@@ -100,7 +100,7 @@ func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id i
 		header  = block.Header()
 		hash    = header.HashNoNonce().Bytes()
 		//target  = new(big.Int).Div(maxUint256, header.Difficulty)
-		postarget = ethash.CalcPosTarget(chain, header)
+		target = ethash.CalcTarget(chain, header)
 //		dataset = ethash.dataset(number)
 	)
 	// Start generating random nonces until we abort or find a good one
@@ -130,7 +130,7 @@ search:
 //			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
 			result := hashimotoFull(hash, nonce)
 
-			if new(big.Int).SetBytes(result).Cmp(postarget) <= 0 {
+			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
 				header.Nonce = types.EncodeNonce(nonce)

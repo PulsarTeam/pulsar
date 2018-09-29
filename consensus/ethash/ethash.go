@@ -59,7 +59,7 @@ var (
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
 
 	initPosWeight = 5000
-	posWeightPrecision = 10000
+	posWeightPrecision int64 = 10000
 )
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -538,36 +538,34 @@ func NewShared() *Ethash {
 }
 
 // calculate the pos target.
-func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
+func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
 	stat, miner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
+	if err != nil { // pow
+		// calc the pow target
+		target := new(big.Int).Div(maxUint256, header.Difficulty)
+		powWeight := posWeightPrecision - int64(header.PosWeight)
+		powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
+		return powTarget
+	} else { // pos
+		count := len(miner.Depositors)
+		posLocalSum := big.NewInt(0)
+		for i := 0; i < count; i++ {
+			posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
+		}
+		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
+		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
+
+		// calc the pos target
+		target := new(big.Int) .Div(maxUint256, header.Difficulty)
+		x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
+		y := new(big.Int).Mul(x, posLocalSum)
+		z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
+		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
+			return big.NewInt(-1)
+		}
+		posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(int64(posWeightPrecision))))
+		return posTarget
 	}
-	if miner==nil {
-		return new(big.Int)
-	}
-
-	count := len(miner.Depositors)
-	posLocalSum := big.NewInt(0)
-	for i := 0; i < count; i++ {
-		posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
-	}
-
-	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
-	dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
-
-	// calc the pos target
-	target := new(big.Int) .Div(maxUint256, header.Difficulty)
-	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
-	y := new(big.Int).Mul(x, posLocalSum)
-	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
-	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
-		return big.NewInt(-1)
-	}
-
-	posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(int64(posWeightPrecision))))
-
-	return posTarget
 }
 
 // returns the pos weight in a certain cycle.
