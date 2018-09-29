@@ -539,32 +539,35 @@ func NewShared() *Ethash {
 
 // calculate the pos target.
 func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
+
+	// calc the target
+	target := new(big.Int).Div(maxUint256, header.Difficulty)
+	//powWeight := posWeightPrecision - int64(header.PosWeight)
+	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
+	posTargetAvg.Div(posTargetAvg, big.NewInt(posWeightPrecision))
+	powTarget := new(big.Int).Sub( target, posTargetAvg)
+
+	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
 	stat, miner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil { // pow
-		// calc the pow target
-		target := new(big.Int).Div(maxUint256, header.Difficulty)
-		powWeight := posWeightPrecision - int64(header.PosWeight)
-		powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
+	if err != nil { // pure pow
 		return powTarget
 	} else { // pos
+		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
+		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
+			return powTarget
+		}
 		count := len(miner.Depositors)
 		posLocalSum := big.NewInt(0)
 		for i := 0; i < count; i++ {
 			posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 		}
-		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
 		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
 
-		// calc the pos target
-		target := new(big.Int).Div(maxUint256, header.Difficulty)
-		x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
-		y := new(big.Int).Mul(x, posLocalSum)
-		z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
-		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
-			return big.NewInt(-1)
-		}
-		posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(posWeightPrecision)))
-		return posTarget
+		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
+		tmp.Div(tmp, posNetworkSum)
+		posTarget := new(big.Int).Mul(tmp, posLocalSum)
+		return new(big.Int).Add(powTarget, posTarget);
 	}
 }
 
