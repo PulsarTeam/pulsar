@@ -319,6 +319,8 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
+
+
 	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
 	} else {
@@ -342,7 +344,6 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
 			return parent.Difficulty
 		}
-
 		return newDifficulty
 	}
 }
@@ -572,6 +573,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 		return consensus.ErrUnknownAncestor
 	}
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	header.PosWeight = 	ethash.PosWeight(chain, header)
 	return nil
 }
 

@@ -30,6 +30,9 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
 		Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
+		PosWeight   uint32         `json:"posWeight"        gencodec:"required"`
+		PosProduction *hexutil.Big `json:"posProduction"    gencodec:"required"`
+		PowProduction *hexutil.Big `json:"powProduction"    gencodec:"required"`
 		Hash        common.Hash    `json:"hash"`
 	}
 	var enc Header
@@ -48,6 +51,9 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Extra = h.Extra
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
+	enc.PosWeight = h.PosWeight
+	enc.PosProduction = (*hexutil.Big)(h.PosProduction)
+	enc.PowProduction = (*hexutil.Big)(h.PowProduction)
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
@@ -69,6 +75,9 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"          gencodec:"required"`
 		Nonce       *BlockNonce     `json:"nonce"            gencodec:"required"`
+		PosWeight    uint32         `json:"posWeight"        gencodec:"required"`
+		PosProduction *hexutil.Big  `json:"posProduction"    gencodec:"required"`
+		PowProduction *hexutil.Big  `json:"powProduction"    gencodec:"required"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -134,5 +143,14 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'nonce' for Header")
 	}
 	h.Nonce = *dec.Nonce
+	h.PosWeight = dec.PosWeight
+	if dec.Number == nil {
+		return errors.New("missing required field 'posProduction' for Header")
+	}
+	h.PosProduction = (*big.Int)(dec.PosProduction)
+	if dec.Number == nil {
+		return errors.New("missing required field 'powProduction' for Header")
+	}
+	h.PowProduction = (*big.Int)(dec.PowProduction)
 	return nil
 }
