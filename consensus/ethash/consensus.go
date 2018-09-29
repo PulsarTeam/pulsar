@@ -342,7 +342,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
 			return parent.Difficulty
 		}
-
+		ethash.PosWeight(chain, parent)
 		return newDifficulty
 	}
 }
