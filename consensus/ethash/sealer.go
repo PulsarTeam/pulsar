@@ -69,7 +69,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ethash.mine(block, id, nonce, abort, found)
+			ethash.mine(chain, block, id, nonce, abort, found)
 		}(i, uint64(ethash.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
@@ -94,12 +94,13 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
-func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	// Extract some data from the header
 	var (
 		header  = block.Header()
 		hash    = header.HashNoNonce().Bytes()
-		target  = new(big.Int).Div(maxUint256, header.Difficulty)
+		//target  = new(big.Int).Div(maxUint256, header.Difficulty)
+		postarget = ethash.CalcPosTarget(chain, header)
 //		dataset = ethash.dataset(number)
 	)
 	// Start generating random nonces until we abort or find a good one
@@ -129,7 +130,7 @@ search:
 //			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
 			result := hashimotoFull(hash, nonce)
 
-			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
+			if new(big.Int).SetBytes(result).Cmp(postarget) <= 0 {
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
 				header.Nonce = types.EncodeNonce(nonce)

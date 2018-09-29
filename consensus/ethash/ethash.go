@@ -20,7 +20,6 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
@@ -37,11 +36,11 @@ import (
 
 	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/availabledb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hashicorp/golang-lru/simplelru"
-	"github.com/ethereum/go-ethereum/consensus/availabledb"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -58,6 +57,9 @@ var (
 
 	// dumpMagic is a dataset dump header to sanity check a data dump.
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
+
+	initPosWeight = 5000
+	posWeightPrecision = 10000
 )
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -536,7 +538,7 @@ func NewShared() *Ethash {
 }
 
 // calculate the pos target.
-func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr common.Address, header *types.Header) *big.Int {
+func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
 	stat, miner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
 	if err != nil {
 		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
@@ -556,13 +558,14 @@ func (ethash *Ethash) CalcPosTarget(chain consensus.ChainReader, minerAddr commo
 
 	// calc the pos target
 	target := new(big.Int) .Div(maxUint256, header.Difficulty)
-	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight/10000)))
+	x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
 	y := new(big.Int).Mul(x, posLocalSum)
 	z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
 	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
 		return big.NewInt(-1)
 	}
-	posTarget := new(big.Int).Div(z, posNetworkSum)
+
+	posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(int64(posWeightPrecision))))
 
 	return posTarget
 }
@@ -573,9 +576,9 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	posProduction := ethash.GetPosProduction(chain, header)
 	t := big.NewInt(0)
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
-		return
+		header.PosWeight = uint32(initPosWeight)
 	}
-	x := new(big.Int).Mul(powProduction, big.NewInt(10000))
+	x := new(big.Int).Mul(powProduction, big.NewInt(int64(posWeightPrecision)))
 	weight := new(big.Int).Div(x, new(big.Int).Add(powProduction, posProduction))
 	pw := uint32(weight.Uint64())
 	header.PosWeight = pw
