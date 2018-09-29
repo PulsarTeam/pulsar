@@ -91,6 +91,9 @@ var (
 
 	//ErrMinerDelegate is return if a delegate miner try to delegate to another mine
 	ErrMinerDelegate = errors.New("delegate miner should not delegate to another miner")
+
+	//ErrDelegateValue is return if delegate stake value is 0
+	ErrDelegateValue = errors.New("delegate value should not zero")
 )
 
 var (
@@ -604,6 +607,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	//for Ds-pow: if this is a DelegateStakesTx, the shareholder should not make the transaction many times,
 	//and the delegate miner should not make this transaction
 	if tx.TxType() == params.DelegateStakesTx{
+		if tx.Value().Sign() == 0 {
+			return ErrDelegateValue
+		}
+
 		to := tx.To()
 		if pool.currentState.GetAccountType(*to) != common.DelegateMiner{
 			return ErrToDelegateType
