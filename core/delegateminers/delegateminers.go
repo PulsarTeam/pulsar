@@ -24,7 +24,7 @@ func GetDelegateMiner(ethash *availabledb.AvailableDb, chain consensus.ChainRead
 	var err error = nil
 
 	var state, stateErr = ethash.GetAvailableDb(chain,header)
-    if state==nil {
+    if state == nil {
         return nil, nil, stateErr
 	}
 
