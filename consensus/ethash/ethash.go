@@ -445,7 +445,8 @@ func New(config Config) *Ethash {
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
 		powLimit: 131072,
-		availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
+		//availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
+		availableDb: &availabledb.AvailableDb{DsPowCycle: 10 },
 	}
 }
 
