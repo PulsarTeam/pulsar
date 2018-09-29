@@ -572,17 +572,16 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 }
 
 // returns the pos weight in a certain cycle.
-func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) {
+func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
 	powProduction := ethash.GetPowProduction(chain, header)
 	posProduction := ethash.GetPosProduction(chain, header)
 	t := big.NewInt(0)
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
-		header.PosWeight = uint32(initPosWeight)
+		return uint32(initPosWeight)
 	}
 	x := new(big.Int).Mul(powProduction, big.NewInt(int64(posWeightPrecision)))
 	weight := new(big.Int).Div(x, new(big.Int).Add(powProduction, posProduction))
-	pw := uint32(weight.Uint64())
-	header.PosWeight = pw
+	return uint32(weight.Uint64())
 }
 
 // returns the total pow production in the previous mature cycle.

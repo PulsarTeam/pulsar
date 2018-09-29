@@ -319,7 +319,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
-	ethash.PosWeight(chain, parent)
+
 
 	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
@@ -573,6 +573,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 		return consensus.ErrUnknownAncestor
 	}
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	header.PosWeight = 	ethash.PosWeight(chain, header)
 	return nil
 }
 

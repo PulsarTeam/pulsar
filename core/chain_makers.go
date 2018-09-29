@@ -243,6 +243,7 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		GasLimit: CalcGasLimit(parent),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
 		Time:     time,
+		PosWeight: 5000,
 	}
 }
 
