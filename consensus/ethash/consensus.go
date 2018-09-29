@@ -318,9 +318,10 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 	var difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
 
 	//var difficultyAdjustInterval int64 = 100
+	
+	ethash.PosWeight(chain, parent)
 
 	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
-		ethash.PosWeight(chain, parent)
 		return parent.Difficulty
 	} else {
 		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() +1 - difficultyAdjustInterval)).Time.Int64()))
@@ -340,13 +341,9 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		log.Info("adjust difficulty","actualtime",actualTimespan, "number", parent.Number.Int64(),"newdifficulty",newDifficulty.Int64(),"old-difficulty",parent.Difficulty.Int64())
 		state,_ := chain.GetState(parent.Root)
 		minerCounts, _ := delegateminers.GetLastCycleDelegateMiners(state)
-
-		ethash.PosWeight(chain, parent)
-
 		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
 			return parent.Difficulty
 		}
-
 		return newDifficulty
 	}
 }
