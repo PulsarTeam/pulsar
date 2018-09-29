@@ -60,6 +60,8 @@ var (
 
 	initPosWeight = 5000
 	posWeightPrecision int64 = 10000
+	posWeightMax uint32 = 2000
+	posWeightMin uint32 = 8000
 )
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -549,8 +551,8 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 	powTarget := new(big.Int).Sub( target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
-	stat, miner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil { // pure pow
+	stat, miner, _ := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
+	if stat == nil { // pure pow
 		return powTarget
 	} else { // pos
 		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
@@ -582,7 +584,13 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	}
 	x := new(big.Int).Mul(powProduction, big.NewInt(int64(posWeightPrecision)))
 	weight := new(big.Int).Div(x, new(big.Int).Add(powProduction, posProduction))
-	return uint32(weight.Uint64())
+	weight32u := uint32(weight.Uint64())
+	if weight32u>posWeightMax {
+		weight32u = posWeightMax
+	} else if weight32u<posWeightMin {
+		weight32u=posWeightMin
+	}
+	return weight32u
 }
 
 // returns the total pow production in the previous mature cycle.
