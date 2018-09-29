@@ -258,8 +258,12 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		y = big.NewInt(-1)
 	}
 	w := new(big.Int).Div(pos, y)
-	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
-		return fmt.Errorf("invalid pos weight: have %v, max %v", header.PosWeight, w)
+
+	expectedPosWeight := ethash.PosWeight(chain, header)
+	if  int64(header.PosWeight)>posWeightPrecision {
+		return fmt.Errorf("invalid pos weight: have %v, max  %v", header.PosWeight, posWeightPrecision)
+	} else if expectedPosWeight != header.PosWeight {
+		return fmt.Errorf("invalid pos weight: have %v, want %v", header.PosWeight, w)
 	}
 
 	// Verify that the gas limit is <= 2^63-1

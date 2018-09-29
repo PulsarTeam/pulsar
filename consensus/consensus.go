@@ -97,6 +97,9 @@ type Engine interface {
 	// that a new block should have.
 	CalcDifficulty(chain ChainReader, time uint64, parent *types.Header) *big.Int
 
+	// returns the pos weight in a certain cycle.
+	PosWeight(chain ChainReader, header *types.Header) uint32
+
 	// APIs returns the RPC APIs this consensus engine provides.
 	APIs(chain ChainReader) []rpc.API
 }

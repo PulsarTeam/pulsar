@@ -662,6 +662,11 @@ func (c *Clique) CalcDifficulty(chain consensus.ChainReader, time uint64, parent
 	return CalcDifficulty(snap, c.signer)
 }
 
+// returns the pos weight in a certain cycle.
+func (c *Clique) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
+	return 0
+}
+
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have based on the previous blocks in the chain and the
 // current signer.
