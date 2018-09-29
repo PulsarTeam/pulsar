@@ -14,14 +14,13 @@ type AvailableDb struct {
 
 //based Dspowcycle calculate available stateDb
 func (availableDb *AvailableDb) GetAvailableDb(chain consensus.ChainReader, header *types.Header) (*state.StateDB, error) {
-	var err error = nil
 	cylce := header.Number.Uint64() / availableDb.DsPowCycle
 	if(cylce < 2){
-		err = errors.New(`no available DelegateData!`)
+		err := errors.New(`no available DelegateData!`)
 		return nil,err
 	}
 	number := (cylce - 1) * availableDb.DsPowCycle
 	headAvai := chain.GetHeaderByNumber(number)
-	var state, _ = chain.GetState(chain.GetBlock(headAvai.ParentHash, headAvai.Number.Uint64() - 1).Root())
+	var state, err = chain.GetState(chain.GetBlock(headAvai.ParentHash, headAvai.Number.Uint64() - 1).Root())
 	return state,err
 }
