@@ -556,14 +556,14 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
 
 		// calc the pos target
-		target := new(big.Int) .Div(maxUint256, header.Difficulty)
+		target := new(big.Int).Div(maxUint256, header.Difficulty)
 		x := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
 		y := new(big.Int).Mul(x, posLocalSum)
 		z := new(big.Int).Mul(y, big.NewInt(int64(dmCounts)))
 		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
 			return big.NewInt(-1)
 		}
-		posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(int64(posWeightPrecision))))
+		posTarget := new(big.Int).Div(z, new(big.Int).Mul(posNetworkSum, big.NewInt(posWeightPrecision)))
 		return posTarget
 	}
 }
