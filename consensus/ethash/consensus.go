@@ -320,6 +320,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 	//var difficultyAdjustInterval int64 = 100
 
 	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
+		ethash.PosWeight(chain, parent)
 		return parent.Difficulty
 	} else {
 		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() +1 - difficultyAdjustInterval)).Time.Int64()))
