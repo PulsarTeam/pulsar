@@ -90,9 +90,7 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 }
 
 //For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
-func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, /*blockNr rpc.BlockNumber, */addr common.Address)(map[common.Address]interface{}, error){
-	//\\error, should modify
-	blockNr := rpc.LatestBlockNumber
+func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
@@ -110,14 +108,9 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, /*blockNr rpc
 	}
 
 	return fields, state.Error()
-}
 
-/*
-func (s *PublicEthereumAPI)GetAllStakeHoldersLatest(ctx context.Context, addr common.Address)(map[common.Address]interface{}, error){
-	blockNr := rpc.LatestBlockNumber
-	return s.GetAllStakeHolders(ctx, addr, blockNr)
-}
-*/
+	}
+
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:

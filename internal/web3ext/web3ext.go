@@ -432,8 +432,8 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'getAllStakeHolders',
 			call: 'eth_getAllStakeHolders',
-			params: 1,
-			inputFormatter: [web3._extend.formatters.inputAddressFormatter]
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter]
 		}),
 		new web3._extend.Method({
 			name: 'getRawTransactionFromBlock',
