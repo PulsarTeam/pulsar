@@ -388,6 +388,13 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 	return result
 }
 
+//\\//\\
+func (self* StateDB) GetDepositMiners(account common.Address) map[common.Address]common.DMView{
+	result := make(map[common.Address]common.DMView)
+
+	return result
+}
+
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {

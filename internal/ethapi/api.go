@@ -108,8 +108,29 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 	}
 
 	return fields, state.Error()
+}
 
+	//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
+func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
 	}
+
+	if state.GetAccountType(addr) != common.DefaultAccount{
+		return nil, errors.New("can not use this command on a delegate miner!")
+	}
+
+	fields := map[common.Address]interface{}{}
+	delegateMinersList := state.GetDepositMiners(addr)
+
+	for addr, miner := range delegateMinersList{
+		fields[addr] = miner
+	}
+
+	return fields, state.Error()
+
+}
 
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
