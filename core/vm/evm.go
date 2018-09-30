@@ -468,8 +468,24 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 		//deposit stakes to a delegateMiner
 		//evm.StateDB.SetAccountType(msg.From(), common.DefaultAccount, 0)
 		err = evm.StateDB.Deposit(msg.From(), *(msg.To()), msg.Value(), evm.Context.BlockNumber)
-	//\\case params.DelegateStakesCancel:
+	case params.DelegateStakesCancel:
+		if !evm.StateDB.Exist(addr) {
+			precompiles := PrecompiledContractsHomestead
+			if evm.ChainConfig().IsByzantium(evm.BlockNumber) {
+				precompiles = PrecompiledContractsByzantium
+			}
+			if precompiles[addr] == nil && evm.ChainConfig().IsEIP158(evm.BlockNumber) && value.Sign() == 0 {
+				// Calling a non existing account, don't do antything, but ping the tracer
+				if evm.vmConfig.Debug && evm.depth == 0 {
+					evm.vmConfig.Tracer.CaptureStart(caller.Address(), addr, false, input, gas, value)
+					evm.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+				}
+				return nil, gas, nil
+			}
+			evm.StateDB.CreateAccount(addr)
+		}
 
+		evm.StateDB.Withdraw(msg.From(), *(msg.To()))
 	default:
 		return nil, gas, errors.New("normal transaction should not come here")
 	}

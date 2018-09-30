@@ -94,6 +94,15 @@ var (
 
 	//ErrDelegateValue is return if delegate stake value is 0
 	ErrDelegateValue = errors.New("delegate value should not zero")
+
+    //ErrWithdrawFromType is return if from is not a normal account
+	ErrWithdrawFromType = errors.New("from is not a normal account")
+
+	//ErrWithdrawToType is return if to it not a delegate miner
+	ErrWithdrawToType = errors.New("to address is not a delegate miner")
+
+	//ErrWithdrawValue is return if value is not zero
+	ErrWithdrawValue = errors.New("this operation should not with value")
 )
 
 var (
@@ -621,9 +630,22 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		}
 	}
 	//for Ds-pow: if this is a DelegateStakesCancel
-	//\\if tx.TxType() == params.DelegateStakesCancel{
-	//\\
-	//\\}
+	if tx.TxType() == params.DelegateStakesCancel{
+		if pool.currentState.GetAccountType(from) != common.DefaultAccount{
+			return ErrWithdrawFromType
+		}
+
+		to := tx.To()
+		if pool.currentState.GetAccountType(*to) != common.DelegateMiner{
+			return ErrWithdrawToType
+		}
+
+		if tx.Value().Sign() != 0{
+			return ErrWithdrawValue
+		}
+
+		//\\check user delegate or not
+	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
