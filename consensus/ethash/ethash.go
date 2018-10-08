@@ -60,8 +60,8 @@ var (
 
 	initPosWeight = 5000
 	posWeightPrecision int64 = 10000
-	posWeightMax uint32 = 2000
-	posWeightMin uint32 = 8000
+	posWeightMax uint32 = 8000
+	posWeightMin uint32 = 2000
 )
 
 // isLittleEndian returns whether the local system is running in little or big
