@@ -43,7 +43,7 @@ var (
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 	InterestRate           *big.Int = big.NewInt(100)
 	InterestRatePrecision  *big.Int	= big.NewInt(10000000000)
-	FeeRatioPrecision  *big.Int	= big.NewInt(100)
+	FeeRatioPrecision  *big.Int	= big.NewInt(1000000)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
