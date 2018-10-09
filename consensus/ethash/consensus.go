@@ -260,7 +260,10 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	//w := new(big.Int).Div(pos, y)
 
 	expectedPosWeight := ethash.PosWeight(chain, header)
-	if expectedPosWeight != header.PosWeight {
+
+	if  int64(header.PosWeight) > posWeightPrecision {
+		return fmt.Errorf("invalid pos weight: have %v, max  %v", header.PosWeight, posWeightPrecision)
+	} else if expectedPosWeight != header.PosWeight {
 		return fmt.Errorf("invalid pos weight: have %v, want %v", header.PosWeight, expectedPosWeight)
 	}
 
