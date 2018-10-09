@@ -129,7 +129,6 @@ func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.
 	}
 
 	return fields, state.Error()
-
 }
 
 
