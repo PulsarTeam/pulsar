@@ -306,7 +306,14 @@ func (self *StateDB) Deposit(from common.Address, to common.Address, balance *bi
 	if result := fromObj.Balance().Cmp(balance); result < 0 {
 		return fmt.Errorf("account doesn't have enough balance to deposit")
 	}
-	if data := toObj.getDepositData(self.db, &from); !data.Empty() {
+
+	if dv := fromObj.getDepositView(self.db, &to); !dv.Empty() {
+		// double check.
+		dd := toObj.getDepositData(self.db, &from)
+		if dv.BlockNumber.Cmp(dd.BlockNumber) != 0 || dv.Balance.Cmp(dd.Balance) != 0 || dv.FeeRatio != toObj.data.FeeRatio {
+			panic(fmt.Sprintf("Logical error!Default account: %s,%s,%d\nDelegate miner: %s,%s,%d\n",
+				dv.BlockNumber.String(), dv.Balance.String(), dv.FeeRatio, dd.BlockNumber.String(), dd.Balance.String(), toObj.data.FeeRatio))
+		}
 		return fmt.Errorf("re-deposit is not allowed")
 	}
 
@@ -324,7 +331,13 @@ func (self *StateDB) Withdraw(from common.Address, to common.Address) error {
 	if fromObj.getType() == common.DelegateMiner || toObj.getType() != common.DelegateMiner {
 		return fmt.Errorf("account type is not allowed to deposit")
 	}
-	if data := toObj.getDepositData(self.db, &from); data.Empty() {
+
+	if dv := fromObj.getDepositView(self.db, &to); dv.Empty() {
+		// double check.
+		if dd := toObj.getDepositData(self.db, &from); !dd.Empty() {
+			panic(fmt.Sprintf("Logical error!Default account: (nil)\nDelegate miner: %s,%s,%d\n",
+				dd.BlockNumber.String(), dd.Balance.String(), toObj.data.FeeRatio))
+		}
 		return fmt.Errorf("has not deposited before")
 	}
 
@@ -343,7 +356,7 @@ func (self *StateDB) SetAccountType(addr common.Address, aType common.AccountTyp
 	}
 }
 
-func (self* StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
+func (self *StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
 	result := make(map[common.Address]common.DMView)
 	it := trie.NewIterator(self.trie.NodeIterator(nil))
 	var key common.Address
@@ -360,7 +373,26 @@ func (self* StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
 	return result
 }
 
-func (self* StateDB) GetAccountType(addr common.Address) common.AccountType {
+func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]common.DepositView {
+	result := make(map[common.Address]common.DepositView)
+	obj := self.GetOrNewStateObject(addr)
+	if obj != nil && obj.data.Type == common.DefaultAccount{
+		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
+			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
+			var key common.Address
+			for it.Next() {
+				key.SetBytes(self.trie.GetKey(it.Key))
+				value := obj.getDepositView(self.db, &key)
+				if !value.Empty() {
+					result[key] = value
+				}
+			}
+		}
+	}
+	return result
+}
+
+func (self *StateDB) GetAccountType(addr common.Address) common.AccountType {
 	var aType common.AccountType = common.DefaultAccount
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil {
@@ -385,13 +417,6 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 			}
 		}
 	}
-	return result
-}
-
-//\\//\\
-func (self* StateDB) GetDepositMiners(account common.Address) map[common.Address]common.DMView{
-	result := make(map[common.Address]common.DMView)
-
 	return result
 }
 
@@ -656,9 +681,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			s.deleteStateObject(stateObject)
 		} else {
 			stateObject.updateStorageRoot(s.db)
-			if stateObject.data.Type == common.DelegateMiner {
-				stateObject.updateStakeRoot(s.db)
-			}
+			stateObject.updateStakeRoot(s.db)
 			s.updateStateObject(stateObject)
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
@@ -732,7 +755,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		if code != crypto.EmptyKeccak256Hash {
 			s.db.TrieDB().Reference(code, parent)
 		}
-		if account.Type == common.DelegateMiner && account.StakeRoot != trie.EmptyState {
+		if account.StakeRoot != trie.EmptyState {
 			s.db.TrieDB().Reference(account.StakeRoot, parent)
 		}
 		return nil

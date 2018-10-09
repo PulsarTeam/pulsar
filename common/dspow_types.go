@@ -25,6 +25,10 @@ func FeeRatioValidity(feeRatio uint32) bool {
 	return feeRatio < 1000000
 }
 
+type StakeData interface {
+	Empty() bool
+}
+
 type DepositData struct {
 	Balance *big.Int `json:"depositBalance" gencodec:"required"`
 	BlockNumber *big.Int `json:"depositBlockNumber" gencodec:"required"`
@@ -38,4 +42,10 @@ func (this DepositData) Empty() bool {
 type DMView struct {
 	FeeRatio uint32
 	DepositBalance *big.Int
+}
+
+// Deposit View from default account
+type DepositView struct {
+	DepositData
+	FeeRatio uint32
 }
