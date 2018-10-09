@@ -47,5 +47,5 @@ type DMView struct {
 // Deposit View from default account
 type DepositView struct {
 	DepositData
-	FeeRatio uint32
+	FeeRatio uint32 `json:"delegateMinerFeeRatio" gencodec:"required"`
 }
