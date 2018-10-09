@@ -554,13 +554,15 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	}
 
 	// verify pos weight
-	pos := ethash.GetPosProduction(chain, header)
-	pow := ethash.GetPowProduction(chain, header)
-	y := new(big.Int).Add(pos, pow)
-	if y.Cmp(big.NewInt(0)) == 0 {
-		y = big.NewInt(-1)
-	}
-	w := new(big.Int).Div(pos, y)
+	//pos := ethash.GetPosProduction(chain, header)
+	//pow := ethash.GetPowProduction(chain, header)
+	//y := new(big.Int).Add(pos, pow)
+	//if y.Cmp(big.NewInt(0)) == 0 {
+	//	y = big.NewInt(-1)
+	//}
+	//w := new(big.Int).Div(pos, y)
+
+	w := big.NewInt(int64(ethash.PosWeight(chain, header)))
 
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
