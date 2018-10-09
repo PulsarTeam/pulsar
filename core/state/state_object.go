@@ -1,4 +1,5 @@
 // Copyright 2014 The go-ethereum Authors
+// Copyright 2014 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -53,10 +54,10 @@ func (self Storage) Copy() Storage {
 	return cpy
 }
 
-type DepositCache map[common.Address]common.DepositData
+type StakeCache map[common.Address]common.StakeData
 
-func (this DepositCache) Copy() DepositCache {
-	cpy := make(DepositCache)
+func (this StakeCache) Copy() StakeCache {
+	cpy := make(StakeCache)
 	for key, value := range this {
 		cpy[key] = value
 	}
@@ -90,7 +91,7 @@ type stateObject struct {
 	dirtyStorage  Storage // Storage entries that need to be flushed to disk
 
 	stakeTrie Trie  // stake trie for delegate miner
-	dirtyStake DepositCache // stake state need to be flushed to disk
+	dirtyStake StakeCache // stake state need to be flushed to disk
 
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
@@ -145,7 +146,7 @@ func newObject(db *StateDB, address common.Address, account *Account) *stateObje
 		data:          *account,
 		cachedStorage: make(Storage),
 		dirtyStorage:  make(Storage),
-		dirtyStake:    make(DepositCache),
+		dirtyStake:    make(StakeCache),
 	}
 }
 
@@ -190,7 +191,7 @@ func (c *stateObject) getStorageTrie(db Database) Trie {
 }
 
 func (c *stateObject) getStakeTrie(db Database) Trie {
-	if c.data.Type == common.DelegateMiner && c.stakeTrie == nil {
+	if c.stakeTrie == nil {
 		c.stakeTrie = c.openTrie(db, c.data.StakeRoot)
 	}
 	return c.stakeTrie
@@ -273,7 +274,7 @@ func (self *stateObject) updateStakeTrie(db Database) Trie {
 			v, _ := rlp.EncodeToBytes(&value)
 			self.setError(tr.TryUpdate(key[:], v))
 		}
-		self.dirtyStake = make(DepositCache) // clear map
+		self.dirtyStake = make(StakeCache) // clear map
 	}
 	return tr
 }
@@ -322,11 +323,9 @@ func (self *stateObject) commitStakeTrie(db Database) error {
 // This updates the trie root.
 func (self *stateObject) CommitTrie(db Database) error {
 	err := self.commitStorageTrie(db)
-	if self.data.Type == common.DelegateMiner {
-		err1 := self.commitStakeTrie(db)
-		if err == nil {
-			err = err1
-		}
+	err1 := self.commitStakeTrie(db)
+	if err == nil {
+		err = err1
 	}
 	return err
 }
@@ -412,9 +411,19 @@ func (self *stateObject) getType() common.AccountType {
 }
 
 func (self *stateObject) setDeposit(from *stateObject, balance *big.Int, blockNumber *big.Int) {
+	// Delegate miner record the default account deposit information.
 	self.dirtyStake[from.address] = common.DepositData{
 		Balance: balance,
 		BlockNumber: blockNumber,
+	}
+
+	// Default account record to which delegate miner it deposited.
+	from.dirtyStake[self.address] = common.DepositView{
+		DepositData:common.DepositData{
+			Balance: balance,
+			BlockNumber: blockNumber,
+		},
+		FeeRatio: self.data.FeeRatio,
 	}
 
 	// Delegate miner update deposit balance.
@@ -441,9 +450,20 @@ func (self *stateObject) rmDeposit(from *stateObject) {
 	if self.data.DepositBalance.Cmp(balance) < 0 {
 		panic(fmt.Sprintf("Delegate miner's total deposit balance less than customer's deposit amount.\n"))
 	}
+
+	// Delegate miner remove the record.
 	self.dirtyStake[from.address] = common.DepositData{
 		Balance: nil,
 		BlockNumber: nil,
+	}
+
+	// Default account remove the record
+	from.dirtyStake[self.address] = common.DepositView{
+		DepositData:common.DepositData{
+			Balance: nil,
+			BlockNumber: nil,
+		},
+		FeeRatio: 0,
 	}
 
 	// Delegate miner update deposit balance.
@@ -467,7 +487,7 @@ func (self *stateObject) rmDeposit(from *stateObject) {
 
 func (self *stateObject) getDepositData(db Database, pAddr *common.Address) common.DepositData {
 	if data, exist := self.dirtyStake[*pAddr]; exist {
-		return data
+		return data.(common.DepositData)
 	}
 
 	var dataBytes []byte
@@ -476,7 +496,25 @@ func (self *stateObject) getDepositData(db Database, pAddr *common.Address) comm
 	if dataBytes, err = self.getStakeTrie(db).TryGet(pAddr[:]); err == nil {
 		if len(dataBytes) > 0 {
 			// Found
-			err = rlp.DecodeBytes(dataBytes, &data);
+			err = rlp.DecodeBytes(dataBytes, &data)
+		}
+	}
+	self.setError(err)
+	return data
+}
+
+func (self *stateObject) getDepositView(db Database, pAddr *common.Address) common.DepositView {
+	if data, exist := self.dirtyStake[*pAddr]; exist {
+		return data.(common.DepositView)
+	}
+
+	var dataBytes []byte
+	var err error
+	var data common.DepositView
+	if dataBytes, err = self.getStakeTrie(db).TryGet(pAddr[:]); err == nil {
+		if len(dataBytes) > 0 {
+			// Found
+			err = rlp.DecodeBytes(dataBytes, &data)
 		}
 	}
 	self.setError(err)
