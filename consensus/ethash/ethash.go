@@ -620,7 +620,12 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 	var i uint64
 	sumPow := big.NewInt(0)
 	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
-		sumPow = new(big.Int).Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPow.Add(sumPow, h.PowProduction)
+		} else {
+			log.Warn("cannot find the header")
+		}
 	}
 	return sumPow
 }
@@ -636,7 +641,12 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 	var i uint64
 	sumPos := big.NewInt(0)
 	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
-		sumPos = new(big.Int).Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPos.Add(sumPos, h.PosProduction)
+		} else {
+			log.Warn("cannot find the header")
+		}
 	}
 	return sumPos
 }
