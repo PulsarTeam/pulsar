@@ -570,14 +570,22 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
 		tmp.Div(tmp, posNetworkSum)
 		posTarget := new(big.Int).Mul(tmp, posLocalSum)
-		return new(big.Int).Add(powTarget, posTarget);
+		return new(big.Int).Add(powTarget, posTarget)
+	}
+}
+
+func (ethash *Ethash) GetCycle() uint64 {
+	if ethash.availableDb == nil {
+		return 10
+	} else {
+		return ethash.availableDb.DsPowCycle
 	}
 }
 
 // returns the pos weight in a certain cycle.
 func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
 	// in first two cycles
-	cycle := ethash.availableDb.DsPowCycle
+	cycle := ethash.GetCycle()
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum < 2 {
 		return uint32(initPosWeight)
@@ -603,30 +611,32 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 
 // returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.availableDb.DsPowCycle
+	cycle := ethash.GetCycle()
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
 	}
+
 	var i uint64
 	sumPow := big.NewInt(0)
 	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
-		sumPow.Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
+		sumPow = new(big.Int).Add(sumPow, chain.GetHeaderByNumber(i).PowProduction)
 	}
 	return sumPow
 }
 
 // returns the total pos production in the previous mature cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.availableDb.DsPowCycle
+	cycle := ethash.GetCycle()
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
 	}
+
 	var i uint64
 	sumPos := big.NewInt(0)
 	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
-		sumPos.Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
+		sumPos = new(big.Int).Add(sumPos, chain.GetHeaderByNumber(i).PosProduction)
 	}
 	return sumPos
 }
