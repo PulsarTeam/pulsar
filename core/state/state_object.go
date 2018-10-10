@@ -67,14 +67,32 @@ func (this StakeCache) Copy() StakeCache {
 func checkDepositValidity(
 	miner *stateObject, user* stateObject, minerData *common.DepositData, userData *common.DepositView) {
 	if !userData.Equal(minerData) {
+		userDataBlkStr := "nil"
+		userDataBlnStr := "nil"
+		minerDataBlkStr := "nil"
+		minerDataBlnStr := "nil"
+
+		if userData.BlockNumber != nil {
+			userDataBlkStr = userData.BlockNumber.String()
+		}
+		if userData.Balance != nil {
+			userDataBlnStr = userData.Balance.String()
+		}
+		if minerData.BlockNumber != nil {
+			minerDataBlkStr = minerData.BlockNumber.String()
+		}
+		if minerData.Balance != nil {
+			minerDataBlnStr = minerData.Balance.String()
+		}
+
 		panic(fmt.Sprintf("Logical error!User account: %s,%s,%d\nDelegate miner: %s,%s,%d\n",
-			userData.BlockNumber.String(), userData.Balance.String(), userData.FeeRatio,
-			minerData.BlockNumber.String(), minerData.Balance.String(), miner.data.FeeRatio))
+			userDataBlkStr, userDataBlnStr, userData.FeeRatio,
+			minerDataBlkStr, minerDataBlnStr, miner.data.FeeRatio))
 	}
 
 	if minerData.Balance != nil && miner.data.DepositBalance.Cmp(minerData.Balance) < 0 { // whole < part
-		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, deposited balance: nil\n",
-			miner.data.DepositBalance.String()))
+		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, deposited balance: %s\n",
+			miner.data.DepositBalance.String(), minerData.Balance.String()))
 	}
 
 	if userData.Balance != nil && user.data.DepositBalance.Cmp(userData.Balance) < 0 { // whole < part
