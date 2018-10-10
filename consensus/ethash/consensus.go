@@ -17,7 +17,7 @@
 package ethash
 
 import (
-		"errors"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"math/big"
@@ -30,9 +30,9 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -258,7 +258,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	//	y = big.NewInt(-1)
 	//}
 	//w := new(big.Int).Div(pos, y)
-
+	//fmt.Printf("===header No.%d, Nonce:%x\n", header.Number, header.Nonce)
 	expectedPosWeight := ethash.PosWeight(chain, header)
 
 	if  int64(header.PosWeight) > posWeightPrecision {
@@ -549,7 +549,8 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	// Caches are unmapped in a finalizer. Ensure that the cache stays live
 	// until after the call to hashimotoLight so it's not unmapped while being used.
 //	runtime.KeepAlive(cache)
-	target := new(big.Int).Div(maxUint256, header.Difficulty)
+	// target := new(big.Int).Div(maxUint256, header.Difficulty)
+	target := ethash.CalcTarget(chain, header)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}
