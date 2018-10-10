@@ -123,10 +123,14 @@ type (
 		prevType common.AccountType
 	}
 
-	// Default account deposit balance change
-	depositChange struct {
+	depositUp struct {
 		account *common.Address
-		prev *big.Int
+		deltaBalance *big.Int
+	}
+
+	depositDown struct {
+		account *common.Address
+		deltaBalance *big.Int
 	}
 
 	depositSinkChange struct {
@@ -230,21 +234,32 @@ func (ch typeChange) revert(s *StateDB) {
 	s.getStateObject(*ch.account).data.Type = ch.prevType
 }
 
-func (ch depositChange) dirtied() *common.Address {
+func (ch depositUp) dirtied() *common.Address {
 	return ch.account
 }
 
-func (ch depositChange) revert(s *StateDB) {
+func (ch depositUp) revert(s *StateDB) {
 	obj := s.getStateObject(*ch.account)
-	current := obj.Balance()
-	result := new(big.Int).Sub(ch.prev, current)
-	if result.Cmp(obj.DepositBalance()) != 0 {
-		panic(fmt.Errorf(
-			"Deposit data is not matched: Prevous: %v, Current: %v, Deposit: %v\n",
-			ch.prev, current, obj.DepositBalance()))
+	obj.data.Balance.Add(obj.data.Balance, ch.deltaBalance)
+	if obj.data.DepositBalance.Cmp(ch.deltaBalance) < 0 {
+		panic(fmt.Sprintf("Logical error! Total deposit amount: %s less than %s\n",
+			obj.data.DepositBalance.String(), ch.deltaBalance.String()))
 	}
-	obj.setBalance(ch.prev)
-	obj.data.DepositBalance.SetUint64(0)
+	obj.data.DepositBalance.Sub(obj.data.DepositBalance, ch.deltaBalance)
+}
+
+func (ch depositDown) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch depositDown) revert(s *StateDB) {
+	obj := s.getStateObject(*ch.account)
+	obj.data.DepositBalance.Add(obj.data.DepositBalance, ch.deltaBalance)
+	if obj.data.Balance.Cmp(ch.deltaBalance) < 0 {
+		panic(fmt.Sprintf("Logical error! Total balance amount: %s less than %s\n",
+			obj.data.Balance.String(), ch.deltaBalance.String()))
+	}
+	obj.data.Balance.Sub(obj.data.Balance, ch.deltaBalance)
 }
 
 func (ch depositSinkChange) dirtied() *common.Address {
@@ -253,7 +268,6 @@ func (ch depositSinkChange) dirtied() *common.Address {
 
 func (ch depositSinkChange) revert(s *StateDB) {
 	obj := s.getStateObject(*ch.account)
-	delete(obj.dirtyStake, *ch.from)
 	obj.data.DepositBalance = ch.prev
 }
 

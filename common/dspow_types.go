@@ -49,3 +49,7 @@ type DepositView struct {
 	DepositData
 	FeeRatio uint32 `json:"delegateMinerFeeRatio" gencodec:"required"`
 }
+
+func (self *DepositView) Equal(dd *DepositData) bool {
+	return self.Balance.Cmp(dd.Balance) == 0 && self.BlockNumber.Cmp(dd.BlockNumber) == 0
+}

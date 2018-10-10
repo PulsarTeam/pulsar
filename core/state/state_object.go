@@ -64,6 +64,27 @@ func (this StakeCache) Copy() StakeCache {
 	return cpy
 }
 
+func checkDepositValidity(
+	miner *stateObject, user* stateObject, minerData *common.DepositData, userData *common.DepositView) {
+	if !userData.Equal(minerData) {
+		panic(fmt.Sprintf("Logical error!User account: %s,%s,%d\nDelegate miner: %s,%s,%d\n",
+			userData.BlockNumber.String(), userData.Balance.String(), userData.FeeRatio,
+			minerData.BlockNumber.String(), minerData.Balance.String(), miner.data.FeeRatio))
+	}
+	if miner.data.DepositBalance.Cmp(minerData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, user deposited balance: %s\n",
+			miner.data.DepositBalance.String(), minerData.Balance.String()))
+	}
+	if user.data.DepositBalance.Cmp(userData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! user total deposit balance: %s, user deposited balance: %s\n",
+			user.data.DepositBalance.String(), userData.Balance.String()))
+	}
+	if user.data.Balance.Cmp(user.data.DepositBalance) < 0 {
+		panic(fmt.Sprintf("Logical error! user total balance: %s, user deposited balance: %s\n",
+			user.data.DepositBalance.String(), userData.Balance.String()))
+	}
+}
+
 
 // stateObject represents an Ethereum account which is being modified.
 //
@@ -149,7 +170,6 @@ func newObject(db *StateDB, address common.Address, account *Account) *stateObje
 		dirtyStake:    make(StakeCache),
 	}
 }
-
 
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
@@ -410,7 +430,15 @@ func (self *stateObject) getType() common.AccountType {
 	return self.data.Type
 }
 
-func (self *stateObject) setDeposit(from *stateObject, balance *big.Int, blockNumber *big.Int) {
+func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big.Int, blockNumber *big.Int) error {
+	dv := from.getDepositView(db, &self.address)
+	dd := self.getDepositData(db, &from.address)
+
+	checkDepositValidity(self, from, &dd, &dv)
+	if !dv.Empty() {
+		return fmt.Errorf("can not re-deposit to same miner")
+	}
+
 	// Delegate miner record the default account deposit information.
 	self.dirtyStake[from.address] = common.DepositData{
 		Balance: balance,
@@ -436,19 +464,23 @@ func (self *stateObject) setDeposit(from *stateObject, balance *big.Int, blockNu
 	})
 
 	// Customer account update deposit balance
-	prevBalance := new (big.Int).Set(from.data.Balance)
 	from.data.Balance.Sub(from.data.Balance, balance)
-	from.data.DepositBalance.Set(balance)
-	self.db.journal.append(depositChange{
+	from.data.DepositBalance.Add(from.data.DepositBalance, balance)
+	self.db.journal.append(depositUp{
 		account: &from.address,
-		prev: new (big.Int).Set(prevBalance),
+		deltaBalance: new (big.Int).Set(balance),
 	})
+
+	return nil
 }
 
-func (self *stateObject) rmDeposit(from *stateObject) {
-	balance := from.data.DepositBalance
-	if self.data.DepositBalance.Cmp(balance) < 0 {
-		panic(fmt.Sprintf("Delegate miner's total deposit balance less than customer's deposit amount.\n"))
+func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
+	dv := from.getDepositView(db, &self.address)
+	dd := self.getDepositData(db, &from.address)
+
+	checkDepositValidity(self, from, &dd, &dv)
+	if dv.Empty() {
+		return fmt.Errorf("has not deposited before")
 	}
 
 	// Delegate miner remove the record.
@@ -468,21 +500,22 @@ func (self *stateObject) rmDeposit(from *stateObject) {
 
 	// Delegate miner update deposit balance.
 	prevDeposit := new (big.Int).Set(self.data.DepositBalance)
-	self.data.DepositBalance.Sub(self.data.DepositBalance, balance)
+	self.data.DepositBalance.Sub(self.data.DepositBalance, dv.Balance)
 	self.db.journal.append(depositSinkChange{
 		account: &self.address,
 		from: &from.address,
 		prev: prevDeposit,
 	})
 
-	// Customer account update deposit balance
-	prevBalance := new (big.Int).Set(from.data.Balance)
-	from.data.Balance.Add(from.data.Balance, balance)
-	from.data.DepositBalance.SetUint64(0)
-	self.db.journal.append(depositChange{
+	// Default account update deposit balance
+	from.data.Balance.Add(from.data.Balance, dv.Balance)
+	from.data.DepositBalance.Sub(from.data.DepositBalance, dv.Balance)
+	self.db.journal.append(depositDown{
 		account: &from.address,
-		prev: new (big.Int).Set(prevBalance),
+		deltaBalance: new (big.Int).Set(dv.Balance),
 	})
+
+	return nil
 }
 
 func (self *stateObject) getDepositData(db Database, pAddr *common.Address) common.DepositData {
