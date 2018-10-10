@@ -307,19 +307,7 @@ func (self *StateDB) Deposit(from common.Address, to common.Address, balance *bi
 		return fmt.Errorf("account doesn't have enough balance to deposit")
 	}
 
-	if dv := fromObj.getDepositView(self.db, &to); !dv.Empty() {
-		// double check.
-		dd := toObj.getDepositData(self.db, &from)
-		if dv.BlockNumber.Cmp(dd.BlockNumber) != 0 || dv.Balance.Cmp(dd.Balance) != 0 || dv.FeeRatio != toObj.data.FeeRatio {
-			panic(fmt.Sprintf("Logical error!Default account: %s,%s,%d\nDelegate miner: %s,%s,%d\n",
-				dv.BlockNumber.String(), dv.Balance.String(), dv.FeeRatio, dd.BlockNumber.String(), dd.Balance.String(), toObj.data.FeeRatio))
-		}
-		return fmt.Errorf("re-deposit is not allowed")
-	}
-
-	// All are OK.
-	toObj.setDeposit(fromObj, balance, blockNumber)
-	return nil
+	return toObj.setDeposit(self.db, fromObj, balance, blockNumber)
 }
 
 func (self *StateDB) Withdraw(from common.Address, to common.Address) error {
@@ -332,18 +320,7 @@ func (self *StateDB) Withdraw(from common.Address, to common.Address) error {
 		return fmt.Errorf("account type is not allowed to deposit")
 	}
 
-	if dv := fromObj.getDepositView(self.db, &to); dv.Empty() {
-		// double check.
-		if dd := toObj.getDepositData(self.db, &from); !dd.Empty() {
-			panic(fmt.Sprintf("Logical error!Default account: (nil)\nDelegate miner: %s,%s,%d\n",
-				dd.BlockNumber.String(), dd.Balance.String(), toObj.data.FeeRatio))
-		}
-		return fmt.Errorf("has not deposited before")
-	}
-
-	// All are OK
-	toObj.rmDeposit(fromObj)
-	return nil
+	return toObj.rmDeposit(self.db, fromObj)
 }
 
 func (self *StateDB) SetAccountType(addr common.Address, aType common.AccountType, feeRatio uint32) {
@@ -376,7 +353,8 @@ func (self *StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
 func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]common.DepositView {
 	result := make(map[common.Address]common.DepositView)
 	obj := self.GetOrNewStateObject(addr)
-	if obj != nil && obj.data.Type == common.DefaultAccount{
+	if obj != nil && obj.data.Type == common.DefaultAccount {
+		total := new (big.Int).SetUint64(0)
 		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
 			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
 			var key common.Address
@@ -385,10 +363,20 @@ func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]co
 				value := obj.getDepositView(self.db, &key)
 				if !value.Empty() {
 					result[key] = value
+					total.Add(total, value.Balance)
+				} else {
+					log.Warn("Empty deposit data entry for user %s has not been deleted!\n", addr.String())
 				}
 			}
 		}
+
+		// check validity
+		if total.Cmp(obj.data.DepositBalance) != 0 {
+			panic(fmt.Sprintf("Logcal error! User %s total deposit balance %s is not equal to part accumulated amount %s.\n",
+				addr.String(), total.String(), obj.data.DepositBalance.String()))
+		}
 	}
+
 	return result
 }
 
@@ -405,6 +393,7 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 	result := make(map[common.Address]common.DepositData)
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil && obj.data.Type == common.DelegateMiner {
+		total := new (big.Int).SetUint64(0)
 		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
 			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
 			var key common.Address
@@ -413,10 +402,19 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 				value := obj.getDepositData(self.db, &key)
 				if !value.Empty() {
 					result[key] = value
+				} else {
+					log.Warn("Empty deposit data entry for miner %s has not been deleted!\n", addr.String())
 				}
 			}
 		}
+
+		// check validity
+		if total.Cmp(obj.data.DepositBalance) != 0 {
+			panic(fmt.Sprintf("Logcal error! Miner %s total deposit balance %s is not equal to part accumulated amount %s.\n",
+				addr.String(), total.String(), obj.data.DepositBalance.String()))
+		}
 	}
+
 	return result
 }
 
