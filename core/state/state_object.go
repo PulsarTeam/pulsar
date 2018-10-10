@@ -71,16 +71,14 @@ func checkDepositValidity(
 			userData.BlockNumber.String(), userData.Balance.String(), userData.FeeRatio,
 			minerData.BlockNumber.String(), minerData.Balance.String(), miner.data.FeeRatio))
 	}
-	if miner.data.DepositBalance.Cmp(minerData.Balance) < 0 { // whole < part
-		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, user deposited balance: %s\n",
-			miner.data.DepositBalance.String(), minerData.Balance.String()))
+
+	if minerData.Balance != nil && miner.data.DepositBalance.Cmp(minerData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, deposited balance: nil\n",
+			miner.data.DepositBalance.String()))
 	}
-	if user.data.DepositBalance.Cmp(userData.Balance) < 0 { // whole < part
-		panic(fmt.Sprintf("Logical error! user total deposit balance: %s, user deposited balance: %s\n",
-			user.data.DepositBalance.String(), userData.Balance.String()))
-	}
-	if user.data.Balance.Cmp(user.data.DepositBalance) < 0 {
-		panic(fmt.Sprintf("Logical error! user total balance: %s, user deposited balance: %s\n",
+
+	if userData.Balance != nil && user.data.DepositBalance.Cmp(userData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! user total deposit balance: %s, deposited balance: %s\n",
 			user.data.DepositBalance.String(), userData.Balance.String()))
 	}
 }

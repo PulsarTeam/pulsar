@@ -402,6 +402,7 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 				value := obj.getDepositData(self.db, &key)
 				if !value.Empty() {
 					result[key] = value
+					total.Add(total, value.Balance)
 				} else {
 					log.Warn("Empty deposit data entry for miner %s has not been deleted!\n", addr.String())
 				}
