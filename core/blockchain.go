@@ -139,6 +139,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		cacheConfig = &CacheConfig{
 			TrieNodeLimit: 256 * 1024 * 1024,
 			TrieTimeLimit: 5 * time.Minute,
+			Disabled: true,
 		}
 	}
 	bodyCache, _ := lru.New(bodyCacheLimit)
