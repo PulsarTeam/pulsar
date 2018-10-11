@@ -448,7 +448,7 @@ func New(config Config) *Ethash {
 		powTargetSpacing: 15,
 		powLimit: 131072,
 		//availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
-		availableDb: &availabledb.AvailableDb{DsPowCycle: 10 },
+		availableDb: &availabledb.AvailableDb{DsPowCycle: 200 },
 	}
 }
 
@@ -576,7 +576,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 
 func (ethash *Ethash) GetCycle() uint64 {
 	if ethash.availableDb == nil {
-		return 10
+		return 200
 	} else {
 		return ethash.availableDb.DsPowCycle
 	}
