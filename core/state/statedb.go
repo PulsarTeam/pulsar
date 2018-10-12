@@ -365,7 +365,7 @@ func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]co
 					result[key] = value
 					total.Add(total, value.Balance)
 				} else {
-					log.Warn("Empty deposit data entry for user %s has not been deleted!\n", addr.String())
+					log.Warn(fmt.Sprintf("Empty deposit data entry for user %s has not been deleted!\n", addr.String()))
 				}
 			}
 		}
@@ -404,7 +404,7 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 					result[key] = value
 					total.Add(total, value.Balance)
 				} else {
-					log.Warn("Empty deposit data entry for miner %s has not been deleted!\n", addr.String())
+					log.Warn(fmt.Sprintf("Empty deposit data entry for miner %s has not been deleted!\n", addr.String()))
 				}
 			}
 		}
