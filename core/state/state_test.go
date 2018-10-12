@@ -49,7 +49,7 @@ func (s *StateSuite) TestBasic(c *checker.C) {
 	obj3 := s.state.GetOrNewStateObject(objAddr3)
 	obj3.SetBalance(big.NewInt(44))
 
-	dMap1 := s.state.GetDepositMap(objAddr1)
+	dMap1 := s.state.GetDepositUsers(objAddr1)
 	c.Assert(len(dMap1), checker.Equals, 0)
 	s.state.SetAccountType(objAddr1, common.DelegateMiner, 1000)
 
@@ -61,7 +61,7 @@ func (s *StateSuite) TestBasic(c *checker.C) {
 	s.state.updateStateObject(obj3)
 	s.state.Commit(false)
 
-	dMap1 = s.state.GetDepositMap(objAddr1)
+	dMap1 = s.state.GetDepositUsers(objAddr1)
 	c.Assert(len(dMap1), checker.Equals, 1)
 	c.Assert(dMap1[objAddr3], checker.DeepEquals, common.DepositData{new(big.Int).SetUint64(10), new(big.Int).SetUint64(100)})
 
@@ -126,7 +126,7 @@ func (s *StateSuite) TestBasic(c *checker.C) {
 	s.state.updateStateObject(obj3)
 	s.state.Commit(false)
 
-	dMap1 = s.state.GetDepositMap(objAddr1)
+	dMap1 = s.state.GetDepositUsers(objAddr1)
 	c.Assert(len(dMap1), checker.Equals, 0)
 
 	dMiners = s.state.GetAllDelegateMiners()

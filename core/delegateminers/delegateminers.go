@@ -28,7 +28,7 @@ func GetDelegateMiner(ethash *availabledb.AvailableDb, chain consensus.ChainRead
         return nil, nil, stateErr
 	}
 
-	var depositorMap = state.GetDepositMap(address)
+	var depositorMap = state.GetDepositUsers(address)
 	var miners = state.GetAllDelegateMiners()
 	miner ,ok := miners[address]
 	if (!ok){

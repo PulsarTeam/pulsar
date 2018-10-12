@@ -101,7 +101,7 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 	}
 
 	fields := map[common.Address]interface{}{}
-	stakeHoldersList := state.GetDepositMap(addr)
+	stakeHoldersList := state.GetDepositUsers(addr)
 
 	for addr, stakeholder := range stakeHoldersList{
 		fields[addr] = stakeholder

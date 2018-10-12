@@ -55,6 +55,8 @@ type StateDB interface {
 	 */
 	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32)
 
+	GetAccountType(common.Address) common.AccountType
+
 	/**
 	 * @brief Get all registered delegate miners
 	 * @return The map of all delegate miners address and view.
@@ -62,14 +64,18 @@ type StateDB interface {
 	GetAllDelegateMiners() map[common.Address]common.DMView
 
 	/**
-	 * @brief Get the delegate miners that the (default) account deposit shares.
+	 * @brief Get the delegate miners that the (default) account deposited shares.
 	 * @param account: the account who deposit shares.
 	 * @return The map of the delegate miners address and view.
 	 */
 	GetDepositMiners(account common.Address) map[common.Address]common.DepositView
 
-	GetAccountType(common.Address) common.AccountType
-	GetDepositMap(common.Address) map[common.Address]common.DepositData
+	/**
+	 * @brief Get the users of which account deposited shares to the delegate miner.
+	 * @param: the delegate miner address.
+	 * @return The map of the user (default account) address and its deposit data.
+	 */
+	GetDepositUsers(common.Address) map[common.Address]common.DepositData
 
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)

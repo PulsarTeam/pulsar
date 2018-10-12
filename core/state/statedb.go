@@ -391,7 +391,7 @@ func (self *StateDB) GetAccountType(addr common.Address) common.AccountType {
 	return aType
 }
 
-func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]common.DepositData {
+func (self* StateDB) GetDepositUsers(addr common.Address) map[common.Address]common.DepositData {
 	result := make(map[common.Address]common.DepositData)
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil && obj.data.Type == common.DelegateMiner {
