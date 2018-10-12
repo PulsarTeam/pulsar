@@ -485,7 +485,7 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 			evm.StateDB.CreateAccount(addr)
 		}
 
-		evm.StateDB.Withdraw(msg.From(), *(msg.To()))
+		err = evm.StateDB.Withdraw(msg.From(), *(msg.To()))
 	default:
 		return nil, gas, errors.New("normal transaction should not come here")
 	}

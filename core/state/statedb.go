@@ -374,7 +374,7 @@ func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]co
 
 		// check validity
 		if err == nil && total.Cmp(obj.data.DepositBalance) != 0 {
-			panic(fmt.Sprintf("Logcal error! User %s total deposit balance %s is not equal to part accumulated amount %s.\n",
+			log.Error(fmt.Sprintf("Fatal error! User %s total deposit balance %s is not equal to part accumulated amount %s.\n",
 				addr.String(), total.String(), obj.data.DepositBalance.String()))
 		}
 	}
@@ -415,7 +415,7 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 
 		// check validity
 		if err == nil && total.Cmp(obj.data.DepositBalance) != 0 {
-			panic(fmt.Sprintf("Logcal error! Miner %s total deposit balance %s is not equal to part accumulated amount %s.\n",
+			log.Error(fmt.Sprintf("Logcal error! Miner %s total deposit balance %s is not equal to part accumulated amount %s.\n",
 				addr.String(), total.String(), obj.data.DepositBalance.String()))
 		}
 	}
