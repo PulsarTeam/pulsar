@@ -354,24 +354,26 @@ func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]co
 	result := make(map[common.Address]common.DepositView)
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil && obj.data.Type == common.DefaultAccount {
+		var err error
 		total := new (big.Int).SetUint64(0)
 		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
 			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
 			var key common.Address
+			var value common.DepositView
 			for it.Next() {
 				key.SetBytes(self.trie.GetKey(it.Key))
-				value := obj.getDepositView(self.db, &key)
+				value, err = obj.getDepositView(self.db, &key)
 				if !value.Empty() {
 					result[key] = value
 					total.Add(total, value.Balance)
 				} else {
-					log.Warn(fmt.Sprintf("Empty deposit data entry for user %s has not been deleted!\n", addr.String()))
+					log.Warn(fmt.Sprintf("Empty deposit view entry for %s. Reason: %v\n", addr.String(), err))
 				}
 			}
 		}
 
 		// check validity
-		if total.Cmp(obj.data.DepositBalance) != 0 {
+		if err != nil && total.Cmp(obj.data.DepositBalance) != 0 {
 			panic(fmt.Sprintf("Logcal error! User %s total deposit balance %s is not equal to part accumulated amount %s.\n",
 				addr.String(), total.String(), obj.data.DepositBalance.String()))
 		}
@@ -393,24 +395,26 @@ func (self* StateDB) GetDepositMap(addr common.Address) map[common.Address]commo
 	result := make(map[common.Address]common.DepositData)
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil && obj.data.Type == common.DelegateMiner {
+		var err error
 		total := new (big.Int).SetUint64(0)
 		if stakeTrie := obj.getStakeTrie(self.db); stakeTrie != nil {
 			it := trie.NewIterator(stakeTrie.NodeIterator(nil))
 			var key common.Address
+			var value common.DepositData
 			for it.Next() {
 				key.SetBytes(self.trie.GetKey(it.Key))
-				value := obj.getDepositData(self.db, &key)
+				value, err = obj.getDepositData(self.db, &key)
 				if !value.Empty() {
 					result[key] = value
 					total.Add(total, value.Balance)
 				} else {
-					log.Warn(fmt.Sprintf("Empty deposit data entry for miner %s has not been deleted!\n", addr.String()))
+					log.Warn(fmt.Sprintf("Empty deposit data entry for %s. Reason: %v\n", addr.String(), err))
 				}
 			}
 		}
 
 		// check validity
-		if total.Cmp(obj.data.DepositBalance) != 0 {
+		if err != nil && total.Cmp(obj.data.DepositBalance) != 0 {
 			panic(fmt.Sprintf("Logcal error! Miner %s total deposit balance %s is not equal to part accumulated amount %s.\n",
 				addr.String(), total.String(), obj.data.DepositBalance.String()))
 		}

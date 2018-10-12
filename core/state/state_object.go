@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type Code []byte
@@ -447,8 +448,16 @@ func (self *stateObject) getType() common.AccountType {
 }
 
 func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big.Int, blockNumber *big.Int) error {
-	dv := from.getDepositView(db, &self.address)
-	dd := self.getDepositData(db, &from.address)
+	var err error
+	var dv common.DepositView
+	var dd common.DepositData
+
+	if dv, err = from.getDepositView(db, &self.address); err != nil {
+		return err
+	}
+	if dd, err = self.getDepositData(db, &from.address); err != nil {
+		return err
+	}
 
 	checkDepositValidity(self, from, &dd, &dv)
 	if !dv.Empty() {
@@ -491,8 +500,16 @@ func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big
 }
 
 func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
-	dv := from.getDepositView(db, &self.address)
-	dd := self.getDepositData(db, &from.address)
+	var err error
+	var dv common.DepositView
+	var dd common.DepositData
+
+	if dv, err = from.getDepositView(db, &self.address); err != nil {
+		return err
+	}
+	if dd, err = self.getDepositData(db, &from.address); err != nil {
+		return err
+	}
 
 	checkDepositValidity(self, from, &dd, &dv)
 	if dv.Empty() {
@@ -534,9 +551,10 @@ func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
 	return nil
 }
 
-func (self *stateObject) getDepositData(db Database, pAddr *common.Address) common.DepositData {
+func (self *stateObject) getDepositData(db Database, pAddr *common.Address) (common.DepositData, error) {
 	if data, exist := self.dirtyStake[*pAddr]; exist {
-		return data.(common.DepositData)
+		log.Info(fmt.Sprintf("Get deposit data from dirty for miner: %s\n", pAddr.String()))
+		return data.(common.DepositData), nil
 	}
 
 	var dataBytes []byte
@@ -548,13 +566,13 @@ func (self *stateObject) getDepositData(db Database, pAddr *common.Address) comm
 			err = rlp.DecodeBytes(dataBytes, &data)
 		}
 	}
-	self.setError(err)
-	return data
+	return data, err
 }
 
-func (self *stateObject) getDepositView(db Database, pAddr *common.Address) common.DepositView {
+func (self *stateObject) getDepositView(db Database, pAddr *common.Address) (common.DepositView, error) {
 	if data, exist := self.dirtyStake[*pAddr]; exist {
-		return data.(common.DepositView)
+		log.Info(fmt.Sprintf("Get deposit view from dirty for user: %s\n", pAddr.String()))
+		return data.(common.DepositView), nil
 	}
 
 	var dataBytes []byte
@@ -566,8 +584,7 @@ func (self *stateObject) getDepositView(db Database, pAddr *common.Address) comm
 			err = rlp.DecodeBytes(dataBytes, &data)
 		}
 	}
-	self.setError(err)
-	return data
+	return data, err
 }
 
 //
