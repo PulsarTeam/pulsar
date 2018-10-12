@@ -553,7 +553,7 @@ func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
 
 func (self *stateObject) getDepositData(db Database, pAddr *common.Address) (common.DepositData, error) {
 	if data, exist := self.dirtyStake[*pAddr]; exist {
-		log.Info(fmt.Sprintf("Get deposit data from dirty for miner: %s\n", pAddr.String()))
+		log.Warn(fmt.Sprintf("Get deposit data from dirty for miner: %s\n", pAddr.String()))
 		return data.(common.DepositData), nil
 	}
 
@@ -571,7 +571,7 @@ func (self *stateObject) getDepositData(db Database, pAddr *common.Address) (com
 
 func (self *stateObject) getDepositView(db Database, pAddr *common.Address) (common.DepositView, error) {
 	if data, exist := self.dirtyStake[*pAddr]; exist {
-		log.Info(fmt.Sprintf("Get deposit view from dirty for user: %s\n", pAddr.String()))
+		log.Warn(fmt.Sprintf("Get deposit view from dirty for user: %s\n", pAddr.String()))
 		return data.(common.DepositView), nil
 	}
 
