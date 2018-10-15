@@ -350,6 +350,22 @@ func (self *StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
 	return result
 }
 
+func (self *StateDB) GetDelegateMiner(miner common.Address) common.DMView {
+	var result common.DMView
+	obj := self.GetOrNewStateObject(miner)
+	if obj == nil {
+		log.Error(fmt.Sprintf("Can not get object of %s\n", miner.String()))
+		return result
+	}
+	if obj.data.Type != common.DelegateMiner {
+		log.Warn(fmt.Sprintf("account %s is not a delegate miner\n", miner.String()))
+		return result
+	}
+	result.DepositBalance = obj.data.DepositBalance
+	result.FeeRatio = obj.data.FeeRatio
+	return result
+}
+
 func (self *StateDB) GetDepositMiners(addr common.Address) map[common.Address]common.DepositView {
 	result := make(map[common.Address]common.DepositView)
 	obj := self.GetOrNewStateObject(addr)

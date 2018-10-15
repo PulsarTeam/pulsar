@@ -63,6 +63,8 @@ type StateDB interface {
 	 */
 	GetAllDelegateMiners() map[common.Address]common.DMView
 
+	GetDelegateMiner(common.Address) common.DMView
+
 	/**
 	 * @brief Get the delegate miners that the (default) account deposited shares.
 	 * @param account: the account who deposit shares.
