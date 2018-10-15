@@ -103,6 +103,9 @@ var (
 
 	//ErrWithdrawValue is return if value is not zero
 	ErrWithdrawValue = errors.New("this operation should not with value")
+
+	//ErrDelegatedMinerRegister return if a delegate miner send a register transaction again
+	ErrDelegatedMinerRegister = errors.New("delegate miner should not register again")
 )
 
 var (
@@ -601,6 +604,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should not larger than params.MaxDelegateFeeLimit
 	//notice: at first stage, wo not check times of this op, at the second stage, this op should happen one time for a miner
 	if tx.TxType() == params.DelegateMinerRegisterTx{
+		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
+			return ErrDelegatedMinerRegister
+		}
+
 		balance := pool.currentState.GetBalance(from)
 		if balance.Sign() < 0 || balance.Sign() == 0{
 			return ErrBalanceForRegister
