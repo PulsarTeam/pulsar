@@ -23,6 +23,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	"math/big"
+	"github.com/ethereum/go-ethereum/core/delegateminers"
+	"github.com/ethereum/go-ethereum/common"
+	"errors"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -44,6 +48,17 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 	}
 	return validator
 }
+
+//Intermediate variable for target calculate
+type Depositor struct {
+	Addr   common.Address
+	Amount *big.Int
+}
+type DelegateMiner struct {
+	Depositors []Depositor
+	Fee        uint32
+}
+var delegateMiner = DelegateMiner{}
 
 // ValidateBody validates the given block's uncles and verifies the the block
 // header's transaction and uncle roots. The headers are assumed to be already
@@ -98,6 +113,48 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
+
+	return nil
+}
+
+func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateDB) error{
+	fmt.Println("============================================|||||||||||")
+	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
+	miner := statedb.GetDelegateMiner(block.Header().Coinbase)
+	var depositorMap = statedb.GetDepositUsers(block.Header().Coinbase)
+
+	target := new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), block.Header().Difficulty)
+	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(block.Header().PosWeight)))
+	posTargetAvg.Div(posTargetAvg, big.NewInt(10000))
+	powTarget := new(big.Int).Sub( target, posTargetAvg)
+
+	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(statedb)
+	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
+		target =  powTarget
+	}else {
+		delegateMiner.Fee = miner.FeeRatio
+		for k, v := range depositorMap {
+			depositor := Depositor{Addr: k, Amount: v.Balance}
+			delegateMiner.Depositors = append(delegateMiner.Depositors, depositor)
+		}
+		count := len(delegateMiner.Depositors)
+		posLocalSum := big.NewInt(0)
+		for i := 0; i < count; i++ {
+			posLocalSum= new(big.Int).Add(posLocalSum, delegateMiner.Depositors[i].Amount)
+		}
+		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(statedb)
+
+		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
+		tmp.Div(tmp, posNetworkSum)
+		posTarget := new(big.Int).Mul(tmp, posLocalSum)
+		target =  new(big.Int).Add(powTarget, posTarget)
+	}
+
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errors.New("block target error")
+	}
+
 	return nil
 }
 

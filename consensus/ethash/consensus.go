@@ -550,10 +550,16 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	// until after the call to hashimotoLight so it's not unmapped while being used.
 //	runtime.KeepAlive(cache)
 	// target := new(big.Int).Div(maxUint256, header.Difficulty)
+
+
+	//\\--------linc debug-------------
+	fmt.Println(result)
+	/*
 	target := ethash.CalcTarget(chain, header)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}
+	*/
 
 	// verify pos weight
 	//pos := ethash.GetPosProduction(chain, header)

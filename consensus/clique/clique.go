@@ -687,3 +687,7 @@ func (c *Clique) APIs(chain consensus.ChainReader) []rpc.API {
 		Public:    false,
 	}}
 }
+
+func (c *Clique)HashimotoforHeader(hash []byte, nonce uint64) ([]byte) {
+	return nil
+}
