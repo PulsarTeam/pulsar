@@ -12,7 +12,7 @@ GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
 giga:
-	build/env.sh go run build/ci.go install ./cmd/geth
+	build/env.sh go run build/ci.go install ./cmd/giga
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/giga\" to launch giga."
 
