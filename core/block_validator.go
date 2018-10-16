@@ -118,7 +118,6 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 }
 
 func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateDB) error{
-	fmt.Println("============================================|||||||||||")
 	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
 	miner := statedb.GetDelegateMiner(block.Header().Coinbase)
 	var depositorMap = statedb.GetDepositUsers(block.Header().Coinbase)
