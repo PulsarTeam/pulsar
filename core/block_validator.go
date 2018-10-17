@@ -19,14 +19,14 @@ package core
 import (
 	"fmt"
 
+	"errors"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"math/big"
-	"github.com/ethereum/go-ethereum/core/delegateminers"
-	"github.com/ethereum/go-ethereum/common"
-	"errors"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -58,6 +58,7 @@ type DelegateMiner struct {
 	Depositors []Depositor
 	Fee        uint32
 }
+
 var delegateMiner = DelegateMiner{}
 
 // ValidateBody validates the given block's uncles and verifies the the block
@@ -117,19 +118,20 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	return nil
 }
 
-func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateDB) error{
+func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.StateDB) error {
 	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
 	var depositorMap = statedb.GetDepositUsers(block.Header().Coinbase)
 
 	target := new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), block.Header().Difficulty)
 	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(block.Header().PosWeight)))
 	posTargetAvg.Div(posTargetAvg, big.NewInt(10000))
-	powTarget := new(big.Int).Sub( target, posTargetAvg)
+	powTarget := new(big.Int).Sub(target, posTargetAvg)
 
 	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(statedb)
-	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
-		target =  powTarget
-	}else {
+	if posNetworkSum.Cmp(big.NewInt(0)) == 0 || (statedb.GetAccountType(block.Header().Coinbase) != common.DelegateMiner) {
+		target = powTarget
+	} else {
+		delegateMiner.Depositors = delegateMiner.Depositors[:0:0]
 		miner := statedb.GetDelegateMiner(block.Header().Coinbase)
 		delegateMiner.Fee = miner.FeeRatio
 		for k, v := range depositorMap {
@@ -139,21 +141,19 @@ func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateD
 		count := len(delegateMiner.Depositors)
 		posLocalSum := big.NewInt(0)
 		for i := 0; i < count; i++ {
-			posLocalSum= new(big.Int).Add(posLocalSum, delegateMiner.Depositors[i].Amount)
+			posLocalSum = new(big.Int).Add(posLocalSum, delegateMiner.Depositors[i].Amount)
 		}
 		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(statedb)
 
 		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
-		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
+		tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(dmCounts)))
 		tmp.Div(tmp, posNetworkSum)
 		posTarget := new(big.Int).Mul(tmp, posLocalSum)
-		target =  new(big.Int).Add(powTarget, posTarget)
+		target = new(big.Int).Add(powTarget, posTarget)
 	}
-
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errors.New("block target error")
 	}
-
 	return nil
 }
 

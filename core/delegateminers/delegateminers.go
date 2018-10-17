@@ -33,12 +33,13 @@ func GetDelegateMiner(ethash *availabledb.AvailableDb, chain consensus.ChainRead
 	cylcemod := header.Number.Uint64() % ethash.DsPowCycle
 
 	if cylce >= 2 && cylcemod == 0 {
+		if state.GetAccountType(address) != common.DelegateMiner {
+			err = errors.New(`no miner!`)
+			return state, nil, err
+		}
 		delegateMiner.Depositors = delegateMiner.Depositors[:0:0]
 		var depositorMap = state.GetDepositUsers(address)
 		var miner = state.GetDelegateMiner(address)
-		if state.GetAccountType(address) != common.DelegateMiner {
-			err = errors.New(`no miner!`)
-		}
 		delegateMiner.Fee = miner.FeeRatio
 		for k, v := range depositorMap {
 			depositor := Depositor{Addr: k, Amount: v.Balance}
