@@ -552,7 +552,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
 	stat, miner, _ := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if stat == nil { // pure pow
+	if stat == nil || miner == nil { // pure pow
 		return powTarget
 	} else { // pos
 		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
