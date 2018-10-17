@@ -1154,9 +1154,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		// Validate the state using the default validator
 		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
-		err2 := bc.Validator().ValidateHeader(block, state)
+		//\err2 := bc.Validator().ValidateHeader(block, state)
 
-		if err != nil || err2 != nil{
+		//\\if err != nil || err2 != nil{
+		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
