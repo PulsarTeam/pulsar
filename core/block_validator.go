@@ -119,7 +119,6 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 
 func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateDB) error{
 	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
-	miner := statedb.GetDelegateMiner(block.Header().Coinbase)
 	var depositorMap = statedb.GetDepositUsers(block.Header().Coinbase)
 
 	target := new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), block.Header().Difficulty)
@@ -131,6 +130,7 @@ func (v *BlockValidator)ValidateHeader(block *types.Block, statedb *state.StateD
 	if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
 		target =  powTarget
 	}else {
+		miner := statedb.GetDelegateMiner(block.Header().Coinbase)
 		delegateMiner.Fee = miner.FeeRatio
 		for k, v := range depositorMap {
 			depositor := Depositor{Addr: k, Amount: v.Balance}

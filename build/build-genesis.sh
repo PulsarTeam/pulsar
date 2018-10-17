@@ -1,3 +1,3 @@
 #!/bin/bash
 
-bin/geth --datadir ~/data init genesis-private.json
+bin/giga --datadir ~/data init genesis-private.json
