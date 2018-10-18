@@ -97,11 +97,11 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	// Extract some data from the header
 	var (
-		header  = block.Header()
-		hash    = header.HashNoNonce().Bytes()
+		header = block.Header()
+		hash   = header.HashNoNonce().Bytes()
 		//target  = new(big.Int).Div(maxUint256, header.Difficulty)
-		target = ethash.CalcTarget(chain, header)
-//		dataset = ethash.dataset(number)
+		target = new(big.Int).SetInt64(0)
+		//		dataset = ethash.dataset(number)
 	)
 	// Start generating random nonces until we abort or find a good one
 	var (
@@ -121,20 +121,23 @@ search:
 
 		default:
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
+			if target.Int64() == 0 {
+				target = ethash.CalcTarget(chain, header)
+			}
 			attempts++
 			if (attempts % (1 << 15)) == 0 {
 				ethash.hashrate.Mark(attempts)
 				attempts = 0
 			}
 			// Compute the PoW value of this nonce
-//			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
+			//			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
 			result := hashimotoFull(hash, nonce)
 
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
 				header.Nonce = types.EncodeNonce(nonce)
-//				header.MixDigest = common.BytesToHash(digest)
+				//				header.MixDigest = common.BytesToHash(digest)
 
 				// Seal and return a block (if still needed)
 				select {
@@ -150,5 +153,5 @@ search:
 	}
 	// Datasets are unmapped in a finalizer. Ensure that the dataset stays live
 	// during sealing so it's not unmapped while being read.
-//	runtime.KeepAlive(dataset)
+	//	runtime.KeepAlive(dataset)
 }
