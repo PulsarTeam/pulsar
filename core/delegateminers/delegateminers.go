@@ -20,31 +20,36 @@ type DelegateMiner struct {
 	Fee        uint32
 }
 
-var delegateMiner = DelegateMiner{}
+var delegateMinerMap = make(map[common.Address]DelegateMiner, 10)
 
 func GetDelegateMiner(ethash *availabledb.AvailableDb, chain consensus.ChainReader, header *types.Header, address common.Address) (*state.StateDB, *DelegateMiner, error) {
 	var err error = nil
-
+	var delegateMiner = DelegateMiner{}
 	var state, stateErr = ethash.GetAvailableDb(chain, header)
+	cylce := header.Number.Uint64() / ethash.DsPowCycle
+	cylcemod := header.Number.Uint64() % ethash.DsPowCycle
 	if state == nil {
 		return nil, nil, stateErr
 	}
-	cylce := header.Number.Uint64() / ethash.DsPowCycle
-	cylcemod := header.Number.Uint64() % ethash.DsPowCycle
-
-	if cylce >= 2 && cylcemod == 0 {
+	if cylce >= 2 {
 		if state.GetAccountType(address) != common.DelegateMiner {
 			err = errors.New(`no miner!`)
 			return state, nil, err
 		}
-		delegateMiner.Depositors = delegateMiner.Depositors[:0:0]
+		if cylcemod == 0 {
+			delegateMinerMap = make(map[common.Address]DelegateMiner, 10)
+		}
+		if _, ok := delegateMinerMap[address]; ok {
+			delegateMiner = delegateMinerMap[address]
+			return state, &delegateMiner, err
+		}
 		var depositorMap = state.GetDepositUsers(address)
-		var miner = state.GetDelegateMiner(address)
-		delegateMiner.Fee = miner.FeeRatio
+		delegateMiner.Fee = state.GetDelegateMiner(address).FeeRatio
 		for k, v := range depositorMap {
 			depositor := Depositor{Addr: k, Amount: v.Balance}
 			delegateMiner.Depositors = append(delegateMiner.Depositors, depositor)
 		}
+		delegateMinerMap[address] = delegateMiner
 	}
 	return state, &delegateMiner, err
 }
