@@ -418,7 +418,7 @@ type Ethash struct {
 
 	//mining params
 	powTargetTimespan int64
-	powLimit int64
+	minDifficulty int64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
 	powTargetSpacing int64
 
 	availableDb *availabledb.AvailableDb
@@ -446,7 +446,7 @@ func New(config Config) *Ethash {
 		hashrate: metrics.NewMeter(),
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 		//availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
 		availableDb: &availabledb.AvailableDb{DsPowCycle: 200 },
 	}
@@ -462,7 +462,7 @@ func NewTester() *Ethash {
 		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 	}
 }
 
@@ -477,7 +477,7 @@ func NewFaker() *Ethash {
 		},
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 	}
 }
 
@@ -492,7 +492,7 @@ func NewFakeFailer(fail uint64) *Ethash {
 		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 		fakeFail: fail,
 	}
 }
@@ -508,7 +508,7 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 		fakeDelay: delay,
 	}
 }
@@ -523,7 +523,7 @@ func NewFullFaker() *Ethash {
 		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 	}
 }
 
@@ -536,18 +536,22 @@ func NewShared() *Ethash {
 		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
 		powTargetSpacing: 15,
-		powLimit: 131072,
+		minDifficulty: 131072,
 	}
 }
 
 // calculate the pos target.
 func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
 
+	if header.Difficulty.Int64() < ethash.minDifficulty {
+		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
+	}
+
 	// calc the target
 	target := new(big.Int).Div(maxUint256, header.Difficulty)
 	//powWeight := posWeightPrecision - int64(header.PosWeight)
-	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
-	posTargetAvg.Div(posTargetAvg, big.NewInt(posWeightPrecision))
+	posTargetAvg := new(big.Int).Div(target, big.NewInt(posWeightPrecision))
+	posTargetAvg.Mul(posTargetAvg, big.NewInt(int64(header.PosWeight)))
 	powTarget := new(big.Int).Sub( target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
@@ -567,6 +571,10 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
 
 		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+		
+		// for a valid difficulty(>=ethash.minDifficulty), the target*difficulty< MaxBigInt,
+		// so for a delegate miner count (dmCounts)<minDifficulty, the posTargetAvg*dmCounts<MaxBigInt.
+		// i.e. the max delegate miner count(dmCountMax)=minDifficulty
 		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
 		tmp.Div(tmp, posNetworkSum)
 		posTarget := new(big.Int).Mul(tmp, posLocalSum)
