@@ -331,8 +331,8 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
 			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 		}
-		if actualTimespan > (uint64)(ethash.powTargetTimespan/4) {
-			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+		if actualTimespan > (uint64)(ethash.powTargetTimespan*4) {
+			actualTimespan = (uint64)(ethash.powTargetTimespan * 4)
 		}
 		var minDifficulty int64 = ethash.minDifficulty
 		var newDifficulty *big.Int = parent.Difficulty
@@ -342,6 +342,10 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 			newDifficulty = new(big.Int).SetInt64(minDifficulty)
 		}
 		log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
+		minerCounts := delegateminers.GetDelegateMinersCount(chain, new(big.Int).SetInt64(parent.Number.Int64()+1))
+		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
+			return parent.Difficulty
+		}
 		return newDifficulty
 	}
 }
@@ -652,10 +656,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
+	delegateMiner := delegateminers.GetDelegateMiner(chain, header, header.Coinbase)
 	if delegateMiner == nil {
 		return new(big.Int)
 	}
@@ -703,10 +704,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
+	delegateMiner := delegateminers.GetDelegateMiner(chain, header, header.Coinbase)
 	if delegateMiner == nil {
 		return new(big.Int)
 	}
