@@ -632,7 +632,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
 		} else {
-			log.Warn("cannot find the header, header number: ", i)
+			log.Warn("cannot find header.", " header number:", i)
 		}
 	}
 	return sumPow
@@ -653,7 +653,7 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
 		} else {
-			log.Warn("cannot find the header, header number: ", i)
+			log.Warn("cannot find header.", " header number:", i)
 		}
 	}
 	return sumPos
