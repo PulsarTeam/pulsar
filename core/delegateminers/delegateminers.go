@@ -25,7 +25,7 @@ var stateBuf *state.StateDB
 var delegateMinerMap = make(map[common.Address]DelegateMiner, 10)
 
 func GetDepositBalanceSum(chain consensus.ChainReader, blockNum *big.Int) *big.Int {
-	GetMatureState(chain, blockNum)
+	getMatureState(chain, blockNum)
 	var miners = stateBuf.GetAllDelegateMiners()
 	var amount uint64
 	for _, v := range miners {
@@ -35,7 +35,7 @@ func GetDepositBalanceSum(chain consensus.ChainReader, blockNum *big.Int) *big.I
 }
 
 func GetDelegateMinersCount(chain consensus.ChainReader, blockNum *big.Int) uint64 {
-	GetMatureState(chain, blockNum)
+	getMatureState(chain, blockNum)
 	var miners = stateBuf.GetAllDelegateMiners()
 	var minersAmount = len(miners)
 	return (uint64)(minersAmount)
@@ -43,7 +43,7 @@ func GetDelegateMinersCount(chain consensus.ChainReader, blockNum *big.Int) uint
 
 func GetDelegateMiner(chain consensus.ChainReader, header *types.Header, address common.Address) *DelegateMiner {
 	var delegateMiner = DelegateMiner{}
-	var state = GetMatureState(chain, header.Number)
+	var state = getMatureState(chain, header.Number)
 	cycle := header.Number.Uint64() / DsPowCycle
 	cyclemod := header.Number.Uint64() % DsPowCycle
 	if state == nil {
@@ -71,7 +71,7 @@ func GetDelegateMiner(chain consensus.ChainReader, header *types.Header, address
 	return &delegateMiner
 }
 
-func GetMatureState(chain consensus.ChainReader, blockNum *big.Int) *state.StateDB {
+func getMatureState(chain consensus.ChainReader, blockNum *big.Int) *state.StateDB {
 	cycle := blockNum.Uint64() / DsPowCycle
 	cyclemod := blockNum.Uint64() % DsPowCycle
 	if cycle < 2 {
