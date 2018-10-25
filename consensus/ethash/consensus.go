@@ -19,7 +19,6 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"math/big"
 	"runtime"
 	"time"
@@ -33,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/core"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -326,24 +326,28 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
-	} else {
-		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
-		if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
-			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
-		}
-		if actualTimespan > (uint64)(ethash.powTargetTimespan/4) {
-			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
-		}
-		var minDifficulty int64 = ethash.minDifficulty
-		var newDifficulty *big.Int = parent.Difficulty
-		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
-		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
-		if newDifficulty.Int64() < minDifficulty {
-			newDifficulty = new(big.Int).SetInt64(minDifficulty)
-		}
-		log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
-		return newDifficulty
 	}
+
+	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
+	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
+		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+	}
+	if actualTimespan > (uint64)(ethash.powTargetTimespan * 4) {
+		actualTimespan = (uint64)(ethash.powTargetTimespan * 4)
+	}
+	var powLimit int64 = ethash.minDifficulty
+	var newDifficulty *big.Int = parent.Difficulty
+	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
+	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
+	if newDifficulty.Int64() < powLimit {
+		newDifficulty = new(big.Int).SetInt64(powLimit)
+	}
+	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
+	matureState := core.GetMatureState(chain, parent.Number.Uint64())
+	if matureState == nil || newDifficulty.Cmp(big.NewInt(int64(matureState.DelegateMinersCount()))) < 0 {
+		return parent.Difficulty
+	}
+	return newDifficulty
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
@@ -652,49 +656,33 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
-	if delegateMiner == nil {
+	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
-	stakeholders := delegateMiner.Depositors
-
-	//--dummy code just for test-----------------------------------------
-	//mnt1, _ := new(big.Int).SetString("100000000000000000000", 10)
-	//mnt2, _ := new(big.Int).SetString("1000000000000000000000", 10)
-	//mnt3, _ := new(big.Int).SetString("10000000000000000000000", 10)
-	//mnt4, _ := new(big.Int).SetString("100000000000000000000000", 10)
-	//
-	//stakeholders := []delegateminers.Depositor{
-	//	delegateminers.Depositor{common.HexToAddress("0x63264d76b9131085e1b7f2ef55600b55c81d58de"),mnt1},
-	//	delegateminers.Depositor{common.HexToAddress("0x4877884e5d156603514b9790ca7db3b357054f88"),mnt2},
-	//	delegateminers.Depositor{common.HexToAddress("0x4cc7df7fda9eccb1ef72e77045b54a16f9076e99"),mnt3},
-	//	delegateminers.Depositor{common.HexToAddress("0xf7fc37c340096ea854ebc0fc29a60a9e799e971a"),mnt4},
-	//}
-	//-------------------------------------------------------------------
-
-	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
+	feeRatio, balanceSum, users := matureState.GetDelegateMiner(header.Coinbase)
+	if balanceSum == nil && users == nil {
+		return new(big.Int)
+	}
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
-
-	for _, stakeholder := range stakeholders {
+	for userAddr, depositData := range users {
 		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount, InterestRate)
+		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
 		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
-		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
 		delegateFee.Div(delegateFee, FeeRatioPrecision)
 
 		//rewardStake = rewardStakeRaw - delegateFee
 		rewardStake := new(big.Int).Sub(rewardStakeRaw, delegateFee)
 		feeTotal.Add(feeTotal, delegateFee)
 		total.Add(total, rewardStakeRaw)
-		state.AddBalance(stakeholder.Addr, rewardStake)
+		state.AddBalance(userAddr, rewardStake)
 	}
+
 	state.AddBalance(header.Coinbase, feeTotal)
 	return total
 }
@@ -703,27 +691,24 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
-	if delegateMiner == nil {
+	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
-	stakeholders := delegateMiner.Depositors
-
-	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
+	feeRatio, balanceSum, users := matureState.GetDelegateMiner(header.Coinbase)
+	if balanceSum == nil && users == nil {
+		return new(big.Int)
+	}
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
-
-	for _, stakeholder := range stakeholders {
+	for _, depositData := range users {
 		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount, InterestRate)
+		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
 		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
-		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
 		delegateFee.Div(delegateFee, FeeRatioPrecision)
 
 		feeTotal.Add(feeTotal, delegateFee)

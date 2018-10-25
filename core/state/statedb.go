@@ -361,7 +361,7 @@ func (self *StateDB) GetDelegateMiner(miner common.Address) common.DMView {
 		log.Warn(fmt.Sprintf("account %s is not a delegate miner\n", miner.String()))
 		return result
 	}
-	result.DepositBalance = obj.data.DepositBalance
+	result.DepositBalance = new(big.Int).Set(obj.data.DepositBalance)
 	result.FeeRatio = obj.data.FeeRatio
 	return result
 }
