@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"math/big"
 	"errors"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -46,16 +45,6 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 		bc:     blockchain,
 	}
 	return validator
-}
-
-//Intermediate variable for target calculate
-type Depositor struct {
-	Addr   common.Address
-	Amount *big.Int
-}
-type DelegateMiner struct {
-	Depositors []Depositor
-	Fee        uint32
 }
 
 // ValidateBody validates the given block's uncles and verifies the the block
@@ -129,7 +118,7 @@ func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.State
 	} else {
 		_, localSum, _ := matureState.GetDelegateMiner(block.Header().Coinbase)
 		if localSum == nil || localSum.Sign() == 0 {
-			log.Error("Error: cannot get delegate miner %s deposit balance.\n", block.Header().Coinbase.String())
+			log.Error(fmt.Sprintf("Error: cannot get delegate miner %s deposit balance.\n", block.Header().Coinbase.String()))
 			return errors.New("cannot get delegate miner deposit balance")
 		}
 
