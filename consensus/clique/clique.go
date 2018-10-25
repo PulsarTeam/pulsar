@@ -235,7 +235,7 @@ func (c *Clique) Author(header *types.Header) (common.Address, error) {
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
-func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, headers []*types.Header) error {
 	return c.verifyHeader(chain, header, nil)
 }
 
@@ -363,7 +363,7 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 		}
 	}
 	// All basic checks passed, verify the seal and return
-	return c.verifySeal(chain, header, parents)
+	return c.verifySeal(chain, header, parents, nil)
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
@@ -390,7 +390,7 @@ func (c *Clique) snapshot(chain consensus.ChainReader, number uint64, hash commo
 		// If we're at block zero, make a snapshot
 		if number == 0 {
 			genesis := chain.GetHeaderByNumber(0)
-			if err := c.VerifyHeader(chain, genesis, false); err != nil {
+			if err := c.VerifyHeader(chain, genesis, false, nil); err != nil {
 				return nil, err
 			}
 			signers := make([]common.Address, (len(genesis.Extra)-extraVanity-extraSeal)/common.AddressLength)
@@ -454,15 +454,15 @@ func (c *Clique) VerifyUncles(chain consensus.ChainReader, block *types.Block) e
 
 // VerifySeal implements consensus.Engine, checking whether the signature contained
 // in the header satisfies the consensus protocol requirements.
-func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-	return c.verifySeal(chain, header, nil)
+func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header, headers []*types.Header) error {
+	return c.verifySeal(chain, header, nil, headers)
 }
 
 // verifySeal checks whether the signature contained in the header satisfies the
 // consensus protocol requirements. The method accepts an optional list of parent
 // headers that aren't yet part of the local blockchain to generate the snapshots
 // from.
-func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
+func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, parents []*types.Header, headers []*types.Header) error {
 	// Verifying the genesis block is not supported
 	number := header.Number.Uint64()
 	if number == 0 {
@@ -663,7 +663,7 @@ func (c *Clique) CalcDifficulty(chain consensus.ChainReader, time uint64, parent
 }
 
 // returns the pos weight in a certain cycle.
-func (c *Clique) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
+func (c *Clique) PosWeight(chain consensus.ChainReader, header *types.Header, headers []*types.Header) uint32 {
 	return 0
 }
 
