@@ -36,6 +36,7 @@ import (
 
 	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/availabledb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -57,10 +58,10 @@ var (
 	// dumpMagic is a dataset dump header to sanity check a data dump.
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
 
-	initPosWeight             = 5000
-	posWeightPrecision int64  = 10000
-	posWeightMax       uint32 = 8000
-	posWeightMin       uint32 = 2000
+	initPosWeight = 5000
+	posWeightPrecision int64 = 10000
+	posWeightMax uint32 = 8000
+	posWeightMin uint32 = 2000
 )
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -417,9 +418,12 @@ type Ethash struct {
 
 	//mining params
 	powTargetTimespan int64
-	minDifficulty     int64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
-	powTargetSpacing  int64
-	lock              sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
+	minDifficulty int64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
+	powTargetSpacing int64
+
+	availableDb *availabledb.AvailableDb
+
+	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
 // New creates a full sized ethash PoW scheme.
@@ -435,14 +439,16 @@ func New(config Config) *Ethash {
 		log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
 	}
 	return &Ethash{
-		config:            config,
-		caches:            newlru("cache", config.CachesInMem, newCache),
-		datasets:          newlru("dataset", config.DatasetsInMem, newDataset),
-		update:            make(chan struct{}),
-		hashrate:          metrics.NewMeter(),
+		config:   config,
+		caches:   newlru("cache", config.CachesInMem, newCache),
+		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
+		update:   make(chan struct{}),
+		hashrate: metrics.NewMeter(),
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
+		//availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
+		availableDb: &availabledb.AvailableDb{DsPowCycle: 200 },
 	}
 }
 
@@ -453,10 +459,10 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
-		threads:           1,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
 	}
 }
 
@@ -467,10 +473,11 @@ func NewFaker() *Ethash {
 	return &Ethash{
 		config: Config{
 			PowMode: ModeFake,
+
 		},
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
 	}
 }
 
@@ -482,11 +489,11 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
-		threads:           1,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
-		fakeFail:          fail,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
+		fakeFail: fail,
 	}
 }
 
@@ -498,11 +505,11 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
-		threads:           1,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
-		fakeDelay:         delay,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
+		fakeDelay: delay,
 	}
 }
 
@@ -513,23 +520,23 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
-		threads:           1,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
 	}
 }
 
 // NewShared creates a full sized ethash PoW shared between all requesters running
 // in the same process.
 func NewShared() *Ethash {
-	//	return &Ethash{shared: sharedEthash}
+//	return &Ethash{shared: sharedEthash}
 	return &Ethash{
-		shared:            sharedEthash,
-		threads:           1,
+		shared: sharedEthash,
+		threads: 1,
 		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing:  15,
-		minDifficulty:     131072,
+		powTargetSpacing: 15,
+		minDifficulty: 131072,
 	}
 }
 
@@ -537,7 +544,7 @@ func NewShared() *Ethash {
 func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
 
 	if header.Difficulty.Int64() < ethash.minDifficulty {
-		panic(fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64(), ethash.minDifficulty, header.Number.Int64()))
+		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
 	}
 
 	// calc the target
@@ -545,40 +552,49 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 	//powWeight := posWeightPrecision - int64(header.PosWeight)
 	posTargetAvg := new(big.Int).Div(target, big.NewInt(posWeightPrecision))
 	posTargetAvg.Mul(posTargetAvg, big.NewInt(int64(header.PosWeight)))
-	powTarget := new(big.Int).Sub(target, posTargetAvg)
+	powTarget := new(big.Int).Sub( target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
-	miner := delegateminers.GetDelegateMiner(chain, header, header.Coinbase)
-	if miner == nil { // pure pow
+	stat, miner, _ := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
+	if stat == nil || miner == nil { // pure pow
 		return powTarget
 	} else { // pos
-		posNetworkSum := delegateminers.GetDepositBalanceSum(chain, header.Number)
+		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
 		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
 			return powTarget
 		}
 		count := len(miner.Depositors)
 		posLocalSum := big.NewInt(0)
 		for i := 0; i < count; i++ {
-			posLocalSum = new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
+			posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
 		}
-		dmCounts := delegateminers.GetDelegateMinersCount(chain, header.Number)
+		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
 
 		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
-
+		
 		// for a valid difficulty(>=ethash.minDifficulty), the target*difficulty< MaxBigInt,
 		// so for a delegate miner count (dmCounts)<minDifficulty, the posTargetAvg*dmCounts<MaxBigInt.
 		// i.e. the max delegate miner count(dmCountMax)=minDifficulty
-		tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(dmCounts)))
+		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
 		tmp.Div(tmp, posNetworkSum)
 		posTarget := new(big.Int).Mul(tmp, posLocalSum)
 		return new(big.Int).Add(powTarget, posTarget)
 	}
 }
 
+func (ethash *Ethash) GetCycle() uint64 {
+	if ethash.availableDb == nil {
+		return 200
+	} else {
+		return ethash.availableDb.DsPowCycle
+	}
+}
+
 // returns the pos weight in a certain cycle.
 func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
 	// in first two cycles
-	cycleNum := header.Number.Uint64() / delegateminers.DsPowCycle
+	cycle := ethash.GetCycle()
+	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum < 2 {
 		return uint32(initPosWeight)
 	}
@@ -603,7 +619,7 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 
 // returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := delegateminers.DsPowCycle
+	cycle := ethash.GetCycle()
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
@@ -611,8 +627,8 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 
 	var i uint64
 	sumPow := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum-1)*cycle; i++ {
-		h := chain.GetHeaderByNumber(i)
+	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
 		} else {
@@ -624,7 +640,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 
 // returns the total pos production in the previous mature cycle.
 func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := delegateminers.DsPowCycle
+	cycle := ethash.GetCycle()
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
 		return big.NewInt(0)
@@ -632,8 +648,8 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 
 	var i uint64
 	sumPos := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum-1)*cycle; i++ {
-		h := chain.GetHeaderByNumber(i)
+	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
 		} else {
@@ -731,6 +747,6 @@ func SeedHash(block uint64) []byte {
 	return seedHash(block)
 }
 
-func (ethash *Ethash) HashimotoforHeader(hash []byte, nonce uint64) []byte {
+func (ethash *Ethash)HashimotoforHeader(hash []byte, nonce uint64) ([]byte) {
 	return hashimoto(hash, nonce)
 }
