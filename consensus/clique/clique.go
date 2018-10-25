@@ -363,7 +363,7 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 		}
 	}
 	// All basic checks passed, verify the seal and return
-	return c.verifySeal(chain, header, parents)
+	return c.verifySeal(chain, header, parents, nil)
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
@@ -454,15 +454,15 @@ func (c *Clique) VerifyUncles(chain consensus.ChainReader, block *types.Block) e
 
 // VerifySeal implements consensus.Engine, checking whether the signature contained
 // in the header satisfies the consensus protocol requirements.
-func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-	return c.verifySeal(chain, header, nil)
+func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header, headers []*types.Header) error {
+	return c.verifySeal(chain, header, nil, headers)
 }
 
 // verifySeal checks whether the signature contained in the header satisfies the
 // consensus protocol requirements. The method accepts an optional list of parent
 // headers that aren't yet part of the local blockchain to generate the snapshots
 // from.
-func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
+func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, parents []*types.Header, headers []*types.Header) error {
 	// Verifying the genesis block is not supported
 	number := header.Number.Uint64()
 	if number == 0 {

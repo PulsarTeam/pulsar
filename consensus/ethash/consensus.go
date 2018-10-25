@@ -293,7 +293,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	}
 	// Verify the engine specific seal securing the block
 	if seal {
-		if err := ethash.VerifySeal(chain, header); err != nil {
+		if err := ethash.VerifySeal(chain, header, headers); err != nil {
 			return err
 		}
 	}
@@ -519,7 +519,7 @@ func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
 
 // VerifySeal implements consensus.Engine, checking whether the given block satisfies
 // the PoW difficulty requirements.
-func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Header, headers []*types.Header) error {
 	// If we're running a fake PoW, accept any seal as valid
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		time.Sleep(ethash.fakeDelay)
@@ -530,14 +530,14 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	}
 	// If we're running a shared PoW, delegate verification to it
 	if ethash.shared != nil {
-		return ethash.shared.VerifySeal(chain, header)
+		return ethash.shared.VerifySeal(chain, header, headers)
 	}
 	// Ensure that we have a valid difficulty for the block
 	if header.Difficulty.Sign() <= 0 {
 		return errInvalidDifficulty
 	}
 
-	w := big.NewInt(int64(ethash.PosWeight(chain, header, nil)))
+	w := big.NewInt(int64(ethash.PosWeight(chain, header, headers)))
 
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
