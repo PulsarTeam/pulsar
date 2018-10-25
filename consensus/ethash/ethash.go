@@ -576,15 +576,15 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 }
 
 // returns the pos weight in a certain cycle.
-func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header, headers []*types.Header) uint32 {
+func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
 	// in first two cycles
 	cycleNum := header.Number.Uint64() / delegateminers.DsPowCycle
 	if cycleNum < 2 {
 		return uint32(initPosWeight)
 	}
 
-	powProduction := ethash.GetPowProduction(chain, header, headers)
-	posProduction := ethash.GetPosProduction(chain, header, headers)
+	powProduction := ethash.GetPowProduction(chain, header)
+	posProduction := ethash.GetPosProduction(chain, header)
 	t := big.NewInt(0)
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
 		return uint32(initPosWeight)
@@ -601,18 +601,8 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	return weight32u
 }
 
-// find header in header list
-func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header) bool {
-	for _, v := range headers {
-		if header.Hash().String() == v.Hash().String() {
-			return true
-		}
-	}
-	return false
-}
-
 // returns the total pow production in the previous mature cycle.
-func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
 	cycle := delegateminers.DsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
@@ -621,12 +611,10 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 
 	var i uint64
 	sumPow := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+	for i = (cycleNum - 2) * cycle; i < (cycleNum-1)*cycle; i++ {
 		h := chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
-			sumPow.Add(sumPow, header.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
@@ -635,7 +623,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 }
 
 // returns the total pos production in the previous mature cycle.
-func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
 	cycle := delegateminers.DsPowCycle
 	cycleNum := header.Number.Uint64() / cycle
 	if cycleNum <= 1 {
@@ -644,13 +632,10 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 
 	var i uint64
 	sumPos := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+	for i = (cycleNum - 2) * cycle; i < (cycleNum-1)*cycle; i++ {
 		h := chain.GetHeaderByNumber(i)
-
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
-			sumPos.Add(sumPos, header.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
