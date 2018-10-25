@@ -551,12 +551,16 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
 	matureState := core.GetMatureState(chain, header.Number.Uint64())
-	if matureState == nil || matureState.DelegateMinersCount() == 0 {
+	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		return powTarget
 	}
 
 	// POS
 	_, localSum, _:= matureState.GetDelegateMiner(header.Coinbase)
+	if localSum == nil || localSum.Sign() == 0 {
+		log.Error("Error: cannot get delegate miner %s deposit balance.\n", header.Coinbase.String())
+		return powTarget
+	}
 
 	// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
 
