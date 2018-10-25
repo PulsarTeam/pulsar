@@ -150,7 +150,7 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 		panic("block time out of range")
 	}
 	b.header.Difficulty = b.engine.CalcDifficulty(b.chainReader, b.header.Time.Uint64(), b.parent.Header())
-	b.header.PosWeight =  b.engine.PosWeight(b.chainReader, b.header)
+	b.header.PosWeight =  b.engine.PosWeight(b.chainReader, b.header, nil)
 }
 
 // GenerateChain creates a chain of n blocks. The first block's

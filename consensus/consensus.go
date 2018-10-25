@@ -62,7 +62,7 @@ type Engine interface {
 	// VerifyHeader checks whether a header conforms to the consensus rules of a
 	// given engine. Verifying the seal may be done optionally here, or explicitly
 	// via the VerifySeal method.
-	VerifyHeader(chain ChainReader, header *types.Header, seal bool) error
+	VerifyHeader(chain ChainReader, header *types.Header, seal bool, headers []*types.Header) error
 
 	// VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
 	// concurrently. The method returns a quit channel to abort the operations and
@@ -98,7 +98,7 @@ type Engine interface {
 	CalcDifficulty(chain ChainReader, time uint64, parent *types.Header) *big.Int
 
 	// returns the pos weight in a certain cycle.
-	PosWeight(chain ChainReader, header *types.Header) uint32
+	PosWeight(chain ChainReader, header *types.Header, headers []*types.Header) uint32
 
 	// APIs returns the RPC APIs this consensus engine provides.
 	APIs(chain ChainReader) []rpc.API

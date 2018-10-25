@@ -235,7 +235,7 @@ func (c *Clique) Author(header *types.Header) (common.Address, error) {
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
-func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, headers []*types.Header) error {
 	return c.verifyHeader(chain, header, nil)
 }
 
@@ -390,7 +390,7 @@ func (c *Clique) snapshot(chain consensus.ChainReader, number uint64, hash commo
 		// If we're at block zero, make a snapshot
 		if number == 0 {
 			genesis := chain.GetHeaderByNumber(0)
-			if err := c.VerifyHeader(chain, genesis, false); err != nil {
+			if err := c.VerifyHeader(chain, genesis, false, nil); err != nil {
 				return nil, err
 			}
 			signers := make([]common.Address, (len(genesis.Extra)-extraVanity-extraSeal)/common.AddressLength)
@@ -663,7 +663,7 @@ func (c *Clique) CalcDifficulty(chain consensus.ChainReader, time uint64, parent
 }
 
 // returns the pos weight in a certain cycle.
-func (c *Clique) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
+func (c *Clique) PosWeight(chain consensus.ChainReader, header *types.Header, headers []*types.Header) uint32 {
 	return 0
 }
 
