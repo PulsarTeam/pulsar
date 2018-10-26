@@ -96,39 +96,39 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 		return nil, err
 	}
 
-	if state.GetAccountType(addr) != common.DelegateMiner{
-		return nil, errors.New("can not use this command on a normal account!")
-	}
-
 	fields := map[common.Address]interface{}{}
-	stakeHoldersList := state.GetDepositUsers(addr)
-
-	for addr, stakeholder := range stakeHoldersList{
-		fields[addr] = stakeholder
+	var stakeHoldersList map[common.Address]common.DepositData
+	var err1 error
+	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 != nil {
+		for addr, stakeholder := range stakeHoldersList {
+			fields[addr] = stakeholder
+		}
 	}
 
-	return fields, state.Error()
+	return fields, err1
 }
 
 	//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
-func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
+func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
 	}
 
-	if state.GetAccountType(addr) != common.DefaultAccount{
+	if state.GetAccountType(addr) != common.DefaultAccount {
 		return nil, errors.New("can not use this command on a delegate miner!")
 	}
 
 	fields := map[common.Address]interface{}{}
-	delegateMinersList := state.GetDepositMiners(addr)
-
-	for addr, miner := range delegateMinersList{
-		fields[addr] = miner
+	var delegateMinersList map[common.Address]common.DepositView
+	var err1 error
+	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 != nil {
+		for addr, miner := range delegateMinersList {
+			fields[addr] = miner
+		}
 	}
 
-	return fields, state.Error()
+	return fields, err1
 }
 
 

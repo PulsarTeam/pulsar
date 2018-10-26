@@ -3,6 +3,7 @@ package core
 import (
 	"math/big"
 	"sync"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -48,7 +49,7 @@ func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 
 func LastMatureCycleRange(cur uint64) (uint64, uint64) {
 	if cur >= minMatureBlockNumber {
-		end := (cur & ^(blocksInMatureCycle - 1)) - blocksInMatureCycle
+		end := (cur & ^blocksInMatureCycleMask) - blocksInMatureCycle
 		return end - blocksInMatureCycle, end
 	}
 	return 0, 0
@@ -69,7 +70,9 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 		header := chain.GetHeaderByNumber(blockNum - blocksInMatureCycle - 1)
 		stateDB, err := chain.GetState(header.Root)
 		if err != nil {
-			log.Error("FATAL ERROR: can not get state DB from matured block. reason: %v\n", err)
+			log.Error(fmt.Sprintf(
+				"FATAL ERROR: can not get state DB from matured block: %d. reason: %v\n",
+				blockNum - blocksInMatureCycle - 1, err))
 			panic("Logical error.\n")
 		}
 		dmViews := stateDB.GetAllDelegateMiners()
@@ -97,19 +100,21 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 
 func (self *MatureState) GetDelegateMiner(addr common.Address) (uint32, *big.Int, map[common.Address]common.DepositData) {
 	if miner, ok := self.miners[addr]; ok {
-		return miner.feeRatio, new(big.Int).Set(miner.depositBalanceSum), miner.users
+		return miner.feeRatio, miner.depositBalanceSum, miner.users
 	}
 
-	if uint32(len(self.miners)) < self.dmCount {
-		dv := self.state.GetDelegateMiner(addr)
-		dd := self.state.GetDepositUsers(addr)
-		dmObj := &dmAttr{
-			feeRatio: dv.FeeRatio,
-			depositBalanceSum: dv.DepositBalance,
-			users: dd,
+	if uint32(len(self.miners)) < self.dmCount && self.state.GetAccountType(addr) == common.DelegateMiner {
+		dv, dvErr := self.state.GetDelegateMiner(addr)
+		dd, ddErr := self.state.GetDepositUsers(addr)
+		if dvErr != nil && ddErr != nil {
+			dmObj := &dmAttr{
+				feeRatio:          dv.FeeRatio,
+				depositBalanceSum: new(big.Int).Set(dv.DepositBalance),
+				users:             dd,
+			}
+			self.miners[addr] = dmObj
+			return dv.FeeRatio, dmObj.depositBalanceSum, dd
 		}
-		self.miners[addr] = dmObj
-		return dv.FeeRatio, new(big.Int).Set(dv.DepositBalance), dd
 	}
 
 	return 0, nil, nil // not found

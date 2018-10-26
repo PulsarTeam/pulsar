@@ -461,7 +461,7 @@ func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big
 
 	checkDepositValidity(self, from, &dd, &dv)
 	if !dv.Empty() {
-		return fmt.Errorf("can not re-deposit to same miner")
+		return common.ErrRedeposit
 	}
 
 	// Delegate miner record the default account deposit information.
@@ -513,7 +513,7 @@ func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
 
 	checkDepositValidity(self, from, &dd, &dv)
 	if dv.Empty() {
-		return fmt.Errorf("has not deposited before")
+		return common.ErrNoDepositBalance
 	}
 
 	// Delegate miner remove the record.
