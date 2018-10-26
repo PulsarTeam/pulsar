@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -113,21 +112,21 @@ func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.State
 	powTarget := new(big.Int).Sub(target, posTargetAvg)
 
 	matureState := GetMatureState(v.bc, block.Number().Uint64())
-	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0{
+	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		target = powTarget
 	} else {
 		_, localSum, _ := matureState.GetDelegateMiner(block.Header().Coinbase)
 		if localSum == nil || localSum.Sign() == 0 {
-			log.Error(fmt.Sprintf("Error: cannot get delegate miner %s deposit balance.\n", block.Header().Coinbase.String()))
-			return errors.New("cannot get delegate miner deposit balance")
+			target = powTarget
+		} else {
+			// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+			tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(matureState.DelegateMinersCount())))
+			tmp.Div(tmp, matureState.DepositBalanceSum())
+			posTarget := new(big.Int).Mul(tmp, localSum)
+			target = new(big.Int).Add(powTarget, posTarget)
 		}
-
-		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
-		tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(matureState.DelegateMinersCount())))
-		tmp.Div(tmp, matureState.DepositBalanceSum())
-		posTarget := new(big.Int).Mul(tmp, localSum)
-		target = new(big.Int).Add(powTarget, posTarget)
 	}
+
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errors.New("block target error")
 	}

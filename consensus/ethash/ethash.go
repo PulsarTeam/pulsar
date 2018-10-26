@@ -558,7 +558,6 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 	// POS
 	_, localSum, _:= matureState.GetDelegateMiner(header.Coinbase)
 	if localSum == nil || localSum.Sign() == 0 {
-		log.Error(fmt.Sprintf("Error: cannot get delegate miner %s deposit balance.\n", header.Coinbase.String()))
 		return powTarget
 	}
 
