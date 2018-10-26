@@ -106,7 +106,7 @@ func (self *MatureState) GetDelegateMiner(addr common.Address) (uint32, *big.Int
 	if uint32(len(self.miners)) < self.dmCount && self.state.GetAccountType(addr) == common.DelegateMiner {
 		dv, dvErr := self.state.GetDelegateMiner(addr)
 		dd, ddErr := self.state.GetDepositUsers(addr)
-		if dvErr != nil && ddErr != nil {
+		if dvErr == nil && ddErr == nil {
 			dmObj := &dmAttr{
 				feeRatio:          dv.FeeRatio,
 				depositBalanceSum: new(big.Int).Set(dv.DepositBalance),
