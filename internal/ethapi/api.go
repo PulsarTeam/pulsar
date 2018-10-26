@@ -99,10 +99,12 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 	fields := map[common.Address]interface{}{}
 	var stakeHoldersList map[common.Address]common.DepositData
 	var err1 error
-	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 != nil {
+	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 == nil {
 		for addr, stakeholder := range stakeHoldersList {
 			fields[addr] = stakeholder
 		}
+	} else {
+		err1 = state.Error()
 	}
 
 	return fields, err1
@@ -115,17 +117,15 @@ func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.
 		return nil, err
 	}
 
-	if state.GetAccountType(addr) != common.DefaultAccount {
-		return nil, errors.New("can not use this command on a delegate miner!")
-	}
-
 	fields := map[common.Address]interface{}{}
 	var delegateMinersList map[common.Address]common.DepositView
 	var err1 error
-	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 != nil {
+	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 == nil {
 		for addr, miner := range delegateMinersList {
 			fields[addr] = miner
 		}
+	} else {
+		err1 = state.Error()
 	}
 
 	return fields, err1
