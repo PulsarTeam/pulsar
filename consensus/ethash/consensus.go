@@ -27,12 +27,12 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
-	"github.com/ethereum/go-ethereum/core"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -332,7 +332,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
 		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 	}
-	if actualTimespan > (uint64)(ethash.powTargetTimespan * 4) {
+	if actualTimespan > (uint64)(ethash.powTargetTimespan*4) {
 		actualTimespan = (uint64)(ethash.powTargetTimespan * 4)
 	}
 	var powLimit int64 = ethash.minDifficulty
@@ -343,10 +343,6 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		newDifficulty = new(big.Int).SetInt64(powLimit)
 	}
 	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
-	matureState := core.GetMatureState(chain, parent.Number.Uint64())
-	if matureState == nil || newDifficulty.Cmp(big.NewInt(int64(matureState.DelegateMinersCount()))) < 0 {
-		return parent.Difficulty
-	}
 	return newDifficulty
 }
 
