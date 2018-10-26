@@ -42,7 +42,7 @@ const (
 var cachedStates = matureStateSet{
 	current: nil,
 	prev: nil,
-	minBlock: minMatureBlockNumber,
+	minBlock: blocksInMatureCycle,
 }
 
 func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
