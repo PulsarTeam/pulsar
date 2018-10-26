@@ -96,18 +96,17 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 		return nil, err
 	}
 
-	fields := map[common.Address]interface{}{}
 	var stakeHoldersList map[common.Address]common.DepositData
 	var err1 error
-	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 == nil {
-		for addr, stakeholder := range stakeHoldersList {
-			fields[addr] = stakeholder
-		}
-	} else {
-		err1 = state.Error()
+	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 != nil {
+		return nil, err1
 	}
 
-	return fields, err1
+	fields := map[common.Address]interface{}{}
+	for addr, stakeholder := range stakeHoldersList {
+		fields[addr] = stakeholder
+	}
+	return fields, state.Error()
 }
 
 	//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
@@ -117,18 +116,18 @@ func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.
 		return nil, err
 	}
 
-	fields := map[common.Address]interface{}{}
 	var delegateMinersList map[common.Address]common.DepositView
 	var err1 error
-	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 == nil {
-		for addr, miner := range delegateMinersList {
-			fields[addr] = miner
-		}
-	} else {
-		err1 = state.Error()
+	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 != nil {
+		return nil, err1
 	}
 
-	return fields, err1
+	fields := map[common.Address]interface{}{}
+	for addr, miner := range delegateMinersList {
+		fields[addr] = miner
+	}
+
+	return fields, state.Error()
 }
 
 
