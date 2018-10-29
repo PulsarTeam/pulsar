@@ -29,73 +29,73 @@ type matureStateSet struct {
 	current *MatureState
 	prev *MatureState
 	minBlock uint64
-	cs sync.RWMutex
+	cs sync.Mutex
 }
 
 const (
 	blocksInMatureCycle uint64 = 128
-	blocksInMatureCycleMask = blocksInMatureCycle - 1
+	blocksInMatureCycleMask = ^(blocksInMatureCycle - 1)
 	minMatureBlockNumber = blocksInMatureCycle * 2
 )
-
-
-var cachedStates = matureStateSet{
-	current: nil,
-	prev: nil,
-	minBlock: blocksInMatureCycle,
-}
 
 func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 
 func LastMatureCycleRange(cur uint64) (uint64, uint64) {
 	if cur >= minMatureBlockNumber {
-		end := (cur & ^blocksInMatureCycleMask) - blocksInMatureCycle
+		end := (cur & blocksInMatureCycleMask) - blocksInMatureCycle
 		return end - blocksInMatureCycle, end
 	}
 	return 0, 0
 }
 
+
+var cachedStates = matureStateSet{
+	current: nil,
+	prev: nil,
+	minBlock: 0,
+}
+
 func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState {
-	if (blockNum & blocksInMatureCycleMask) != 0 {
-		cachedStates.cs.RLock()
-		defer cachedStates.cs.RUnlock()
-		if blockNum >= cachedStates.minBlock {
+	cachedStates.cs.Lock()
+	defer cachedStates.cs.Unlock()
+	if cachedStates.current != nil {
+		if blockNum >= cachedStates.minBlock && blockNum < cachedStates.minBlock + blocksInMatureCycle {
+			// Current cycle
 			return cachedStates.current
 		}
-		return cachedStates.prev
+		if blockNum >= cachedStates.minBlock - blocksInMatureCycle && blockNum < cachedStates.minBlock {
+			// Previous cycle
+			if cachedStates.prev != nil || blockNum < minMatureBlockNumber {
+				return cachedStates.prev
+			}
+			// update previous cycle.
+			cachedStates.prev = newMatureState(chain, cachedStates.minBlock - blocksInMatureCycle - 1)
+			return cachedStates.prev
+		}
+		// Next cycle
+		nextCycleBlock := cachedStates.minBlock + blocksInMatureCycle
+		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock + blocksInMatureCycle {
+			// update current cycle
+			cachedStates.prev = cachedStates.current
+			cachedStates.current = newMatureState(chain, nextCycleBlock - 1)
+			cachedStates.minBlock = nextCycleBlock
+			return cachedStates.current
+		}
 	}
 
+	var mState *MatureState
+	startBlock := blockNum & blocksInMatureCycleMask
 	if blockNum >= minMatureBlockNumber {
-		// get the state
-		header := chain.GetHeaderByNumber(blockNum - blocksInMatureCycle - 1)
-		stateDB, err := chain.GetState(header.Root)
-		if err != nil {
-			log.Error(fmt.Sprintf(
-				"FATAL ERROR: can not get state DB from matured block: %d. reason: %v\n",
-				blockNum - blocksInMatureCycle - 1, err))
-			panic("Logical error.\n")
-		}
-		dmViews := stateDB.GetAllDelegateMiners()
-		count := len(dmViews)
-		sum := new(big.Int)
-		for _, view := range dmViews {
-			sum.Add(sum, view.DepositBalance)
-		}
-
-		// update the cache
-		cachedStates.cs.Lock()
-		defer cachedStates.cs.Unlock()
-		cachedStates.prev = cachedStates.current
-		cachedStates.minBlock += blocksInMatureCycle
-		cachedStates.current = &MatureState{
-			state:             stateDB,
-			miners:            make(map[common.Address]*dmAttr),
-			depositBalanceSum: sum,
-			dmCount:           uint32(count),
-		}
+		mState = newMatureState(chain, startBlock - 1)
 	}
-
-	return cachedStates.current
+	if cachedStates.current == nil {
+		// First calling
+		cachedStates.current = mState
+		cachedStates.minBlock = startBlock
+	} else {
+		log.Warn("Ad-hoc calling mature state", "block: ", blockNum, "current: ", cachedStates.minBlock)
+	}
+	return mState
 }
 
 func (self *MatureState) GetDelegateMiner(addr common.Address) (uint32, *big.Int, map[common.Address]common.DepositData) {
@@ -126,4 +126,29 @@ func (self *MatureState) DelegateMinersCount() uint32 {
 
 func (self *MatureState) DepositBalanceSum() *big.Int {
 	return new(big.Int).Set(self.depositBalanceSum)
+}
+
+func newMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState {
+	// get the state
+	header := chain.GetHeaderByNumber(blockNum)
+	stateDB, err := chain.GetState(header.Root)
+	if err != nil {
+		log.Error(fmt.Sprintf(
+			"FATAL ERROR: can not get state DB from matured block: %d. reason: %v\n",
+			blockNum - blocksInMatureCycle - 1, err))
+		panic("Logical error.\n")
+	}
+	dmViews := stateDB.GetAllDelegateMiners()
+	count := len(dmViews)
+	sum := new(big.Int)
+	for _, view := range dmViews {
+		sum.Add(sum, view.DepositBalance)
+	}
+
+	return &MatureState{
+		state:             stateDB,
+		miners:            make(map[common.Address]*dmAttr),
+		depositBalanceSum: sum,
+		dmCount:           uint32(count),
+	}
 }
