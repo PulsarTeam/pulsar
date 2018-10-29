@@ -72,10 +72,10 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 			cachedStates.prev = newMatureState(chain, cachedStates.minBlock - blocksInMatureCycle - 1)
 			return cachedStates.prev
 		}
-		// Next cycle
+
 		nextCycleBlock := cachedStates.minBlock + blocksInMatureCycle
 		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock + blocksInMatureCycle {
-			// update current cycle
+			// Next cycle
 			cachedStates.prev = cachedStates.current
 			cachedStates.current = newMatureState(chain, nextCycleBlock - 1)
 			cachedStates.minBlock = nextCycleBlock
@@ -84,16 +84,17 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 	}
 
 	var mState *MatureState
-	startBlock := blockNum & blocksInMatureCycleMask
 	if blockNum >= minMatureBlockNumber {
+		startBlock := blockNum & blocksInMatureCycleMask
 		mState = newMatureState(chain, startBlock - 1)
-	}
-	if cachedStates.current == nil {
-		// First calling
-		cachedStates.current = mState
-		cachedStates.minBlock = startBlock
-	} else {
-		log.Warn("Ad-hoc calling mature state", "block: ", blockNum, "current: ", cachedStates.minBlock)
+		if cachedStates.current == nil {
+			// First calling
+			cachedStates.current = mState
+			cachedStates.minBlock = startBlock
+		} else {
+			// Ad-hoc calling doesn't affect cache
+			log.Warn("Ad-hoc calling mature state", "block: ", blockNum, "current: ", cachedStates.minBlock)
+		}
 	}
 	return mState
 }
