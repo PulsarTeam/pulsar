@@ -96,23 +96,13 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
 func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
-	// Extract some data from the header
-	var (
-		header = block.Header()
-		//\\hash   = header.HashNoNonce().Bytes()
+	header := block.Header()
+	target := ethash.CalcTarget(chain, header)
+	attempts := int64(0)
+	nonce := seed
 
-		//target  = new(big.Int).Div(maxUint256, header.Difficulty)
-		target = new(big.Int).SetInt64(0)
-		//		dataset = ethash.dataset(number)
-	)
-	// Start generating random nonces until we abort or find a good one
-	var (
-		attempts = int64(0)
-		nonce    = seed
-	)
 	logger := log.New("miner", id)
 	logger.Trace("Started ethash search for new nonces", "seed", seed)
-	//var cnt int = 0
 search:
 	for {
 		select {
@@ -123,40 +113,19 @@ search:
 			break search
 
 		default:
-			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
-			if target.Int64() == 0 {
-				target = ethash.CalcTarget(chain, header)
-			}
 			attempts++
 			if (attempts % (1 << 15)) == 0 {
 				ethash.hashrate.Mark(attempts)
 				attempts = 0
 			}
-			// Compute the PoW value of this nonce
-			//			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
-			//\\result := hashimotoFull(hash, nonce)
-
 			header.Nonce = types.EncodeNonce(nonce)
-			code, err := rlp.EncodeToBytes(header)
-			if err != nil{
-
+			headerRlp, err := rlp.EncodeToBytes(&header)
+			if err != nil {
+				logger.Warn("Ethash prepare failed", "encode error", err)
+				break search
 			}
-
-			result := GHash(code)
-
-			/*
-			cnt++
-			if cnt%10000 == 0{
-				fmt.Println("cnt ================== ", cnt)
-			}
-			*/
+			result := GHash(headerRlp)
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
-				// Correct nonce found, create a new header with it
-				header = types.CopyHeader(header)
-				header.Nonce = types.EncodeNonce(nonce)
-				//				header.MixDigest = common.BytesToHash(digest)
-
-				//fmt.Printf("nonce:%v, number : %v, target = %v, result = %v\n", nonce, block.Number().String(), target.String(), new(big.Int).SetBytes(result).String())
 				// Seal and return a block (if still needed)
 				select {
 				case found <- block.WithSeal(header):
@@ -169,7 +138,4 @@ search:
 			nonce++
 		}
 	}
-	// Datasets are unmapped in a finalizer. Ensure that the dataset stays live
-	// during sealing so it's not unmapped while being read.
-	//	runtime.KeepAlive(dataset)
 }
