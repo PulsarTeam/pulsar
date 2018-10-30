@@ -40,6 +40,8 @@ const (
 
 func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 
+func BlocksInMatureCycle() int64 { return int64(blocksInMatureCycle) }
+
 func LastMatureCycleRange(cur uint64) (uint64, uint64) {
 	if cur >= minMatureBlockNumber {
 		end := (cur & blocksInMatureCycleMask) - blocksInMatureCycle
