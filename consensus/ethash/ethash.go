@@ -423,6 +423,13 @@ type Ethash struct {
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
+const(
+	TesterThreads = 1
+	PowTargetTimespan = 14 * 24 * 60 * 60
+	PowTargetSpacing = 15
+	MinDifficulty = 131072
+)
+
 // New creates a full sized ethash PoW scheme.
 func New(config Config) *Ethash {
 	if config.CachesInMem <= 0 {
@@ -441,9 +448,9 @@ func New(config Config) *Ethash {
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeter(),
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -454,10 +461,10 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
-		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		threads: TesterThreads,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -470,9 +477,9 @@ func NewFaker() *Ethash {
 			PowMode: ModeFake,
 
 		},
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -485,9 +492,9 @@ func NewFakeFailer(fail uint64) *Ethash {
 			PowMode: ModeFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 		fakeFail: fail,
 	}
 }
@@ -501,9 +508,9 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 			PowMode: ModeFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 		fakeDelay: delay,
 	}
 }
@@ -516,9 +523,9 @@ func NewFullFaker() *Ethash {
 			PowMode: ModeFullFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -529,9 +536,9 @@ func NewShared() *Ethash {
 	return &Ethash{
 		shared: sharedEthash,
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		minDifficulty: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
