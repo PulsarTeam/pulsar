@@ -405,6 +405,10 @@ func hashimotoFull(hash []byte, nonce uint64) ([]byte) {
 	return hashimoto(hash, nonce)
 }
 
+func GHash(data []byte) ([]byte){
+	return crypto.Keccak256(data)
+}
+
 const maxEpoch = 2048
 
 // datasetSizes is a lookup table for the ethash dataset size for the first 2048

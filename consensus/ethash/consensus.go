@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -61,6 +62,7 @@ var (
 	errInvalidMixDigest  = errors.New("invalid mix digest")
 	errInvalidPoW        = errors.New("invalid proof-of-work")
 	errInvalidPosWeight  = errors.New("invalid pos weight")
+	errRlpEncodeErr      = errors.New("rlp encode error")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -324,11 +326,16 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
-	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
+	if parent.Number.Cmp(new(big.Int).SetInt64(0)) == 0 {
+		return parent.Difficulty
+	}
+
+	if (parent.Number.Int64() % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
 	}
 
 	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
+
 	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
 		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 	}
@@ -343,6 +350,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		newDifficulty = new(big.Int).SetInt64(powLimit)
 	}
 	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
+
 	return newDifficulty
 }
 
@@ -537,6 +545,17 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
+	}
+
+	code, error := rlp.EncodeToBytes(header)
+	if error != nil{
+		return errRlpEncodeErr
+	}
+
+	result := GHash(code)
+	target := ethash.CalcTarget(chain, header)
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errInvalidPoW
 	}
 
 	return nil

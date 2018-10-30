@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
@@ -98,7 +99,8 @@ func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id i
 	// Extract some data from the header
 	var (
 		header = block.Header()
-		hash   = header.HashNoNonce().Bytes()
+		//\\hash   = header.HashNoNonce().Bytes()
+
 		//target  = new(big.Int).Div(maxUint256, header.Difficulty)
 		target = new(big.Int).SetInt64(0)
 		//		dataset = ethash.dataset(number)
@@ -110,6 +112,7 @@ func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id i
 	)
 	logger := log.New("miner", id)
 	logger.Trace("Started ethash search for new nonces", "seed", seed)
+	//var cnt int = 0
 search:
 	for {
 		select {
@@ -131,14 +134,29 @@ search:
 			}
 			// Compute the PoW value of this nonce
 			//			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
-			result := hashimotoFull(hash, nonce)
+			//\\result := hashimotoFull(hash, nonce)
 
+			header.Nonce = types.EncodeNonce(nonce)
+			code, err := rlp.EncodeToBytes(header)
+			if err != nil{
+
+			}
+
+			result := GHash(code)
+
+			/*
+			cnt++
+			if cnt%10000 == 0{
+				fmt.Println("cnt ================== ", cnt)
+			}
+			*/
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
 				header.Nonce = types.EncodeNonce(nonce)
 				//				header.MixDigest = common.BytesToHash(digest)
 
+				//fmt.Printf("nonce:%v, number : %v, target = %v, result = %v\n", nonce, block.Number().String(), target.String(), new(big.Int).SetBytes(result).String())
 				// Seal and return a block (if still needed)
 				select {
 				case found <- block.WithSeal(header):

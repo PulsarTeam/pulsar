@@ -39,6 +39,7 @@ const (
 )
 
 func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
+func BlocksInMatureCycle() int64 { return int64(blocksInMatureCycle) }
 
 func BlocksInMatureCycle() int64 { return int64(blocksInMatureCycle) }
 

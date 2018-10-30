@@ -425,10 +425,13 @@ type Ethash struct {
 
 const(
 	TesterThreads = 1
-	PowTargetTimespan = 14 * 24 * 60 * 60
+	//\\PowTargetTimespan = 14 * 24 * 60 * 60
+	//\\PowTargetTimespan = 75
 	PowTargetSpacing = 15
 	MinDifficulty = 131072
 )
+
+var PowTargetTimespan int64 = core.BlocksInMatureCycle() * PowTargetSpacing
 
 // New creates a full sized ethash PoW scheme.
 func New(config Config) *Ethash {
