@@ -364,7 +364,7 @@ func NewShared() *Ethash {
 }
 
 // calculate the pos target.
-func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
+func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
 
 	if header.Difficulty.Int64() < ethash.minDifficulty {
 		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
@@ -378,7 +378,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 	powTarget := new(big.Int).Sub( target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
-	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), headers)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		return powTarget
 	}

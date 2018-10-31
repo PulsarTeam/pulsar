@@ -553,7 +553,7 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	}
 
 	result := GHash(code)
-	target := ethash.CalcTarget(chain, header)
+	target := ethash.CalcTarget(chain, header, headers)
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}
@@ -671,7 +671,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
@@ -706,7 +706,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}

@@ -97,7 +97,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 // seed that results in correct final block difficulty.
 func (ethash *Ethash) mine(chain consensus.ChainReader, block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	header := block.Header()
-	target := ethash.CalcTarget(chain, header)
+	target := ethash.CalcTarget(chain, header, nil)
 	attempts := int64(0)
 	nonce := seed
 
