@@ -32,5 +32,5 @@ func hashimoto(hash []byte, nonce uint64) ([]byte) {
 }
 
 func GHash(data []byte) ([]byte) {
-	return crypto.Keccak256(data)
+	return crypto.Keccak256(crypto.Keccak256(data))
 }
