@@ -3,7 +3,6 @@ package core
 import (
 	"math/big"
 	"sync"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -71,7 +70,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 				return cachedStates.prev
 			}
 			// update previous cycle.
-			cachedStates.prev = newMatureState(chain, cachedStates.minBlock - blocksInMatureCycle - 1)
+			cachedStates.prev = newMatureState(chain, cachedStates.minBlock - minMatureBlockNumber - 1)
 			return cachedStates.prev
 		}
 
@@ -79,7 +78,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock + blocksInMatureCycle {
 			// Next cycle
 			cachedStates.prev = cachedStates.current
-			cachedStates.current = newMatureState(chain, nextCycleBlock - 1)
+			cachedStates.current = newMatureState(chain, cachedStates.minBlock - 1)
 			cachedStates.minBlock = nextCycleBlock
 			return cachedStates.current
 		}
@@ -88,7 +87,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 	var mState *MatureState
 	if blockNum >= minMatureBlockNumber {
 		startBlock := blockNum & blocksInMatureCycleMask
-		mState = newMatureState(chain, startBlock - 1)
+		mState = newMatureState(chain, startBlock - blocksInMatureCycle - 1)
 		if cachedStates.current == nil {
 			// First calling
 			cachedStates.current = mState
@@ -134,11 +133,13 @@ func (self *MatureState) DepositBalanceSum() *big.Int {
 func newMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState {
 	// get the state
 	header := chain.GetHeaderByNumber(blockNum)
+	if header == nil {
+		log.Error("FATAL ERROR", "can not get header", blockNum)
+		panic("Logical error.\n")
+	}
 	stateDB, err := chain.GetState(header.Root)
 	if err != nil {
-		log.Error(fmt.Sprintf(
-			"FATAL ERROR: can not get state DB from matured block: %d. reason: %v\n",
-			blockNum - blocksInMatureCycle - 1, err))
+		log.Error("FATAL ERROR", "can not get state DB from matured block", blockNum, "error", err)
 		panic("Logical error.\n")
 	}
 	dmViews := stateDB.GetAllDelegateMiners()
