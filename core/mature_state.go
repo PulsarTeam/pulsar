@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type dmAttr struct {
@@ -56,7 +57,7 @@ var cachedStates = matureStateSet{
 	minBlock: 0,
 }
 
-func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState {
+func GetMatureState(chain consensus.ChainReader, backup []*types.Header, blockNum uint64) *MatureState {
 	cachedStates.cs.Lock()
 	defer cachedStates.cs.Unlock()
 	if cachedStates.current != nil {
@@ -70,7 +71,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 				return cachedStates.prev
 			}
 			// update previous cycle.
-			cachedStates.prev = newMatureState(chain, cachedStates.minBlock - minMatureBlockNumber - 1)
+			cachedStates.prev = newMatureState(chain, backup, cachedStates.minBlock - minMatureBlockNumber - 1)
 			return cachedStates.prev
 		}
 
@@ -78,7 +79,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock + blocksInMatureCycle {
 			// Next cycle
 			cachedStates.prev = cachedStates.current
-			cachedStates.current = newMatureState(chain, cachedStates.minBlock - 1)
+			cachedStates.current = newMatureState(chain, backup, cachedStates.minBlock - 1)
 			cachedStates.minBlock = nextCycleBlock
 			return cachedStates.current
 		}
@@ -87,7 +88,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState 
 	var mState *MatureState
 	if blockNum >= minMatureBlockNumber {
 		startBlock := blockNum & blocksInMatureCycleMask
-		mState = newMatureState(chain, startBlock - blocksInMatureCycle - 1)
+		mState = newMatureState(chain, backup, startBlock - blocksInMatureCycle - 1)
 		if cachedStates.current == nil {
 			// First calling
 			cachedStates.current = mState
@@ -130,12 +131,23 @@ func (self *MatureState) DepositBalanceSum() *big.Int {
 	return new(big.Int).Set(self.depositBalanceSum)
 }
 
-func newMatureState(chain consensus.ChainReader,  blockNum uint64) *MatureState {
+func getHeaderFromBuffer(buf []*types.Header, blockNum uint64) *types.Header {
+	for _, v := range buf {
+		if v.Number.Uint64() == blockNum {
+			return v
+		}
+	}
+	return nil
+}
+
+func newMatureState(chain consensus.ChainReader, backup []*types.Header, blockNum uint64) *MatureState {
 	// get the state
 	header := chain.GetHeaderByNumber(blockNum)
 	if header == nil {
-		log.Error("FATAL ERROR", "can not get header", blockNum)
-		panic("Logical error.\n")
+		if header = getHeaderFromBuffer(backup, blockNum); header == nil {
+			log.Error("FATAL ERROR", "can not get header", blockNum)
+			panic("Logical error.\n")
+		}
 	}
 	stateDB, err := chain.GetState(header.Root)
 	if err != nil {
