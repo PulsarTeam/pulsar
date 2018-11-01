@@ -50,6 +50,9 @@ func LastMatureCycleRange(cur uint64) (uint64, uint64) {
 	return 0, 0
 }
 
+func FixedHalveInterval( rawHalveInterval uint64) uint64 {
+	return rawHalveInterval & blocksInMatureCycleMask
+}
 
 var cachedStates = matureStateSet{
 	current: nil,

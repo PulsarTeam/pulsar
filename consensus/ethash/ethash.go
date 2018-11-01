@@ -646,6 +646,40 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 	return sumPos
 }
 
+// returns the total supply of pos in all previous mature cycles.
+func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+	_, end := core.LastMatureCycleRange(header.Number.Uint64())
+	sumPos := big.NewInt(0)
+	for i := uint64(0); i < end; i++ {
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPos.Add(sumPos, h.PosProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPos.Add(sumPos, header.PosProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return sumPos
+}
+
+// returns the total supply of pow in all previous mature cycles.
+func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+	_, end := core.LastMatureCycleRange(header.Number.Uint64())
+	sumPow := big.NewInt(0)
+	for i := uint64(0); i < end; i++ {
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPow.Add(sumPow, h.PowProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPow.Add(sumPow, header.PowProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return sumPow
+}
+
 // cache tries to retrieve a verification cache for the specified block number
 // by first checking against a list of in-memory caches, then against caches
 // stored on disk, and finally generating one if none can be found.
