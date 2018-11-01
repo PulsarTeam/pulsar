@@ -109,6 +109,9 @@ var (
 
 	//ErrWithdrawFromUncorrelatedMiner return if with draw from a  uncorrelated miner
 	ErrWithdrawFromUncorrelatedMiner = errors.New("you should not with draw from a  uncorrelated miner")
+
+	//ErrDelegatedMinerRegisterWithDeposit return if a account delegate with some deposit
+	ErrDelegatedMinerRegisterWithDeposit = errors.New("you should not register to be a delegate miner with deposit balance")
 )
 
 var (
@@ -609,6 +612,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.TxType() == params.DelegateMinerRegisterTx{
 		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
 			return ErrDelegatedMinerRegister
+		}
+
+		if depositBalance := pool.currentState.GetDepositBalance(from); depositBalance.Cmp(new (big.Int).SetInt64(0)) != 0{
+			return ErrDelegatedMinerRegisterWithDeposit
 		}
 
 		balance := pool.currentState.GetBalance(from)
