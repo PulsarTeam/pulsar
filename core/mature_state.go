@@ -58,7 +58,6 @@ var cachedStates = matureStateSet{
 }
 
 func GetMatureState(chain consensus.ChainReader,  blockNum uint64, backup []*types.Header) *MatureState {
-	//\\fmt.Printf("blockNum ===================== %v\n", blockNum)
 	cachedStates.cs.Lock()
 	defer cachedStates.cs.Unlock()
 	if cachedStates.current != nil {
