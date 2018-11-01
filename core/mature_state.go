@@ -33,7 +33,7 @@ type matureStateSet struct {
 }
 
 const (
-	blocksInMatureCycle uint64 = 16
+	blocksInMatureCycle uint64 = 32
 	blocksInMatureCycleMask = ^(blocksInMatureCycle - 1)
 	minMatureBlockNumber = blocksInMatureCycle * 2
 )
