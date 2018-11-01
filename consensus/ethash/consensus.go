@@ -246,7 +246,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return errZeroBlockTime
 	}
 	// Verify the block's difficulty based in it's timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, headers)
 
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
@@ -309,6 +309,16 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	return nil
 }
 
+
+func (ethash *Ethash)FindInHeadersByNum(blockNum uint64, buf []*types.Header) *types.Header {
+	for _, v := range buf {
+		if v.Number.Uint64() == blockNum {
+			return v
+		}
+	}
+	return nil
+}
+
 // CCalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
@@ -316,7 +326,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 //	return CalcDifficulty(chain.Config(), time, parent)
 //}
 
-func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header, headers []*types.Header) *big.Int {
 	//return new(big.Int).SetInt64(10000)
 
 	//fmt.Println(ethash.powTargetTimespan, ethash.powTargetSpacing)
@@ -334,7 +344,18 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		return parent.Difficulty
 	}
 
-	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
+	start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
+
+	h := chain.GetHeaderByNumber(start)
+	if h == nil{
+		h = ethash.FindInHeadersByNum(start, headers)
+		if h == nil{
+			log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
+			panic("Logical error.\n")
+		}
+	}
+
+	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (h.Time.Int64()))
 
 	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
 		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
@@ -568,7 +589,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, nil)
 	header.PosWeight = ethash.PosWeight(chain, header, nil)
 	return nil
 }
