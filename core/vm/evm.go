@@ -447,7 +447,7 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 	case params.DelegateMinerRegisterTx:
 		//register to be a delegateMiner
 		fee, _ := msg.Fee()
-		evm.StateDB.SetAccountType(msg.From(), common.DelegateMiner, fee)
+		err = evm.StateDB.SetAccountType(msg.From(), common.DelegateMiner, fee)
 	case params.DelegateStakesTx:
 		//delegate stakes to miner
 		if !evm.StateDB.Exist(addr) {
