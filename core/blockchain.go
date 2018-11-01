@@ -1039,22 +1039,34 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		lastCanon     *types.Block
 		coalescedLogs []*types.Log
 	)
-	// Start the parallel header verifier
-	headers := make([]*types.Header, len(chain))
-	seals := make([]bool, len(chain))
 
+	// Start the parallel header verifier
+	//\\headers := make([]*types.Header, len(chain))
+	//\\seals := make([]bool, len(chain))
+
+	headers := make([]*types.Header, 1)
+	seals := make([]bool, 1)
+
+	/*
 	for i, block := range chain {
 		headers[i] = block.Header()
 		seals[i] = true
+		fmt.Printf("getHeader block number : %v &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n", block.Number().String())
 	}
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
+	*/
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
 
 	// Iterate over the blocks and insert when the verifier permits
 	for i, block := range chain {
+		headers[0] = block.Header()
+		seals[0] = true
+		abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+		defer close(abort)
+
 		// If the chain is terminating, stop processing blocks
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
@@ -1165,6 +1177,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 		// Write the block to the chain and get the status.
 		status, err := bc.WriteBlockWithState(block, receipts, state)
+		//\\fmt.Printf("write block number : %v =================++++++++++++++++++\n", block.Number().String())
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}

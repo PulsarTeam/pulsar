@@ -58,6 +58,7 @@ var cachedStates = matureStateSet{
 }
 
 func GetMatureState(chain consensus.ChainReader,  blockNum uint64, backup []*types.Header) *MatureState {
+	//\\fmt.Printf("blockNum ===================== %v\n", blockNum)
 	cachedStates.cs.Lock()
 	defer cachedStates.cs.Unlock()
 	if cachedStates.current != nil {
@@ -145,6 +146,7 @@ func newMatureState(chain consensus.ChainReader, backup []*types.Header, blockNu
 	header := chain.GetHeaderByNumber(blockNum)
 	if header == nil {
 		if header = getHeaderFromBuffer(backup, blockNum); header == nil {
+			//\\fmt.Printf("get header From buffer ====== blockNum: %v \n", blockNum)
 			log.Error("FATAL ERROR", "can not get header", blockNum)
 			panic("Logical error.\n")
 		}
