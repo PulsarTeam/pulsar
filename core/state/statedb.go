@@ -419,7 +419,7 @@ func (self *StateDB) GetDepositBalance(addr common.Address) *big.Int {
 	result := new (big.Int)
 	obj := self.GetOrNewStateObject(addr)
 	if obj != nil {
-		result = result.Set(obj.data.Balance)
+		result = result.Set(obj.data.DepositBalance)
 	}
 	return result
 }
