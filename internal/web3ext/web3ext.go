@@ -430,6 +430,20 @@ web3._extend({
 			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
 		}),
 		new web3._extend.Method({
+			name: 'getPowTotalSupply',
+			call: 'eth_getPowTotalSupply',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
+			outputFormatter: web3._extend.utils.toDecimal
+		}),
+		new web3._extend.Method({
+			name: 'getPosTotalSupply',
+			call: 'eth_getPosTotalSupply',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
+			outputFormatter: web3._extend.utils.toDecimal
+		}),
+		new web3._extend.Method({
 			name: 'getAllStakeHolders',
 			call: 'eth_getAllStakeHolders',
 			params: 2,

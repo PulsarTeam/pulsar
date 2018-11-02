@@ -88,6 +88,52 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 	return fields, state.Error()
 }
 
+//For Ds-pow: GetPowTotalSupply return the total supply of pow
+func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
+	 header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header==nil || err != nil {
+		return nil,  err
+	}
+	headerNumber := header.Number.Uint64()
+	sumPow := big.NewInt(0)
+	for i := uint64(0); i <= headerNumber; i++ {
+		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h==nil || InternalErr != nil {
+			return nil, InternalErr
+		}
+		if h != nil {
+			fmt.Println("block[", h.Number , "],sumPow:", sumPow.String(), " + ", h.PowProduction.String())
+			sumPow.Add(sumPow, h.PowProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return (*hexutil.Big)(sumPow), nil
+}
+
+//For Ds-pow: GetPosTotalSupply return the total supply of pos
+func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
+	header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header==nil || err != nil {
+		return nil, err
+	}
+	headerNumber := header.Number.Uint64()
+	sumPos := big.NewInt(0)
+	for i := uint64(0); i <= headerNumber; i++ {
+		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h==nil || InternalErr != nil {
+			return nil, InternalErr
+		}
+		if h != nil {
+			fmt.Println("block[", h.Number , "],sumPow:", sumPos.String(), " + ", h.PosProduction.String())
+			sumPos.Add(sumPos, h.PosProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return (*hexutil.Big)(sumPos), nil
+}
+
 //For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
 func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)

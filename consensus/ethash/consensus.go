@@ -38,13 +38,17 @@ import (
 
 // Ethash proof-of-work protocol constants.
 var (
-	FrontierBlockReward    *big.Int = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
+	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128),big.NewInt(1e18)) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 	InterestRate           *big.Int = big.NewInt(100)
 	InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision      *big.Int = big.NewInt(1000000)
+	halveIntervalGoal		uint64	= 256 // (60/15)*60*24*365*2
+
+	PowRewardRatioUncles   *big.Int = big.NewInt(3000)
+	PowRewardRatioPrecision*big.Int = big.NewInt(10000)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -469,7 +473,19 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 var (
 	big8  = big.NewInt(8)
 	big32 = big.NewInt(32)
+	big0 = big.NewInt(0)
 )
+
+
+func CurPowReward(baseReward *big.Int, blockNumber uint64) *big.Int {
+	if blockNumber==0 {
+		return big0
+	}
+	halveInterval := core.FixedHalveInterval(halveIntervalGoal)
+	var n uint = uint((blockNumber-1) / halveInterval)
+	curBlockPowReward := new(big.Int).Rsh(baseReward, n)
+	return curBlockPowReward
+}
 
 // AccumulatePowRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
@@ -480,23 +496,29 @@ func (ethash *Ethash) accumulatePowRewards(config *params.ChainConfig, state *st
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
+	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
+	log.Warn("accumulatePowRewards, no:",  header.Number.String() ,"  reward:", curPowReward.String())
+	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
 	total := new(big.Int)
-	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		state.AddBalance(uncle.Coinbase, r)
-
-		total.Add(total, r)
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
+	if uncleCnt.Sign()>0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
+		if powRewardPerUncle.Sign()>0 {
+			for _, uncle := range uncles {
+				state.AddBalance(uncle.Coinbase, powRewardPerUncle)
+				total.Add(total, powRewardPerUncle)
+			}
+		}
+		if powRewardSelf.Sign()>0 {
+			state.AddBalance(header.Coinbase, powRewardSelf)
+			total.Add(total, powRewardSelf)
+		}
+	} else {
+		state.AddBalance(header.Coinbase, curPowReward)
+		total.Add(total, curPowReward)
 	}
-	state.AddBalance(header.Coinbase, reward)
-	total.Add(total, reward)
 	return total
 }
 
@@ -509,22 +531,27 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
+
+	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
+	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
 	total := new(big.Int)
-	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		total.Add(total, r)
-
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
+	if uncleCnt.Sign()>0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
+		if powRewardPerUncle.Sign()>0 {
+			for _, uncle := range uncles {
+				uncle.Coinbase.String()
+				total.Add(total, powRewardPerUncle)
+			}
+		}
+		if powRewardSelf.Sign()>0 {
+			total.Add(total, powRewardSelf)
+		}
+	} else {
+		total.Add(total, curPowReward)
 	}
-
-	total.Add(total, reward)
 	return total
 }
 
