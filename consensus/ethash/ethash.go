@@ -23,20 +23,12 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"math/rand"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strconv"
 	"sync"
 	"time"
-	"unsafe"
-
-	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/ethereum/go-ethereum/core"
 )
 
@@ -47,7 +39,7 @@ var (
 	maxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 	// sharedEthash is a full instance that can be shared between multiple users.
-	sharedEthash = New(Config{"", 3, 0, "", 1, 0, ModeNormal})
+	sharedEthash = New(Config{ModeNormal})
 
 	// algorithmRevision is the data structure version used for file naming.
 	algorithmRevision = 23
@@ -60,142 +52,6 @@ var (
 	posWeightMax uint32 = 8000
 	posWeightMin uint32 = 2000
 )
-
-// isLittleEndian returns whether the local system is running in little or big
-// endian byte order.
-func isLittleEndian() bool {
-	n := uint32(0x01020304)
-	return *(*byte)(unsafe.Pointer(&n)) == 0x04
-}
-
-// memoryMap tries to memory map a file of uint32s for read only access.
-func memoryMap(path string) (*os.File, mmap.MMap, []uint32, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	mem, buffer, err := memoryMapFile(file, false)
-	if err != nil {
-		file.Close()
-		return nil, nil, nil, err
-	}
-	for i, magic := range dumpMagic {
-		if buffer[i] != magic {
-			mem.Unmap()
-			file.Close()
-			return nil, nil, nil, ErrInvalidDumpMagic
-		}
-	}
-	return file, mem, buffer[len(dumpMagic):], err
-}
-
-// memoryMapFile tries to memory map an already opened file descriptor.
-func memoryMapFile(file *os.File, write bool) (mmap.MMap, []uint32, error) {
-	// Try to memory map the file
-	flag := mmap.RDONLY
-	if write {
-		flag = mmap.RDWR
-	}
-	mem, err := mmap.Map(file, flag, 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Yay, we managed to memory map the file, here be dragons
-	header := *(*reflect.SliceHeader)(unsafe.Pointer(&mem))
-	header.Len /= 4
-	header.Cap /= 4
-
-	return mem, *(*[]uint32)(unsafe.Pointer(&header)), nil
-}
-
-// memoryMapAndGenerate tries to memory map a temporary file of uint32s for write
-// access, fill it with the data from a generator and then move it into the final
-// path requested.
-func memoryMapAndGenerate(path string, size uint64, generator func(buffer []uint32)) (*os.File, mmap.MMap, []uint32, error) {
-	// Ensure the data folder exists
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, nil, nil, err
-	}
-	// Create a huge temporary empty file to fill with data
-	temp := path + "." + strconv.Itoa(rand.Int())
-
-	dump, err := os.Create(temp)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if err = dump.Truncate(int64(len(dumpMagic))*4 + int64(size)); err != nil {
-		return nil, nil, nil, err
-	}
-	// Memory map the file for writing and fill it with the generator
-	mem, buffer, err := memoryMapFile(dump, true)
-	if err != nil {
-		dump.Close()
-		return nil, nil, nil, err
-	}
-	copy(buffer, dumpMagic)
-
-	data := buffer[len(dumpMagic):]
-	generator(data)
-
-	if err := mem.Unmap(); err != nil {
-		return nil, nil, nil, err
-	}
-	if err := dump.Close(); err != nil {
-		return nil, nil, nil, err
-	}
-	if err := os.Rename(temp, path); err != nil {
-		return nil, nil, nil, err
-	}
-	return memoryMap(path)
-}
-
-// lru tracks caches or datasets by their last use time, keeping at most N of them.
-type lru struct {
-	what string
-	new  func(epoch uint64) interface{}
-	mu   sync.Mutex
-	// Items are kept in a LRU cache, but there is a special case:
-	// We always keep an item for (highest seen epoch) + 1 as the 'future item'.
-	cache      *simplelru.LRU
-	future     uint64
-	futureItem interface{}
-}
-
-// newlru create a new least-recently-used cache for either the verification caches
-// or the mining datasets.
-func newlru(what string, maxItems int, new func(epoch uint64) interface{}) *lru {
-	if maxItems <= 0 {
-		maxItems = 1
-	}
-	cache, _ := simplelru.NewLRU(maxItems, func(key, value interface{}) {
-		log.Trace("Evicted ethash "+what, "epoch", key)
-	})
-	return &lru{what: what, new: new, cache: cache}
-}
-
-// cache wraps an ethash cache with some metadata to allow easier concurrent use.
-type cache struct {
-	epoch uint64    // Epoch for which this cache is relevant
-	dump  *os.File  // File descriptor of the memory mapped cache
-	mmap  mmap.MMap // Memory map itself to unmap before releasing
-	cache []uint32  // The actual cache data content (may be memory mapped)
-	once  sync.Once // Ensures the cache is generated only once
-}
-
-// newCache creates a new ethash verification cache and returns it as a plain Go
-// interface to be usable in an LRU cache.
-func newCache(epoch uint64) interface{} {
-	return &cache{epoch: epoch}
-}
-
-// finalizer unmaps the memory and closes the file.
-func (c *cache) finalizer() {
-	if c.mmap != nil {
-		c.mmap.Unmap()
-		c.dump.Close()
-		c.mmap, c.dump = nil, nil
-	}
-}
 
 // Mode defines the type and amount of PoW verification an ethash engine makes.
 type Mode uint
@@ -210,12 +66,6 @@ const (
 
 // Config are the configuration parameters of the ethash.
 type Config struct {
-	CacheDir       string
-	CachesInMem    int
-	CachesOnDisk   int
-	DatasetDir     string
-	DatasetsInMem  int
-	DatasetsOnDisk int
 	PowMode        Mode
 }
 
@@ -251,20 +101,10 @@ const(
 	MinDifficulty = 131072
 )
 
-var PowTargetTimespan int64 = core.BlocksInMatureCycle() * PowTargetSpacing
+var PowTargetTimespan = core.BlocksInMatureCycle() * PowTargetSpacing
 
 // New creates a full sized ethash PoW scheme.
 func New(config Config) *Ethash {
-	if config.CachesInMem <= 0 {
-		log.Warn("One ethash cache must always be in memory", "requested", config.CachesInMem)
-		config.CachesInMem = 1
-	}
-	if config.CacheDir != "" && config.CachesOnDisk > 0 {
-		log.Info("Disk storage enabled for ethash caches", "dir", config.CacheDir, "count", config.CachesOnDisk)
-	}
-	if config.DatasetDir != "" && config.DatasetsOnDisk > 0 {
-		log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
-	}
 	return &Ethash{
 		config:   config,
 		update:   make(chan struct{}),
@@ -296,7 +136,6 @@ func NewFaker() *Ethash {
 	return &Ethash{
 		config: Config{
 			PowMode: ModeFake,
-
 		},
 		powTargetTimespan: PowTargetTimespan,
 		powTargetSpacing: PowTargetSpacing,
