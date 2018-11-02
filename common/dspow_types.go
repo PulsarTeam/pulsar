@@ -11,7 +11,7 @@ const (
 )
 
 var (
-	ErrAccountTypeMismatch = errors.New("account type mismatch")
+	ErrAccountTypeNotAllowed = errors.New("account type not allowed")
 	ErrInsufficientBalance = errors.New("insufficient balance")
 	ErrRedeposit = errors.New("redeposit to same miner")
 	ErrNoDepositBalance = errors.New("no deposit balance")

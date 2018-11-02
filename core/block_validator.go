@@ -18,8 +18,6 @@ package core
 
 import (
 	"fmt"
-	"math/big"
-	"errors"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -103,6 +101,7 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	return nil
 }
 
+/*
 func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.StateDB) error {
 	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
 
@@ -111,7 +110,7 @@ func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.State
 	posTargetAvg.Div(posTargetAvg, big.NewInt(10000))
 	powTarget := new(big.Int).Sub(target, posTargetAvg)
 
-	matureState := GetMatureState(v.bc, block.Number().Uint64())
+	matureState := GetMatureState(v.bc, block.Number().Uint64(), nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		target = powTarget
 	} else {
@@ -132,6 +131,7 @@ func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.State
 	}
 	return nil
 }
+*/
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.

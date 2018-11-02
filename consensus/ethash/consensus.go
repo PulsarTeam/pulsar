@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -65,6 +66,7 @@ var (
 	errInvalidMixDigest  = errors.New("invalid mix digest")
 	errInvalidPoW        = errors.New("invalid proof-of-work")
 	errInvalidPosWeight  = errors.New("invalid pos weight")
+	errRlpEncodeErr      = errors.New("rlp encode error")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -248,7 +250,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return errZeroBlockTime
 	}
 	// Verify the block's difficulty based in it's timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, headers)
 
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
@@ -301,12 +303,18 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 			return err
 		}
 	}
-	// If all checks passed, validate any special fields for hard forks
-	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
-		return err
-	}
 	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
+	}
+	return nil
+}
+
+
+func (ethash *Ethash)FindInHeadersByNum(blockNum uint64, buf []*types.Header) *types.Header {
+	for _, v := range buf {
+		if v.Number.Uint64() == blockNum {
+			return v
+		}
 	}
 	return nil
 }
@@ -318,7 +326,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 //	return CalcDifficulty(chain.Config(), time, parent)
 //}
 
-func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header, headers []*types.Header) *big.Int {
 	//return new(big.Int).SetInt64(10000)
 
 	//fmt.Println(ethash.powTargetTimespan, ethash.powTargetSpacing)
@@ -328,11 +336,27 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
-	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
+	if parent.Number.Cmp(new(big.Int).SetInt64(0)) == 0 {
 		return parent.Difficulty
 	}
 
-	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
+	if (parent.Number.Int64() % difficultyAdjustInterval) != 0 {
+		return parent.Difficulty
+	}
+
+	start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
+
+	h := chain.GetHeaderByNumber(start)
+	if h == nil{
+		h = ethash.FindInHeadersByNum(start, headers)
+		if h == nil{
+			log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
+			panic("Logical error.\n")
+		}
+	}
+
+	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (h.Time.Int64()))
+
 	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
 		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
 	}
@@ -347,22 +371,8 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 		newDifficulty = new(big.Int).SetInt64(powLimit)
 	}
 	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
-	return newDifficulty
-}
 
-// CalcDifficulty is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time
-// given the parent block's time and difficulty.
-func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	next := new(big.Int).Add(parent.Number, big1)
-	switch {
-	case config.IsByzantium(next):
-		return calcDifficultyByzantium(time, parent)
-	case config.IsHomestead(next):
-		return calcDifficultyHomestead(time, parent)
-	default:
-		return calcDifficultyFrontier(time, parent)
-	}
+	return newDifficulty
 }
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -375,147 +385,6 @@ var (
 	bigMinus99    = big.NewInt(-99)
 	big2999999    = big.NewInt(2999999)
 )
-
-// calcDifficultyByzantium is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time given the
-// parent block's time and difficulty. The calculation uses the Byzantium rules.
-func calcDifficultyByzantium(time uint64, parent *types.Header) *big.Int {
-	// https://github.com/ethereum/EIPs/issues/100.
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	//        ) + 2^(periodCount - 2)
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).Set(parent.Time)
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big9)
-	if parent.UncleHash == types.EmptyUncleHash {
-		x.Sub(big1, x)
-	} else {
-		x.Sub(big2, x)
-	}
-	// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty, x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-	// calculate a fake block number for the ice-age delay:
-	//   https://github.com/ethereum/EIPs/pull/669
-	//   fake_block_number = min(0, block.number - 3_000_000
-	fakeBlockNumber := new(big.Int)
-	if parent.Number.Cmp(big2999999) >= 0 {
-		fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, big2999999) // Note, parent is 1 less than the actual block number
-	}
-	// for the exponential factor
-	periodCount := fakeBlockNumber
-	periodCount.Div(periodCount, expDiffPeriod)
-
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(big1) > 0 {
-		y.Sub(periodCount, big2)
-		y.Exp(big2, y, nil)
-		x.Add(x, y)
-	}
-	return x
-}
-
-// calcDifficultyHomestead is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time given the
-// parent block's time and difficulty. The calculation uses the Homestead rules.
-func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
-	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.md
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	//        ) + 2^(periodCount - 2)
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).Set(parent.Time)
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// 1 - (block_timestamp - parent_timestamp) // 10
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big10)
-	x.Sub(big1, x)
-
-	// max(1 - (block_timestamp - parent_timestamp) // 10, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// (parent_diff + parent_diff // 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty, x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-	// for the exponential factor
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
-
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(big1) > 0 {
-		y.Sub(periodCount, big2)
-		y.Exp(big2, y, nil)
-		x.Add(x, y)
-	}
-	return x
-}
-
-// calcDifficultyFrontier is the difficulty adjustment algorithm. It returns the
-// difficulty that a new block should have when created at time given the parent
-// block's time and difficulty. The calculation uses the Frontier rules.
-func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
-	diff := new(big.Int)
-	adjust := new(big.Int).Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	bigTime := new(big.Int)
-	bigParentTime := new(big.Int)
-
-	bigTime.SetUint64(time)
-	bigParentTime.Set(parent.Time)
-
-	if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
-		diff.Add(parent.Difficulty, adjust)
-	} else {
-		diff.Sub(parent.Difficulty, adjust)
-	}
-	if diff.Cmp(params.MinimumDifficulty) < 0 {
-		diff.Set(params.MinimumDifficulty)
-	}
-
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
-	if periodCount.Cmp(big1) > 0 {
-		// diff = diff + 2^(periodCount - 2)
-		expDiff := periodCount.Sub(periodCount, big2)
-		expDiff.Exp(big2, expDiff, nil)
-		diff.Add(diff, expDiff)
-		diff = math.BigMax(diff, params.MinimumDifficulty)
-	}
-	return diff
-}
 
 // VerifySeal implements consensus.Engine, checking whether the given block satisfies
 // the PoW difficulty requirements.
@@ -543,6 +412,17 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 		return errInvalidPosWeight
 	}
 
+	code, error := rlp.EncodeToBytes(header)
+	if error != nil{
+		return errRlpEncodeErr
+	}
+
+	result := GHash(code)
+	target := ethash.CalcTarget(chain, header, headers)
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errInvalidPoW
+	}
+
 	return nil
 }
 
@@ -553,7 +433,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, nil)
 	header.PosWeight = ethash.PosWeight(chain, header, nil)
 	return nil
 }
@@ -679,7 +559,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
@@ -714,7 +594,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64())
+	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}

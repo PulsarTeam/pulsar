@@ -53,7 +53,7 @@ type StateDB interface {
 	 * @param aType: state.DefaultAccount, state.DelegateMiner, defined in dspow_defs.go
 	 * @param feeRatio: make sense only if the type is DelegateMiner. feeRatio/1,000,000
 	 */
-	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32)
+	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32) error
 
 	GetAccountType(common.Address) common.AccountType
 

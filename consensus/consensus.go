@@ -95,7 +95,7 @@ type Engine interface {
 
 	// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 	// that a new block should have.
-	CalcDifficulty(chain ChainReader, time uint64, parent *types.Header) *big.Int
+	CalcDifficulty(chain ChainReader, time uint64, parent *types.Header, headers []*types.Header) *big.Int
 
 	// returns the pos weight in a certain cycle.
 	PosWeight(chain ChainReader, header *types.Header, headers []*types.Header) uint32

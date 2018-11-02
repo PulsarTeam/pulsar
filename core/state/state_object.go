@@ -466,15 +466,15 @@ func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big
 
 	// Delegate miner record the default account deposit information.
 	self.dirtyStake[from.address] = common.DepositData{
-		Balance: balance,
-		BlockNumber: blockNumber,
+		Balance: new (big.Int).Set(balance),
+		BlockNumber: new (big.Int).Set(blockNumber),
 	}
 
 	// Default account record to which delegate miner it deposited.
 	from.dirtyStake[self.address] = common.DepositView{
 		DepositData:common.DepositData{
-			Balance: balance,
-			BlockNumber: blockNumber,
+			Balance: new (big.Int).Set(balance),
+			BlockNumber: new (big.Int).Set(blockNumber),
 		},
 		FeeRatio: self.data.FeeRatio,
 	}

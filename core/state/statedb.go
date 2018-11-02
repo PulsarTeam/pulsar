@@ -306,7 +306,7 @@ func (self *StateDB) Deposit(from common.Address, to common.Address, balance *bi
 		return ErrStateObjectNotFound
 	}
 	if fromObj.getType() == common.DelegateMiner || toObj.getType() != common.DelegateMiner {
-		return common.ErrAccountTypeMismatch
+		return common.ErrAccountTypeNotAllowed
 	}
 	if result := fromObj.Balance().Cmp(balance); result < 0 {
 		return common.ErrInsufficientBalance
@@ -322,20 +322,29 @@ func (self *StateDB) Withdraw(from common.Address, to common.Address) error {
 		return ErrStateObjectNotFound
 	}
 	if fromObj.getType() == common.DelegateMiner || toObj.getType() != common.DelegateMiner {
-		return common.ErrAccountTypeMismatch
+		return common.ErrAccountTypeNotAllowed
 	}
 
 	return toObj.rmDeposit(self.db, fromObj)
 }
 
-func (self *StateDB) SetAccountType(addr common.Address, aType common.AccountType, feeRatio uint32) {
+func (self *StateDB) SetAccountType(addr common.Address, aType common.AccountType, feeRatio uint32) error {
 	if !common.AccountTypeValidity(aType) {
 		panic(fmt.Sprintf("Wrong account type: %d\n", aType))
 	}
 	obj := self.GetOrNewStateObject(addr)
-	if obj != nil {
+	if obj == nil {
+		return ErrStateObjectNotFound
+	}
+	if aType != obj.data.Type {
+		// Type transfer
+		if obj.data.DepositBalance.Sign() != 0 {
+			// Have some type specific data, can't transfer type.
+			return common.ErrAccountTypeNotAllowed
+		}
 		obj.setType(aType, feeRatio)
 	}
+	return nil
 }
 
 func (self *StateDB) GetAllDelegateMiners() map[common.Address]common.DMView {
@@ -362,7 +371,7 @@ func (self *StateDB) GetDelegateMiner(miner common.Address) (common.DMView, erro
 		return result, ErrStateObjectNotFound
 	}
 	if obj.data.Type != common.DelegateMiner {
-		return result, common.ErrAccountTypeMismatch
+		return result, common.ErrAccountTypeNotAllowed
 	}
 	result.DepositBalance = new(big.Int).Set(obj.data.DepositBalance)
 	result.FeeRatio = obj.data.FeeRatio
@@ -376,7 +385,7 @@ func (self *StateDB) GetDepositMiners(addr common.Address) (map[common.Address]c
 		return result, ErrStateObjectNotFound
 	}
 	if obj.data.Type != common.DefaultAccount {
-		return result, common.ErrAccountTypeMismatch
+		return result, common.ErrAccountTypeNotAllowed
 	}
 
 	var err error
@@ -415,6 +424,15 @@ func (self *StateDB) GetAccountType(addr common.Address) common.AccountType {
 	return aType
 }
 
+func (self *StateDB) GetDepositBalance(addr common.Address) *big.Int {
+	result := new (big.Int)
+	obj := self.GetOrNewStateObject(addr)
+	if obj != nil {
+		result = result.Set(obj.data.DepositBalance)
+	}
+	return result
+}
+
 func (self* StateDB) GetDepositUsers(addr common.Address) (map[common.Address]common.DepositData, error) {
 	result := make(map[common.Address]common.DepositData)
 	obj := self.GetOrNewStateObject(addr)
@@ -422,7 +440,7 @@ func (self* StateDB) GetDepositUsers(addr common.Address) (map[common.Address]co
 		return result, ErrStateObjectNotFound
 	}
 	if obj.data.Type != common.DelegateMiner {
-		return result, common.ErrAccountTypeMismatch
+		return result, common.ErrAccountTypeNotAllowed
 	}
 
 	var err error
