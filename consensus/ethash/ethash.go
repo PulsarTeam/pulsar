@@ -20,27 +20,16 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"github.com/ethereum/go-ethereum/core/types"
-	"math"
 	"math/big"
 	"math/rand"
-	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strconv"
 	"sync"
 	"time"
-	"unsafe"
-
-	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/availabledb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/hashicorp/golang-lru/simplelru"
+	"github.com/ethereum/go-ethereum/core"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -50,7 +39,7 @@ var (
 	maxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 	// sharedEthash is a full instance that can be shared between multiple users.
-	sharedEthash = New(Config{"", 3, 0, "", 1, 0, ModeNormal})
+	sharedEthash = New(Config{ModeNormal})
 
 	// algorithmRevision is the data structure version used for file naming.
 	algorithmRevision = 23
@@ -63,317 +52,6 @@ var (
 	posWeightMax uint32 = 8000
 	posWeightMin uint32 = 2000
 )
-
-// isLittleEndian returns whether the local system is running in little or big
-// endian byte order.
-func isLittleEndian() bool {
-	n := uint32(0x01020304)
-	return *(*byte)(unsafe.Pointer(&n)) == 0x04
-}
-
-// memoryMap tries to memory map a file of uint32s for read only access.
-func memoryMap(path string) (*os.File, mmap.MMap, []uint32, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	mem, buffer, err := memoryMapFile(file, false)
-	if err != nil {
-		file.Close()
-		return nil, nil, nil, err
-	}
-	for i, magic := range dumpMagic {
-		if buffer[i] != magic {
-			mem.Unmap()
-			file.Close()
-			return nil, nil, nil, ErrInvalidDumpMagic
-		}
-	}
-	return file, mem, buffer[len(dumpMagic):], err
-}
-
-// memoryMapFile tries to memory map an already opened file descriptor.
-func memoryMapFile(file *os.File, write bool) (mmap.MMap, []uint32, error) {
-	// Try to memory map the file
-	flag := mmap.RDONLY
-	if write {
-		flag = mmap.RDWR
-	}
-	mem, err := mmap.Map(file, flag, 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Yay, we managed to memory map the file, here be dragons
-	header := *(*reflect.SliceHeader)(unsafe.Pointer(&mem))
-	header.Len /= 4
-	header.Cap /= 4
-
-	return mem, *(*[]uint32)(unsafe.Pointer(&header)), nil
-}
-
-// memoryMapAndGenerate tries to memory map a temporary file of uint32s for write
-// access, fill it with the data from a generator and then move it into the final
-// path requested.
-func memoryMapAndGenerate(path string, size uint64, generator func(buffer []uint32)) (*os.File, mmap.MMap, []uint32, error) {
-	// Ensure the data folder exists
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, nil, nil, err
-	}
-	// Create a huge temporary empty file to fill with data
-	temp := path + "." + strconv.Itoa(rand.Int())
-
-	dump, err := os.Create(temp)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if err = dump.Truncate(int64(len(dumpMagic))*4 + int64(size)); err != nil {
-		return nil, nil, nil, err
-	}
-	// Memory map the file for writing and fill it with the generator
-	mem, buffer, err := memoryMapFile(dump, true)
-	if err != nil {
-		dump.Close()
-		return nil, nil, nil, err
-	}
-	copy(buffer, dumpMagic)
-
-	data := buffer[len(dumpMagic):]
-	generator(data)
-
-	if err := mem.Unmap(); err != nil {
-		return nil, nil, nil, err
-	}
-	if err := dump.Close(); err != nil {
-		return nil, nil, nil, err
-	}
-	if err := os.Rename(temp, path); err != nil {
-		return nil, nil, nil, err
-	}
-	return memoryMap(path)
-}
-
-// lru tracks caches or datasets by their last use time, keeping at most N of them.
-type lru struct {
-	what string
-	new  func(epoch uint64) interface{}
-	mu   sync.Mutex
-	// Items are kept in a LRU cache, but there is a special case:
-	// We always keep an item for (highest seen epoch) + 1 as the 'future item'.
-	cache      *simplelru.LRU
-	future     uint64
-	futureItem interface{}
-}
-
-// newlru create a new least-recently-used cache for either the verification caches
-// or the mining datasets.
-func newlru(what string, maxItems int, new func(epoch uint64) interface{}) *lru {
-	if maxItems <= 0 {
-		maxItems = 1
-	}
-	cache, _ := simplelru.NewLRU(maxItems, func(key, value interface{}) {
-		log.Trace("Evicted ethash "+what, "epoch", key)
-	})
-	return &lru{what: what, new: new, cache: cache}
-}
-
-// get retrieves or creates an item for the given epoch. The first return value is always
-// non-nil. The second return value is non-nil if lru thinks that an item will be useful in
-// the near future.
-func (lru *lru) get(epoch uint64) (item, future interface{}) {
-	lru.mu.Lock()
-	defer lru.mu.Unlock()
-
-	// Get or create the item for the requested epoch.
-	item, ok := lru.cache.Get(epoch)
-	if !ok {
-		if lru.future > 0 && lru.future == epoch {
-			item = lru.futureItem
-		} else {
-			log.Trace("Requiring new ethash "+lru.what, "epoch", epoch)
-			item = lru.new(epoch)
-		}
-		lru.cache.Add(epoch, item)
-	}
-	// Update the 'future item' if epoch is larger than previously seen.
-	if epoch < maxEpoch-1 && lru.future < epoch+1 {
-		log.Trace("Requiring new future ethash "+lru.what, "epoch", epoch+1)
-		future = lru.new(epoch + 1)
-		lru.future = epoch + 1
-		lru.futureItem = future
-	}
-	return item, future
-}
-
-// cache wraps an ethash cache with some metadata to allow easier concurrent use.
-type cache struct {
-	epoch uint64    // Epoch for which this cache is relevant
-	dump  *os.File  // File descriptor of the memory mapped cache
-	mmap  mmap.MMap // Memory map itself to unmap before releasing
-	cache []uint32  // The actual cache data content (may be memory mapped)
-	once  sync.Once // Ensures the cache is generated only once
-}
-
-// newCache creates a new ethash verification cache and returns it as a plain Go
-// interface to be usable in an LRU cache.
-func newCache(epoch uint64) interface{} {
-	return &cache{epoch: epoch}
-}
-
-// generate ensures that the cache content is generated before use.
-func (c *cache) generate(dir string, limit int, test bool) {
-	c.once.Do(func() {
-		size := cacheSize(c.epoch*epochLength + 1)
-		seed := seedHash(c.epoch*epochLength + 1)
-		if test {
-			size = 1024
-		}
-		// If we don't store anything on disk, generate and return.
-		if dir == "" {
-			c.cache = make([]uint32, size/4)
-			generateCache(c.cache, c.epoch, seed)
-			return
-		}
-		// Disk storage is needed, this will get fancy
-		var endian string
-		if !isLittleEndian() {
-			endian = ".be"
-		}
-		path := filepath.Join(dir, fmt.Sprintf("cache-R%d-%x%s", algorithmRevision, seed[:8], endian))
-		logger := log.New("epoch", c.epoch)
-
-		// We're about to mmap the file, ensure that the mapping is cleaned up when the
-		// cache becomes unused.
-		runtime.SetFinalizer(c, (*cache).finalizer)
-
-		// Try to load the file from disk and memory map it
-		var err error
-		c.dump, c.mmap, c.cache, err = memoryMap(path)
-		if err == nil {
-			logger.Debug("Loaded old ethash cache from disk")
-			return
-		}
-		logger.Debug("Failed to load old ethash cache", "err", err)
-
-		// No previous cache available, create a new cache file to fill
-		c.dump, c.mmap, c.cache, err = memoryMapAndGenerate(path, size, func(buffer []uint32) { generateCache(buffer, c.epoch, seed) })
-		if err != nil {
-			logger.Error("Failed to generate mapped ethash cache", "err", err)
-
-			c.cache = make([]uint32, size/4)
-			generateCache(c.cache, c.epoch, seed)
-		}
-		// Iterate over all previous instances and delete old ones
-		for ep := int(c.epoch) - limit; ep >= 0; ep-- {
-			seed := seedHash(uint64(ep)*epochLength + 1)
-			path := filepath.Join(dir, fmt.Sprintf("cache-R%d-%x%s", algorithmRevision, seed[:8], endian))
-			os.Remove(path)
-		}
-	})
-}
-
-// finalizer unmaps the memory and closes the file.
-func (c *cache) finalizer() {
-	if c.mmap != nil {
-		c.mmap.Unmap()
-		c.dump.Close()
-		c.mmap, c.dump = nil, nil
-	}
-}
-
-// dataset wraps an ethash dataset with some metadata to allow easier concurrent use.
-type dataset struct {
-	epoch   uint64    // Epoch for which this cache is relevant
-	dump    *os.File  // File descriptor of the memory mapped cache
-	mmap    mmap.MMap // Memory map itself to unmap before releasing
-	dataset []uint32  // The actual cache data content
-	once    sync.Once // Ensures the cache is generated only once
-}
-
-// newDataset creates a new ethash mining dataset and returns it as a plain Go
-// interface to be usable in an LRU cache.
-func newDataset(epoch uint64) interface{} {
-	return &dataset{epoch: epoch}
-}
-
-// generate ensures that the dataset content is generated before use.
-func (d *dataset) generate(dir string, limit int, test bool) {
-	d.once.Do(func() {
-		csize := cacheSize(d.epoch*epochLength + 1)
-		dsize := datasetSize(d.epoch*epochLength + 1)
-		seed := seedHash(d.epoch*epochLength + 1)
-		if test {
-			csize = 1024
-			dsize = 32 * 1024
-		}
-		// If we don't store anything on disk, generate and return
-		if dir == "" {
-			cache := make([]uint32, csize/4)
-			generateCache(cache, d.epoch, seed)
-
-			d.dataset = make([]uint32, dsize/4)
-			generateDataset(d.dataset, d.epoch, cache)
-		}
-		// Disk storage is needed, this will get fancy
-		var endian string
-		if !isLittleEndian() {
-			endian = ".be"
-		}
-		path := filepath.Join(dir, fmt.Sprintf("full-R%d-%x%s", algorithmRevision, seed[:8], endian))
-		logger := log.New("epoch", d.epoch)
-
-		// We're about to mmap the file, ensure that the mapping is cleaned up when the
-		// cache becomes unused.
-		runtime.SetFinalizer(d, (*dataset).finalizer)
-
-		// Try to load the file from disk and memory map it
-		var err error
-		d.dump, d.mmap, d.dataset, err = memoryMap(path)
-		if err == nil {
-			logger.Debug("Loaded old ethash dataset from disk")
-			return
-		}
-		logger.Debug("Failed to load old ethash dataset", "err", err)
-
-		// No previous dataset available, create a new dataset file to fill
-		cache := make([]uint32, csize/4)
-		generateCache(cache, d.epoch, seed)
-
-		d.dump, d.mmap, d.dataset, err = memoryMapAndGenerate(path, dsize, func(buffer []uint32) { generateDataset(buffer, d.epoch, cache) })
-		if err != nil {
-			logger.Error("Failed to generate mapped ethash dataset", "err", err)
-
-			d.dataset = make([]uint32, dsize/2)
-			generateDataset(d.dataset, d.epoch, cache)
-		}
-		// Iterate over all previous instances and delete old ones
-		for ep := int(d.epoch) - limit; ep >= 0; ep-- {
-			seed := seedHash(uint64(ep)*epochLength + 1)
-			path := filepath.Join(dir, fmt.Sprintf("full-R%d-%x%s", algorithmRevision, seed[:8], endian))
-			os.Remove(path)
-		}
-	})
-}
-
-// finalizer closes any file handlers and memory maps open.
-func (d *dataset) finalizer() {
-	if d.mmap != nil {
-		d.mmap.Unmap()
-		d.dump.Close()
-		d.mmap, d.dump = nil, nil
-	}
-}
-
-// MakeCache generates a new ethash cache and optionally stores it to disk.
-func MakeCache(block uint64, dir string) {
-	c := cache{epoch: block / epochLength}
-	c.generate(dir, math.MaxInt32, false)
-}
-
-// MakeDataset generates a new ethash dataset and optionally stores it to disk.
-func MakeDataset(block uint64, dir string) {
-	d := dataset{epoch: block / epochLength}
-	d.generate(dir, math.MaxInt32, false)
-}
 
 // Mode defines the type and amount of PoW verification an ethash engine makes.
 type Mode uint
@@ -388,12 +66,6 @@ const (
 
 // Config are the configuration parameters of the ethash.
 type Config struct {
-	CacheDir       string
-	CachesInMem    int
-	CachesOnDisk   int
-	DatasetDir     string
-	DatasetsInMem  int
-	DatasetsOnDisk int
 	PowMode        Mode
 }
 
@@ -401,9 +73,6 @@ type Config struct {
 // algorithm.
 type Ethash struct {
 	config Config
-
-	caches   *lru // In memory caches to avoid regenerating too often
-	datasets *lru // In memory datasets to avoid regenerating too often
 
 	// Mining related fields
 	rand     *rand.Rand    // Properly seeded random source for nonces
@@ -418,37 +87,31 @@ type Ethash struct {
 
 	//mining params
 	powTargetTimespan int64
-	powLimit int64
+	minDifficulty int64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
 	powTargetSpacing int64
-
-	availableDb *availabledb.AvailableDb
 
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
+const(
+	TesterThreads = 1
+	//\\PowTargetTimespan = 14 * 24 * 60 * 60
+	//\\PowTargetTimespan = 75
+	PowTargetSpacing = 5
+	MinDifficulty = 131072
+)
+
+var PowTargetTimespan = core.BlocksInMatureCycle() * PowTargetSpacing
+
 // New creates a full sized ethash PoW scheme.
 func New(config Config) *Ethash {
-	if config.CachesInMem <= 0 {
-		log.Warn("One ethash cache must always be in memory", "requested", config.CachesInMem)
-		config.CachesInMem = 1
-	}
-	if config.CacheDir != "" && config.CachesOnDisk > 0 {
-		log.Info("Disk storage enabled for ethash caches", "dir", config.CacheDir, "count", config.CachesOnDisk)
-	}
-	if config.DatasetDir != "" && config.DatasetsOnDisk > 0 {
-		log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
-	}
 	return &Ethash{
 		config:   config,
-		caches:   newlru("cache", config.CachesInMem, newCache),
-		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeter(),
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
-		//availableDb: &availabledb.AvailableDb{DsPowCycle: 2 * 24 * 60 * 60 / 15 },
-		availableDb: &availabledb.AvailableDb{DsPowCycle: 200 },
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -459,10 +122,10 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
-		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		threads: TesterThreads,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -473,11 +136,10 @@ func NewFaker() *Ethash {
 	return &Ethash{
 		config: Config{
 			PowMode: ModeFake,
-
 		},
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -490,9 +152,9 @@ func NewFakeFailer(fail uint64) *Ethash {
 			PowMode: ModeFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 		fakeFail: fail,
 	}
 }
@@ -506,9 +168,9 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 			PowMode: ModeFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 		fakeDelay: delay,
 	}
 }
@@ -521,9 +183,9 @@ func NewFullFaker() *Ethash {
 			PowMode: ModeFullFake,
 		},
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
@@ -534,65 +196,57 @@ func NewShared() *Ethash {
 	return &Ethash{
 		shared: sharedEthash,
 		threads: 1,
-		powTargetTimespan: 14 * 24 * 60 * 60,
-		powTargetSpacing: 15,
-		powLimit: 131072,
+		powTargetTimespan: PowTargetTimespan,
+		powTargetSpacing: PowTargetSpacing,
+		minDifficulty: MinDifficulty,
 	}
 }
 
 // calculate the pos target.
-func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header) *big.Int {
+func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+
+	if header.Difficulty.Int64() < ethash.minDifficulty {
+		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
+	}
 
 	// calc the target
 	target := new(big.Int).Div(maxUint256, header.Difficulty)
 	//powWeight := posWeightPrecision - int64(header.PosWeight)
-	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(header.PosWeight)))
-	posTargetAvg.Div(posTargetAvg, big.NewInt(posWeightPrecision))
+	posTargetAvg := new(big.Int).Div(target, big.NewInt(posWeightPrecision))
+	posTargetAvg.Mul(posTargetAvg, big.NewInt(int64(header.PosWeight)))
 	powTarget := new(big.Int).Sub( target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
-	stat, miner, _ := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if stat == nil || miner == nil { // pure pow
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), headers)
+	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		return powTarget
-	} else { // pos
-		posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(stat)
-		if posNetworkSum.Cmp(big.NewInt(0)) == 0 {
-			return powTarget
-		}
-		count := len(miner.Depositors)
-		posLocalSum := big.NewInt(0)
-		for i := 0; i < count; i++ {
-			posLocalSum= new(big.Int).Add(posLocalSum, miner.Depositors[i].Amount)
-		}
-		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(stat)
-
-		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
-		tmp := new(big.Int).Mul( posTargetAvg, big.NewInt(int64(dmCounts)))
-		tmp.Div(tmp, posNetworkSum)
-		posTarget := new(big.Int).Mul(tmp, posLocalSum)
-		return new(big.Int).Add(powTarget, posTarget)
 	}
-}
 
-func (ethash *Ethash) GetCycle() uint64 {
-	if ethash.availableDb == nil {
-		return 200
-	} else {
-		return ethash.availableDb.DsPowCycle
+	// POS
+	_, localSum, _:= matureState.GetDelegateMiner(header.Coinbase)
+	if localSum == nil || localSum.Sign() == 0 {
+		return powTarget
 	}
+
+	// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+
+	// for a valid difficulty(>=ethash.minDifficulty), the target*difficulty< MaxBigInt,
+	// so for a delegate miner count (dmCounts)<minDifficulty, the posTargetAvg*dmCounts<MaxBigInt.
+	// i.e. the max delegate miner count(dmCountMax)=minDifficulty
+	tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(matureState.DelegateMinersCount())))
+	tmp.Div(tmp, matureState.DepositBalanceSum())
+	posTarget := new(big.Int).Mul(tmp, localSum)
+	return new(big.Int).Add(powTarget, posTarget)
 }
 
 // returns the pos weight in a certain cycle.
-func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header) uint32 {
-	// in first two cycles
-	cycle := ethash.GetCycle()
-	cycleNum := header.Number.Uint64() / cycle
-	if cycleNum < 2 {
+func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header, headers []*types.Header) uint32 {
+	if header.Number.Uint64() < core.MinMatureBlockNumber() {
 		return uint32(initPosWeight)
 	}
 
-	powProduction := ethash.GetPowProduction(chain, header)
-	posProduction := ethash.GetPosProduction(chain, header)
+	powProduction := ethash.GetPowProduction(chain, header, headers)
+	posProduction := ethash.GetPosProduction(chain, header, headers)
 	t := big.NewInt(0)
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
 		return uint32(initPosWeight)
@@ -609,85 +263,81 @@ func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Heade
 	return weight32u
 }
 
-// returns the total pow production in the previous mature cycle.
-func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.GetCycle()
-	cycleNum := header.Number.Uint64() / cycle
-	if cycleNum <= 1 {
-		return big.NewInt(0)
+func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header) bool {
+	for _, v := range headers {
+		if header.Hash().String() == v.Hash().String() {
+			return true
+		}
 	}
+	return false
+}
 
-	var i uint64
+// returns the total pow production in the previous mature cycle.
+func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+	start, end := core.LastMatureCycleRange(header.Number.Uint64())
+	for i := start; i < end; i++ {
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPow.Add(sumPow, header.PowProduction)
 		} else {
-			log.Warn("cannot find the header, header number: ", i)
+			log.Warn("cannot find header.", " header number:", i)
 		}
 	}
 	return sumPow
 }
 
 // returns the total pos production in the previous mature cycle.
-func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header) *big.Int {
-	cycle := ethash.GetCycle()
-	cycleNum := header.Number.Uint64() / cycle
-	if cycleNum <= 1 {
-		return big.NewInt(0)
-	}
-
-	var i uint64
+func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
-	for i = (cycleNum - 2) * cycle; i < (cycleNum - 1) * cycle; i++ {
+	for i := start; i < end; i++ {
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPos.Add(sumPos, header.PosProduction)
 		} else {
-			log.Warn("cannot find the header, header number: ", i)
+			log.Warn("cannot find header.", " header number:", i)
 		}
 	}
 	return sumPos
 }
 
-// cache tries to retrieve a verification cache for the specified block number
-// by first checking against a list of in-memory caches, then against caches
-// stored on disk, and finally generating one if none can be found.
-func (ethash *Ethash) cache(block uint64) *cache {
-	epoch := block / epochLength
-	currentI, futureI := ethash.caches.get(epoch)
-	current := currentI.(*cache)
-
-	// Wait for generation finish.
-	current.generate(ethash.config.CacheDir, ethash.config.CachesOnDisk, ethash.config.PowMode == ModeTest)
-
-	// If we need a new future cache, now's a good time to regenerate it.
-	if futureI != nil {
-		future := futureI.(*cache)
-		go future.generate(ethash.config.CacheDir, ethash.config.CachesOnDisk, ethash.config.PowMode == ModeTest)
+// returns the total supply of pos in all previous mature cycles.
+func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+	_, end := core.LastMatureCycleRange(header.Number.Uint64())
+	sumPos := big.NewInt(0)
+	for i := uint64(0); i < end; i++ {
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPos.Add(sumPos, h.PosProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPos.Add(sumPos, header.PosProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
 	}
-	return current
+	return sumPos
 }
 
-// dataset tries to retrieve a mining dataset for the specified block number
-// by first checking against a list of in-memory datasets, then against DAGs
-// stored on disk, and finally generating one if none can be found.
-func (ethash *Ethash) dataset(block uint64) *dataset {
-	epoch := block / epochLength
-	currentI, futureI := ethash.datasets.get(epoch)
-	current := currentI.(*dataset)
-
-	// Wait for generation finish.
-	current.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.PowMode == ModeTest)
-
-	// If we need a new future dataset, now's a good time to regenerate it.
-	if futureI != nil {
-		future := futureI.(*dataset)
-		go future.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.PowMode == ModeTest)
+// returns the total supply of pow in all previous mature cycles.
+func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+	_, end := core.LastMatureCycleRange(header.Number.Uint64())
+	sumPow := big.NewInt(0)
+	for i := uint64(0); i < end; i++ {
+		h:=chain.GetHeaderByNumber(i)
+		if h != nil {
+			sumPow.Add(sumPow, h.PowProduction)
+		} else if found := ethash.FindInHeaders(header, headers); found {
+			sumPow.Add(sumPow, header.PowProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
 	}
-
-	return current
+	return sumPow
 }
 
 // Threads returns the number of mining threads currently enabled. This doesn't
@@ -731,12 +381,6 @@ func (ethash *Ethash) Hashrate() float64 {
 // that is empty.
 func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 	return nil
-}
-
-// SeedHash is the seed to use for generating a verification cache and the mining
-// dataset.
-func SeedHash(block uint64) []byte {
-	return seedHash(block)
 }
 
 func (ethash *Ethash)HashimotoforHeader(hash []byte, nonce uint64) ([]byte) {

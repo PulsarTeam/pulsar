@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -89,6 +88,52 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 	return fields, state.Error()
 }
 
+//For Ds-pow: GetPowTotalSupply return the total supply of pow
+func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
+	 header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header==nil || err != nil {
+		return nil,  err
+	}
+	headerNumber := header.Number.Uint64()
+	sumPow := big.NewInt(0)
+	for i := uint64(0); i <= headerNumber; i++ {
+		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h==nil || InternalErr != nil {
+			return nil, InternalErr
+		}
+		if h != nil {
+			fmt.Println("block[", h.Number , "],sumPow:", sumPow.String(), " + ", h.PowProduction.String())
+			sumPow.Add(sumPow, h.PowProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return (*hexutil.Big)(sumPow), nil
+}
+
+//For Ds-pow: GetPosTotalSupply return the total supply of pos
+func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
+	header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header==nil || err != nil {
+		return nil, err
+	}
+	headerNumber := header.Number.Uint64()
+	sumPos := big.NewInt(0)
+	for i := uint64(0); i <= headerNumber; i++ {
+		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h==nil || InternalErr != nil {
+			return nil, InternalErr
+		}
+		if h != nil {
+			fmt.Println("block[", h.Number , "],sumPow:", sumPos.String(), " + ", h.PosProduction.String())
+			sumPos.Add(sumPos, h.PosProduction)
+		} else {
+			log.Warn("cannot find header.", " header number:", i)
+		}
+	}
+	return (*hexutil.Big)(sumPos), nil
+}
+
 //For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
 func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
@@ -96,35 +141,34 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 		return nil, err
 	}
 
-	if state.GetAccountType(addr) != common.DelegateMiner{
-		return nil, errors.New("can not use this command on a normal account!")
+	var stakeHoldersList map[common.Address]common.DepositData
+	var err1 error
+	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 != nil {
+		return nil, err1
 	}
 
 	fields := map[common.Address]interface{}{}
-	stakeHoldersList := state.GetDepositUsers(addr)
-
-	for addr, stakeholder := range stakeHoldersList{
+	for addr, stakeholder := range stakeHoldersList {
 		fields[addr] = stakeholder
 	}
-
 	return fields, state.Error()
 }
 
 	//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
-func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
+func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
 	}
 
-	if state.GetAccountType(addr) != common.DefaultAccount{
-		return nil, errors.New("can not use this command on a delegate miner!")
+	var delegateMinersList map[common.Address]common.DepositView
+	var err1 error
+	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 != nil {
+		return nil, err1
 	}
 
 	fields := map[common.Address]interface{}{}
-	delegateMinersList := state.GetDepositMiners(addr)
-
-	for addr, miner := range delegateMinersList{
+	for addr, miner := range delegateMinersList {
 		fields[addr] = miner
 	}
 
@@ -1493,15 +1537,6 @@ func (api *PublicDebugAPI) PrintBlock(ctx context.Context, number uint64) (strin
 		return "", fmt.Errorf("block #%d not found", number)
 	}
 	return spew.Sdump(block), nil
-}
-
-// SeedHash retrieves the seed hash of a block.
-func (api *PublicDebugAPI) SeedHash(ctx context.Context, number uint64) (string, error) {
-	block, _ := api.b.BlockByNumber(ctx, rpc.BlockNumber(number))
-	if block == nil {
-		return "", fmt.Errorf("block #%d not found", number)
-	}
-	return fmt.Sprintf("0x%x", ethash.SeedHash(number)), nil
 }
 
 // PrivateDebugAPI is the collection of Ethereum APIs exposed over the private

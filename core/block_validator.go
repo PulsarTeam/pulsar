@@ -18,15 +18,10 @@ package core
 
 import (
 	"fmt"
-
-	"errors"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
-	"math/big"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -48,18 +43,6 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 	}
 	return validator
 }
-
-//Intermediate variable for target calculate
-type Depositor struct {
-	Addr   common.Address
-	Amount *big.Int
-}
-type DelegateMiner struct {
-	Depositors []Depositor
-	Fee        uint32
-}
-
-var delegateMiner = DelegateMiner{}
 
 // ValidateBody validates the given block's uncles and verifies the the block
 // header's transaction and uncle roots. The headers are assumed to be already
@@ -118,44 +101,37 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	return nil
 }
 
+/*
 func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.StateDB) error {
 	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
-	var depositorMap = statedb.GetDepositUsers(block.Header().Coinbase)
 
 	target := new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), block.Header().Difficulty)
 	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(block.Header().PosWeight)))
 	posTargetAvg.Div(posTargetAvg, big.NewInt(10000))
 	powTarget := new(big.Int).Sub(target, posTargetAvg)
 
-	posNetworkSum, _ := delegateminers.GetLastCycleDepositAmount(statedb)
-	if posNetworkSum.Cmp(big.NewInt(0)) == 0 || (statedb.GetAccountType(block.Header().Coinbase) != common.DelegateMiner) {
+	matureState := GetMatureState(v.bc, block.Number().Uint64(), nil)
+	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
 		target = powTarget
 	} else {
-		delegateMiner.Depositors = delegateMiner.Depositors[:0:0]
-		miner := statedb.GetDelegateMiner(block.Header().Coinbase)
-		delegateMiner.Fee = miner.FeeRatio
-		for k, v := range depositorMap {
-			depositor := Depositor{Addr: k, Amount: v.Balance}
-			delegateMiner.Depositors = append(delegateMiner.Depositors, depositor)
+		_, localSum, _ := matureState.GetDelegateMiner(block.Header().Coinbase)
+		if localSum == nil || localSum.Sign() == 0 {
+			target = powTarget
+		} else {
+			// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+			tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(matureState.DelegateMinersCount())))
+			tmp.Div(tmp, matureState.DepositBalanceSum())
+			posTarget := new(big.Int).Mul(tmp, localSum)
+			target = new(big.Int).Add(powTarget, posTarget)
 		}
-		count := len(delegateMiner.Depositors)
-		posLocalSum := big.NewInt(0)
-		for i := 0; i < count; i++ {
-			posLocalSum = new(big.Int).Add(posLocalSum, delegateMiner.Depositors[i].Amount)
-		}
-		dmCounts, _ := delegateminers.GetLastCycleDelegateMiners(statedb)
-
-		// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
-		tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(dmCounts)))
-		tmp.Div(tmp, posNetworkSum)
-		posTarget := new(big.Int).Mul(tmp, posLocalSum)
-		target = new(big.Int).Add(powTarget, posTarget)
 	}
+
 	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errors.New("block target error")
 	}
 	return nil
 }
+*/
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.

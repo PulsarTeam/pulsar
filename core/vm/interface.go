@@ -53,7 +53,7 @@ type StateDB interface {
 	 * @param aType: state.DefaultAccount, state.DelegateMiner, defined in dspow_defs.go
 	 * @param feeRatio: make sense only if the type is DelegateMiner. feeRatio/1,000,000
 	 */
-	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32)
+	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32) error
 
 	GetAccountType(common.Address) common.AccountType
 
@@ -63,21 +63,21 @@ type StateDB interface {
 	 */
 	GetAllDelegateMiners() map[common.Address]common.DMView
 
-	GetDelegateMiner(common.Address) common.DMView
+	GetDelegateMiner(common.Address) (common.DMView, error)
 
 	/**
 	 * @brief Get the delegate miners that the (default) account deposited shares.
 	 * @param account: the account who deposit shares.
 	 * @return The map of the delegate miners address and view.
 	 */
-	GetDepositMiners(account common.Address) map[common.Address]common.DepositView
+	GetDepositMiners(account common.Address) (map[common.Address]common.DepositView, error)
 
 	/**
 	 * @brief Get the users of which account deposited shares to the delegate miner.
 	 * @param: the delegate miner address.
 	 * @return The map of the user (default account) address and its deposit data.
 	 */
-	GetDepositUsers(common.Address) map[common.Address]common.DepositData
+	GetDepositUsers(common.Address) (map[common.Address]common.DepositData, error)
 
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)

@@ -1,10 +1,20 @@
 package common
 
-import "math/big"
+import (
+	"math/big"
+	"errors"
+)
 
 const (
 	DefaultAccount = iota
 	DelegateMiner
+)
+
+var (
+	ErrAccountTypeNotAllowed = errors.New("account type not allowed")
+	ErrInsufficientBalance = errors.New("insufficient balance")
+	ErrRedeposit = errors.New("redeposit to same miner")
+	ErrNoDepositBalance = errors.New("no deposit balance")
 )
 
 type AccountType uint8

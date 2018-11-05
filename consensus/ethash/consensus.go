@@ -19,7 +19,6 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/delegateminers"
 	"math/big"
 	"runtime"
 	"time"
@@ -28,22 +27,28 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Ethash proof-of-work protocol constants.
 var (
-	FrontierBlockReward    *big.Int = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
+	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128),big.NewInt(1e18)) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 	InterestRate           *big.Int = big.NewInt(100)
 	InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision      *big.Int = big.NewInt(1000000)
+	halveIntervalGoal		uint64	= 256 // (60/15)*60*24*365*2
+
+	PowRewardRatioUncles   *big.Int = big.NewInt(3000)
+	PowRewardRatioPrecision*big.Int = big.NewInt(10000)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -61,6 +66,7 @@ var (
 	errInvalidMixDigest  = errors.New("invalid mix digest")
 	errInvalidPoW        = errors.New("invalid proof-of-work")
 	errInvalidPosWeight  = errors.New("invalid pos weight")
+	errRlpEncodeErr      = errors.New("rlp encode error")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -71,7 +77,7 @@ func (ethash *Ethash) Author(header *types.Header) (common.Address, error) {
 
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
-func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, headers []*types.Header) error {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
@@ -86,7 +92,7 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.He
 		return consensus.ErrUnknownAncestor
 	}
 	// Sanity checks passed, do a proper verification
-	return ethash.verifyHeader(chain, header, parent, false, seal)
+	return ethash.verifyHeader(chain, header, parent, false, seal, headers)
 }
 
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
@@ -167,7 +173,7 @@ func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []
 	if chain.GetHeader(headers[index].Hash(), headers[index].Number.Uint64()) != nil {
 		return nil // known block
 	}
-	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index])
+	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index], headers)
 }
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
@@ -215,7 +221,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 		if ancestors[uncle.ParentHash] == nil || uncle.ParentHash == block.ParentHash() {
 			return errDanglingUncle
 		}
-		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true); err != nil {
+		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true, nil); err != nil {
 			return err
 		}
 	}
@@ -225,7 +231,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
 // See YP section 4.3.4. "Block Header Validity"
-func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool) error {
+func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool, headers []*types.Header) error {
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra)) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra), params.MaximumExtraDataSize)
@@ -244,7 +250,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return errZeroBlockTime
 	}
 	// Verify the block's difficulty based in it's timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, headers)
 
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
@@ -259,7 +265,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	//}
 	//w := new(big.Int).Div(pos, y)
 	//fmt.Printf("===header No.%d, Nonce:%x\n", header.Number, header.Nonce)
-	expectedPosWeight := ethash.PosWeight(chain, header)
+	expectedPosWeight := ethash.PosWeight(chain, header, headers)
 
 	if int64(header.PosWeight) > posWeightPrecision {
 		return fmt.Errorf("invalid pos weight: have %v, max  %v", header.PosWeight, posWeightPrecision)
@@ -293,16 +299,22 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	}
 	// Verify the engine specific seal securing the block
 	if seal {
-		if err := ethash.VerifySeal(chain, header); err != nil {
+		if err := ethash.VerifySeal(chain, header, headers); err != nil {
 			return err
 		}
 	}
-	// If all checks passed, validate any special fields for hard forks
-	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
-		return err
-	}
 	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
+	}
+	return nil
+}
+
+
+func (ethash *Ethash)FindInHeadersByNum(blockNum uint64, buf []*types.Header) *types.Header {
+	for _, v := range buf {
+		if v.Number.Uint64() == blockNum {
+			return v
+		}
 	}
 	return nil
 }
@@ -314,7 +326,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 //	return CalcDifficulty(chain.Config(), time, parent)
 //}
 
-func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header, headers []*types.Header) *big.Int {
 	//return new(big.Int).SetInt64(10000)
 
 	//fmt.Println(ethash.powTargetTimespan, ethash.powTargetSpacing)
@@ -324,46 +336,43 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 
 	//var difficultyAdjustInterval int64 = 100
 
-	if ((parent.Number.Int64() + 1) % difficultyAdjustInterval) != 0 {
+	if parent.Number.Cmp(new(big.Int).SetInt64(0)) == 0 {
 		return parent.Difficulty
-	} else {
-		var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (chain.GetHeaderByNumber((uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)).Time.Int64()))
-		if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
-			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
-		}
-		if actualTimespan > (uint64)(ethash.powTargetTimespan/4) {
-			actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
-		}
-		var powLimit int64 = ethash.powLimit
-		var newDifficulty *big.Int = parent.Difficulty
-		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
-		newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
-		if newDifficulty.Int64() < powLimit {
-			newDifficulty = new(big.Int).SetInt64(powLimit)
-		}
-		log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
-		state, _ := chain.GetState(parent.Root)
-		minerCounts, _ := delegateminers.GetLastCycleDelegateMiners(state)
-		if newDifficulty.Cmp(big.NewInt(int64(minerCounts))) < 0 {
-			return parent.Difficulty
-		}
-		return newDifficulty
 	}
-}
 
-// CalcDifficulty is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time
-// given the parent block's time and difficulty.
-func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	next := new(big.Int).Add(parent.Number, big1)
-	switch {
-	case config.IsByzantium(next):
-		return calcDifficultyByzantium(time, parent)
-	case config.IsHomestead(next):
-		return calcDifficultyHomestead(time, parent)
-	default:
-		return calcDifficultyFrontier(time, parent)
+	if (parent.Number.Int64() % difficultyAdjustInterval) != 0 {
+		return parent.Difficulty
 	}
+
+	start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
+
+	h := chain.GetHeaderByNumber(start)
+	if h == nil{
+		h = ethash.FindInHeadersByNum(start, headers)
+		if h == nil{
+			log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
+			panic("Logical error.\n")
+		}
+	}
+
+	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (h.Time.Int64()))
+
+	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
+		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+	}
+	if actualTimespan > (uint64)(ethash.powTargetTimespan*4) {
+		actualTimespan = (uint64)(ethash.powTargetTimespan * 4)
+	}
+	var powLimit int64 = ethash.minDifficulty
+	var newDifficulty *big.Int = parent.Difficulty
+	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
+	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
+	if newDifficulty.Int64() < powLimit {
+		newDifficulty = new(big.Int).SetInt64(powLimit)
+	}
+	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
+
+	return newDifficulty
 }
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -377,150 +386,9 @@ var (
 	big2999999    = big.NewInt(2999999)
 )
 
-// calcDifficultyByzantium is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time given the
-// parent block's time and difficulty. The calculation uses the Byzantium rules.
-func calcDifficultyByzantium(time uint64, parent *types.Header) *big.Int {
-	// https://github.com/ethereum/EIPs/issues/100.
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	//        ) + 2^(periodCount - 2)
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).Set(parent.Time)
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big9)
-	if parent.UncleHash == types.EmptyUncleHash {
-		x.Sub(big1, x)
-	} else {
-		x.Sub(big2, x)
-	}
-	// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty, x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-	// calculate a fake block number for the ice-age delay:
-	//   https://github.com/ethereum/EIPs/pull/669
-	//   fake_block_number = min(0, block.number - 3_000_000
-	fakeBlockNumber := new(big.Int)
-	if parent.Number.Cmp(big2999999) >= 0 {
-		fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, big2999999) // Note, parent is 1 less than the actual block number
-	}
-	// for the exponential factor
-	periodCount := fakeBlockNumber
-	periodCount.Div(periodCount, expDiffPeriod)
-
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(big1) > 0 {
-		y.Sub(periodCount, big2)
-		y.Exp(big2, y, nil)
-		x.Add(x, y)
-	}
-	return x
-}
-
-// calcDifficultyHomestead is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time given the
-// parent block's time and difficulty. The calculation uses the Homestead rules.
-func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
-	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.md
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	//        ) + 2^(periodCount - 2)
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).Set(parent.Time)
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// 1 - (block_timestamp - parent_timestamp) // 10
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big10)
-	x.Sub(big1, x)
-
-	// max(1 - (block_timestamp - parent_timestamp) // 10, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// (parent_diff + parent_diff // 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty, x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-	// for the exponential factor
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
-
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(big1) > 0 {
-		y.Sub(periodCount, big2)
-		y.Exp(big2, y, nil)
-		x.Add(x, y)
-	}
-	return x
-}
-
-// calcDifficultyFrontier is the difficulty adjustment algorithm. It returns the
-// difficulty that a new block should have when created at time given the parent
-// block's time and difficulty. The calculation uses the Frontier rules.
-func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
-	diff := new(big.Int)
-	adjust := new(big.Int).Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	bigTime := new(big.Int)
-	bigParentTime := new(big.Int)
-
-	bigTime.SetUint64(time)
-	bigParentTime.Set(parent.Time)
-
-	if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
-		diff.Add(parent.Difficulty, adjust)
-	} else {
-		diff.Sub(parent.Difficulty, adjust)
-	}
-	if diff.Cmp(params.MinimumDifficulty) < 0 {
-		diff.Set(params.MinimumDifficulty)
-	}
-
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
-	if periodCount.Cmp(big1) > 0 {
-		// diff = diff + 2^(periodCount - 2)
-		expDiff := periodCount.Sub(periodCount, big2)
-		expDiff.Exp(big2, expDiff, nil)
-		diff.Add(diff, expDiff)
-		diff = math.BigMax(diff, params.MinimumDifficulty)
-	}
-	return diff
-}
-
 // VerifySeal implements consensus.Engine, checking whether the given block satisfies
 // the PoW difficulty requirements.
-func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Header, headers []*types.Header) error {
 	// If we're running a fake PoW, accept any seal as valid
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		time.Sleep(ethash.fakeDelay)
@@ -531,17 +399,28 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	}
 	// If we're running a shared PoW, delegate verification to it
 	if ethash.shared != nil {
-		return ethash.shared.VerifySeal(chain, header)
+		return ethash.shared.VerifySeal(chain, header, headers)
 	}
 	// Ensure that we have a valid difficulty for the block
 	if header.Difficulty.Sign() <= 0 {
 		return errInvalidDifficulty
 	}
 
-	w := big.NewInt(int64(ethash.PosWeight(chain, header)))
+	w := big.NewInt(int64(ethash.PosWeight(chain, header, headers)))
 
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
+	}
+
+	code, error := rlp.EncodeToBytes(header)
+	if error != nil{
+		return errRlpEncodeErr
+	}
+
+	result := GHash(code)
+	target := ethash.CalcTarget(chain, header, headers)
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errInvalidPoW
 	}
 
 	return nil
@@ -554,8 +433,8 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
-	header.PosWeight = ethash.PosWeight(chain, header)
+	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, nil)
+	header.PosWeight = ethash.PosWeight(chain, header, nil)
 	return nil
 }
 
@@ -594,7 +473,19 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 var (
 	big8  = big.NewInt(8)
 	big32 = big.NewInt(32)
+	big0 = big.NewInt(0)
 )
+
+
+func CurPowReward(baseReward *big.Int, blockNumber uint64) *big.Int {
+	if blockNumber==0 {
+		return big0
+	}
+	halveInterval := core.FixedHalveInterval(halveIntervalGoal)
+	var n uint = uint((blockNumber-1) / halveInterval)
+	curBlockPowReward := new(big.Int).Rsh(baseReward, n)
+	return curBlockPowReward
+}
 
 // AccumulatePowRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
@@ -605,23 +496,29 @@ func (ethash *Ethash) accumulatePowRewards(config *params.ChainConfig, state *st
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
+	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
+	log.Warn("accumulatePowRewards, no:",  header.Number.String() ,"  reward:", curPowReward.String())
+	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
 	total := new(big.Int)
-	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		state.AddBalance(uncle.Coinbase, r)
-
-		total.Add(total, r)
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
+	if uncleCnt.Sign()>0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
+		if powRewardPerUncle.Sign()>0 {
+			for _, uncle := range uncles {
+				state.AddBalance(uncle.Coinbase, powRewardPerUncle)
+				total.Add(total, powRewardPerUncle)
+			}
+		}
+		if powRewardSelf.Sign()>0 {
+			state.AddBalance(header.Coinbase, powRewardSelf)
+			total.Add(total, powRewardSelf)
+		}
+	} else {
+		state.AddBalance(header.Coinbase, curPowReward)
+		total.Add(total, curPowReward)
 	}
-	state.AddBalance(header.Coinbase, reward)
-	total.Add(total, reward)
 	return total
 }
 
@@ -634,22 +531,27 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
+
+	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
+	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
 	total := new(big.Int)
-	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		total.Add(total, r)
-
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
+	if uncleCnt.Sign()>0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
+		if powRewardPerUncle.Sign()>0 {
+			for _, uncle := range uncles {
+				uncle.Coinbase.String()
+				total.Add(total, powRewardPerUncle)
+			}
+		}
+		if powRewardSelf.Sign()>0 {
+			total.Add(total, powRewardSelf)
+		}
+	} else {
+		total.Add(total, curPowReward)
 	}
-
-	total.Add(total, reward)
 	return total
 }
 
@@ -657,49 +559,33 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
-	if delegateMiner == nil {
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
+	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
-	stakeholders := delegateMiner.Depositors
-
-	//--dummy code just for test-----------------------------------------
-	//mnt1, _ := new(big.Int).SetString("100000000000000000000", 10)
-	//mnt2, _ := new(big.Int).SetString("1000000000000000000000", 10)
-	//mnt3, _ := new(big.Int).SetString("10000000000000000000000", 10)
-	//mnt4, _ := new(big.Int).SetString("100000000000000000000000", 10)
-	//
-	//stakeholders := []delegateminers.Depositor{
-	//	delegateminers.Depositor{common.HexToAddress("0x63264d76b9131085e1b7f2ef55600b55c81d58de"),mnt1},
-	//	delegateminers.Depositor{common.HexToAddress("0x4877884e5d156603514b9790ca7db3b357054f88"),mnt2},
-	//	delegateminers.Depositor{common.HexToAddress("0x4cc7df7fda9eccb1ef72e77045b54a16f9076e99"),mnt3},
-	//	delegateminers.Depositor{common.HexToAddress("0xf7fc37c340096ea854ebc0fc29a60a9e799e971a"),mnt4},
-	//}
-	//-------------------------------------------------------------------
-
-	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
+	feeRatio, balanceSum, users := matureState.GetDelegateMiner(header.Coinbase)
+	if balanceSum == nil && users == nil {
+		return new(big.Int)
+	}
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
-
-	for _, stakeholder := range stakeholders {
+	for userAddr, depositData := range users {
 		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount, InterestRate)
+		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
 		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
-		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
 		delegateFee.Div(delegateFee, FeeRatioPrecision)
 
 		//rewardStake = rewardStakeRaw - delegateFee
 		rewardStake := new(big.Int).Sub(rewardStakeRaw, delegateFee)
 		feeTotal.Add(feeTotal, delegateFee)
 		total.Add(total, rewardStakeRaw)
-		state.AddBalance(stakeholder.Addr, rewardStake)
+		state.AddBalance(userAddr, rewardStake)
 	}
+
 	state.AddBalance(header.Coinbase, feeTotal)
 	return total
 }
@@ -708,27 +594,24 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	_, delegateMiner, err := delegateminers.GetDelegateMiner(ethash.availableDb, chain, header, header.Coinbase)
-	if err != nil {
-		err = errors.New(`get stakeholders for delegate miner "` + header.Coinbase.String() + `" error: ` + err.Error())
-	}
-	if delegateMiner == nil {
+	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
+	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
-	stakeholders := delegateMiner.Depositors
-
-	FeeRatio := new(big.Int).SetUint64(uint64(delegateMiner.Fee))
+	feeRatio, balanceSum, users := matureState.GetDelegateMiner(header.Coinbase)
+	if balanceSum == nil && users == nil {
+		return new(big.Int)
+	}
 
 	total := new(big.Int)
 	feeTotal := new(big.Int)
-
-	for _, stakeholder := range stakeholders {
+	for _, depositData := range users {
 		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(stakeholder.Amount, InterestRate)
+		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
 		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
-		delegateFee := new(big.Int).Mul(rewardStakeRaw, FeeRatio)
+		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
 		delegateFee.Div(delegateFee, FeeRatioPrecision)
 
 		feeTotal.Add(feeTotal, delegateFee)

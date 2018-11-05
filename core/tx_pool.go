@@ -106,6 +106,12 @@ var (
 
 	//ErrDelegatedMinerRegister return if a delegate miner send a register transaction again
 	ErrDelegatedMinerRegister = errors.New("delegate miner should not register again")
+
+	//ErrWithdrawFromUncorrelatedMiner return if with draw from a  uncorrelated miner
+	ErrWithdrawFromUncorrelatedMiner = errors.New("you should not with draw from a  uncorrelated miner")
+
+	//ErrDelegatedMinerRegisterWithDeposit return if a account delegate with some deposit
+	ErrDelegatedMinerRegisterWithDeposit = errors.New("you should not register to be a delegate miner with deposit balance")
 )
 
 var (
@@ -608,6 +614,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			return ErrDelegatedMinerRegister
 		}
 
+		if depositBalance := pool.currentState.GetDepositBalance(from); depositBalance.Cmp(new (big.Int).SetInt64(0)) != 0{
+			return ErrDelegatedMinerRegisterWithDeposit
+		}
+
 		balance := pool.currentState.GetBalance(from)
 		if balance.Sign() < 0 || balance.Sign() == 0{
 			return ErrBalanceForRegister
@@ -652,6 +662,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		}
 
 		//\\check user delegate or not
+		allminers, err := pool.currentState.GetDepositMiners(from)
+		if err != nil{
+			return err
+		}
+
+		if _, ok := allminers[*(tx.To())]; !ok {
+			return ErrWithdrawFromUncorrelatedMiner
+		}
+
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
