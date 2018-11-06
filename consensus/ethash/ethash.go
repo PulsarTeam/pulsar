@@ -272,6 +272,7 @@ func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header
 	return false
 }
 
+
 // returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
@@ -314,7 +315,7 @@ func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, heade
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
+		} else if found := ethash.FindInHeadersByNum(i, headers); found!=nil {
 			sumPos.Add(sumPos, header.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -331,7 +332,7 @@ func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.ChainReader, heade
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
+		} else if found := ethash.FindInHeadersByNum(i, headers); found!=nil {
 			sumPow.Add(sumPow, header.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)

@@ -42,11 +42,13 @@ var (
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
-	InterestRate           *big.Int = big.NewInt(100)
-	InterestRatePrecision  *big.Int = big.NewInt(10000000000)
+	//InterestRate           *big.Int = big.NewInt(100)
+	//InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision      *big.Int = big.NewInt(1000000)
 	halveIntervalGoal		uint64	= 256 // (60/15)*60*24*365*2
 
+	PosSupplyLimit         *big.Int = new(big.Int).Mul(big.NewInt(128*(60*60*24*365*2/15)*2),big.NewInt(1e18)) // The PosSupplyLimit is equal to PowSupplyLimit
+	PosSupplyN			   *big.Int = big.NewInt((60*60*24*365/15)*20)
 	PowRewardRatioUncles   *big.Int = big.NewInt(3000)
 	PowRewardRatioPrecision*big.Int = big.NewInt(10000)
 )
@@ -440,7 +442,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state and assembling the block.
-func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, headers []*types.Header) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 
 	var err error = nil
@@ -454,11 +456,11 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	}
 
 	if state.GetAccountType(header.Coinbase) == common.DelegateMiner {
-		posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles)
+		posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles, headers)
 		if header.PosProduction == nil {
-			header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+			header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles, headers)
 		} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
-			ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
+			ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles, headers)
 		} else {
 			err = errors.New("pos production check error")
 		}
@@ -558,7 +560,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // AccumulatePosRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, headers []*types.Header) *big.Int {
 	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
@@ -568,12 +570,20 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 		return new(big.Int)
 	}
 
+	posSupply := ethash.GetPosMatureTotalSupply(chain, header, headers)
+	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
+	if remainingPosSupply.Sign()<=0 {
+		return new(big.Int)
+	}
+
 	total := new(big.Int)
 	feeTotal := new(big.Int)
 	for userAddr, depositData := range users {
-		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
-		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
+		rewardBase := depositData.Balance
+		if rewardBase.Cmp(remainingPosSupply) > 0 {
+			rewardBase = remainingPosSupply
+		}
+		rewardStakeRaw := new(big.Int).Div(rewardBase, PosSupplyN)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
 		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
@@ -593,7 +603,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // CalculatePosRewards calculate all the POS reward of the block(the stake reward).
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
-func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
+func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, headers []*types.Header) *big.Int {
 	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
@@ -603,12 +613,19 @@ func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *p
 		return new(big.Int)
 	}
 
+	posSupply := ethash.GetPosMatureTotalSupply(chain, header, headers)
+	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
+	if remainingPosSupply.Sign()<=0 {
+		return new(big.Int)
+	}
 	total := new(big.Int)
 	feeTotal := new(big.Int)
 	for _, depositData := range users {
-		//rewardStakeRaw := stakeholder.Amount * (InterestRate/InterestRatePrecision)
-		rewardStakeRaw := new(big.Int).Mul(depositData.Balance, InterestRate)
-		rewardStakeRaw.Div(rewardStakeRaw, InterestRatePrecision)
+		rewardBase := depositData.Balance
+		if rewardBase.Cmp(remainingPosSupply) > 0 {
+			rewardBase = remainingPosSupply
+		}
+		rewardStakeRaw := new(big.Int).Div(rewardBase, PosSupplyN)
 
 		//delegateFee := rewardStakeRaw * (FeeRatio/FeeRatioPrecision)
 		delegateFee := new(big.Int).Mul(rewardStakeRaw, new(big.Int).SetUint64(uint64(feeRatio)))
