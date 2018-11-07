@@ -35,6 +35,10 @@ func FeeRatioValidity(feeRatio uint32) bool {
 	return feeRatio < 1000000
 }
 
+func MaxFeeRatio() uint32 {
+	return 1000000 - 1
+}
+
 type StakeData interface {
 	Empty() bool
 }

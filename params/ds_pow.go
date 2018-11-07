@@ -6,9 +6,4 @@ const (
 	DelegateMinerRegisterTx uint8 = 1
 	DelegateStakesTx        uint8 = 2
 	DelegateStakesCancel    uint8 = 3
-
-	//max fee for Ds-pow
-	MaxDelegateFeeLimit     uint32 = 1000000
-
-
 )
