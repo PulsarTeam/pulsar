@@ -281,8 +281,8 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
-			sumPow.Add(sumPow, header.PowProduction)
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+			sumPow.Add(sumPow, foundHeader.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
@@ -298,8 +298,8 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if found := ethash.FindInHeaders(header, headers); found {
-			sumPos.Add(sumPos, header.PosProduction)
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+			sumPos.Add(sumPos, foundHeader.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
@@ -315,8 +315,8 @@ func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, heade
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if found := ethash.FindInHeadersByNum(i, headers); found!=nil {
-			sumPos.Add(sumPos, header.PosProduction)
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+			sumPos.Add(sumPos, foundHeader.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
@@ -332,8 +332,8 @@ func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.ChainReader, heade
 		h:=chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if found := ethash.FindInHeadersByNum(i, headers); found!=nil {
-			sumPow.Add(sumPow, header.PowProduction)
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+			sumPow.Add(sumPow, foundHeader.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
 		}
