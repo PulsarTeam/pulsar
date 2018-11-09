@@ -442,7 +442,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state and assembling the block.
-func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, headers []*types.Header) (*types.Block, error) {
+func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 
 	var err error = nil
@@ -456,11 +456,11 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	}
 
 	if state.GetAccountType(header.Coinbase) == common.DelegateMiner {
-		posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles, headers)
+		posProduction := ethash.calculatePosRewards(chain, chain.Config(), state, header, uncles)
 		if header.PosProduction == nil {
-			header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles, headers)
+			header.PosProduction = ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
 		} else if posProduction != nil && posProduction.Cmp(header.PosProduction) == 0 {
-			ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles, headers)
+			ethash.accumulatePosRewards(chain, chain.Config(), state, header, uncles)
 		} else {
 			err = errors.New("pos production check error")
 		}
@@ -560,7 +560,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // AccumulatePosRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
 	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
@@ -570,7 +570,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 		return new(big.Int)
 	}
 
-	posSupply := ethash.GetPosMatureTotalSupply(chain, header, headers)
+	posSupply := ethash.GetPosMatureTotalSupply(chain, header, nil)
 	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
 	if remainingPosSupply.Sign()<=0 {
 		return new(big.Int)
@@ -604,7 +604,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.ChainReader, config *
 // CalculatePosRewards calculate all the POS reward of the block(the stake reward).
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
-func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
 	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
@@ -614,7 +614,7 @@ func (ethash *Ethash) calculatePosRewards(chain consensus.ChainReader, config *p
 		return new(big.Int)
 	}
 
-	posSupply := ethash.GetPosMatureTotalSupply(chain, header, headers)
+	posSupply := ethash.GetPosMatureTotalSupply(chain, header, nil)
 	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
 	if remainingPosSupply.Sign()<=0 {
 		return new(big.Int)
