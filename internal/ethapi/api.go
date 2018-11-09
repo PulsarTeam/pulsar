@@ -125,7 +125,7 @@ func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.B
 			return nil, InternalErr
 		}
 		if h != nil {
-			fmt.Println("block[", h.Number , "],sumPow:", sumPos.String(), " + ", h.PosProduction.String())
+			fmt.Println("block[", h.Number , "],sumPos:", sumPos.String(), " + ", h.PosProduction.String())
 			sumPos.Add(sumPos, h.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
