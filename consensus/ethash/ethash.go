@@ -49,8 +49,8 @@ var (
 
 	initPosWeight = 5000
 	posWeightPrecision int64 = 10000
-	posWeightMax uint32 = 8000
-	posWeightMin uint32 = 2000
+	posWeightMax uint32 = 9500
+	posWeightMin uint32 = 500
 )
 
 // Mode defines the type and amount of PoW verification an ethash engine makes.
