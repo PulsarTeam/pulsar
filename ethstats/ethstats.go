@@ -530,7 +530,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 	if s.eth != nil {
 		// Full nodes have all needed information available
 		if block == nil {
-			block = s.eth.DAGManager().CurrentBlock()
+			block = s.eth.DAGManager().CurrentPivotBlock()
 		}
 		header = block.Header()
 		td = s.eth.DAGManager().GetTd(header.Hash(), header.Number.Uint64())
@@ -545,7 +545,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		if block != nil {
 			header = block.Header()
 		} else {
-			header = s.les.DAGManager().CurrentHeader()
+			header = s.les.DAGManager().CurrentPivotHeader()
 		}
 		td = s.les.DAGManager().GetTd(header.Hash(), header.Number.Uint64())
 		txs = []txStats{}
@@ -582,9 +582,9 @@ func (s *Service) reportHistory(conn *websocket.Conn, list []uint64) error {
 		// No indexes requested, send back the top ones
 		var head int64
 		if s.eth != nil {
-			head = s.eth.DAGManager().CurrentHeader().Number.Int64()
+			head = s.eth.DAGManager().CurrentPivotHeader().Number.Int64()
 		} else {
-			head = s.les.DAGManager().CurrentHeader().Number.Int64()
+			head = s.les.DAGManager().CurrentPivotHeader().Number.Int64()
 		}
 		start := head - historyUpdateRange + 1
 		if start < 0 {
@@ -687,13 +687,13 @@ func (s *Service) reportStats(conn *websocket.Conn) error {
 		hashrate = int(s.eth.Miner().HashRate())
 
 		sync := s.eth.Downloader().Progress()
-		syncing = s.eth.DAGManager().CurrentHeader().Number.Uint64() >= sync.HighestBlock
+		syncing = s.eth.DAGManager().CurrentPivotHeader().Number.Uint64() >= sync.HighestBlock
 
 		price, _ := s.eth.APIBackend.SuggestPrice(context.Background())
 		gasprice = int(price.Uint64())
 	} else {
 		sync := s.les.Downloader().Progress()
-		syncing = s.les.DAGManager().CurrentHeader().Number.Uint64() >= sync.HighestBlock
+		syncing = s.les.DAGManager().CurrentPivotHeader().Number.Uint64() >= sync.HighestBlock
 	}
 	// Assemble the node stats and send it to the server
 	log.Trace("Sending node details to ethstats")

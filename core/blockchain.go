@@ -108,7 +108,7 @@ type DAGManager struct {
 	procmu  sync.RWMutex // block processor lock
 
 	checkpoint       int          // checkpoint counts towards the new checkpoint
-	currentBlock     atomic.Value // Current head of the block chain
+	currentBlock     atomic.Value // Current head of the pivot chain
 	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
 
 	stateCache   state.Database // State database to reuse between imports (contains state cache)
@@ -147,7 +147,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	futureBlocks, _ := lru.New(maxFutureBlocks)
 	badBlocks, _ := lru.New(badBlockLimit)
 
-	bc := &DAGManager{
+	dm := &DAGManager{
 		chainConfig:  chainConfig,
 		cacheConfig:  cacheConfig,
 		db:           db,
@@ -162,94 +162,94 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
 	}
-	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
-	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
+	dm.SetValidator(NewBlockValidator(chainConfig, dm, engine))
+	dm.SetProcessor(NewStateProcessor(chainConfig, dm, engine))
 
 	var err error
-	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.getProcInterrupt)
+	dm.hc, err = NewHeaderChain(db, chainConfig, engine, dm.getProcInterrupt)
 	if err != nil {
 		return nil, err
 	}
-	bc.genesisBlock = bc.GetBlockByNumber(0)
-	if bc.genesisBlock == nil {
+	dm.genesisBlock = dm.GetBlockByNumber(0)
+	if dm.genesisBlock == nil {
 		return nil, ErrNoGenesis
 	}
-	if err := bc.loadLastState(); err != nil {
+	if err := dm.loadLastState(); err != nil {
 		return nil, err
 	}
 	// Check the current state of the block hashes and make sure that we do not have any of the bad blocks in our chain
 	for hash := range BadHashes {
-		if header := bc.GetHeaderByHash(hash); header != nil {
+		if header := dm.GetHeaderByHash(hash); header != nil {
 			// get the canonical block corresponding to the offending header's number
-			headerByNumber := bc.GetHeaderByNumber(header.Number.Uint64())
+			headerByNumber := dm.GetHeaderByNumber(header.Number.Uint64())
 			// make sure the headerByNumber (if present) is in our current canonical chain
 			if headerByNumber != nil && headerByNumber.Hash() == header.Hash() {
 				log.Error("Found bad hash, rewinding chain", "number", header.Number, "hash", header.ParentHash)
-				bc.SetHead(header.Number.Uint64() - 1)
+				dm.SetHead(header.Number.Uint64() - 1)
 				log.Error("Chain rewind was successful, resuming normal operation")
 			}
 		}
 	}
 	// Take ownership of this particular state
-	go bc.update()
-	return bc, nil
+	go dm.update()
+	return dm, nil
 }
 
-func (bc *DAGManager) getProcInterrupt() bool {
-	return atomic.LoadInt32(&bc.procInterrupt) == 1
+func (dm *DAGManager) getProcInterrupt() bool {
+	return atomic.LoadInt32(&dm.procInterrupt) == 1
 }
 
 // loadLastState loads the last known chain state from the database. This method
 // assumes that the chain manager mutex is held.
-func (bc *DAGManager) loadLastState() error {
+func (dm *DAGManager) loadLastState() error {
 	// Restore the last known head block
-	head := rawdb.ReadHeadBlockHash(bc.db)
+	head := rawdb.ReadHeadBlockHash(dm.db)
 	if head == (common.Hash{}) {
 		// Corrupt or empty database, init from scratch
 		log.Warn("Empty database, resetting chain")
-		return bc.Reset()
+		return dm.Reset()
 	}
 	// Make sure the entire head block is available
-	currentBlock := bc.GetBlockByHash(head)
+	currentBlock := dm.GetBlockByHash(head)
 	if currentBlock == nil {
 		// Corrupt or empty database, init from scratch
 		log.Warn("Head block missing, resetting chain", "hash", head)
-		return bc.Reset()
+		return dm.Reset()
 	}
 	// Make sure the state associated with the block is available
-	if _, err := state.New(currentBlock.Root(), bc.stateCache); err != nil {
+	if _, err := state.New(currentBlock.Root(), dm.stateCache); err != nil {
 		// Dangling block without a state associated, init from scratch
 		log.Warn("Head state missing, repairing chain", "number", currentBlock.Number(), "hash", currentBlock.Hash())
-		if err := bc.repair(&currentBlock); err != nil {
+		if err := dm.repair(&currentBlock); err != nil {
 			return err
 		}
 	}
 	// Everything seems to be fine, set as the head block
-	bc.currentBlock.Store(currentBlock)
+	dm.currentBlock.Store(currentBlock)
 
 	// Restore the last known head header
 	currentHeader := currentBlock.Header()
-	if head := rawdb.ReadHeadHeaderHash(bc.db); head != (common.Hash{}) {
-		if header := bc.GetHeaderByHash(head); header != nil {
+	if head := rawdb.ReadHeadHeaderHash(dm.db); head != (common.Hash{}) {
+		if header := dm.GetHeaderByHash(head); header != nil {
 			currentHeader = header
 		}
 	}
-	bc.hc.SetCurrentHeader(currentHeader)
+	dm.hc.SetCurrentHeader(currentHeader)
 
 	// Restore the last known head fast block
-	bc.currentFastBlock.Store(currentBlock)
-	if head := rawdb.ReadHeadFastBlockHash(bc.db); head != (common.Hash{}) {
-		if block := bc.GetBlockByHash(head); block != nil {
-			bc.currentFastBlock.Store(block)
+	dm.currentFastBlock.Store(currentBlock)
+	if head := rawdb.ReadHeadFastBlockHash(dm.db); head != (common.Hash{}) {
+		if block := dm.GetBlockByHash(head); block != nil {
+			dm.currentFastBlock.Store(block)
 		}
 	}
 
 	// Issue a status log for the user
-	currentFastBlock := bc.CurrentFastBlock()
+	currentFastBlock := dm.CurrentFastBlock()
 
-	headerTd := bc.GetTd(currentHeader.Hash(), currentHeader.Number.Uint64())
-	blockTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-	fastTd := bc.GetTd(currentFastBlock.Hash(), currentFastBlock.NumberU64())
+	headerTd := dm.GetTd(currentHeader.Hash(), currentHeader.Number.Uint64())
+	blockTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+	fastTd := dm.GetTd(currentFastBlock.Hash(), currentFastBlock.NumberU64())
 
 	log.Info("Loaded most recent local header", "number", currentHeader.Number, "hash", currentHeader.Hash(), "td", headerTd)
 	log.Info("Loaded most recent local full block", "number", currentBlock.Number(), "hash", currentBlock.Hash(), "td", blockTd)
@@ -258,164 +258,175 @@ func (bc *DAGManager) loadLastState() error {
 	return nil
 }
 
-// SetHead rewinds the local chain to a new head. In the case of headers, everything
+// SetHead rewinds the local dm to a new epoch. In the case of headers, everything
 // above the new head will be deleted and the new one set. In the case of blocks
 // though, the head may be further rewound if block bodies are missing (non-archive
 // nodes after a fast sync).
-func (bc *DAGManager) SetHead(head uint64) error {
-	log.Warn("Rewinding blockchain", "target", head)
+func (dm *DAGManager) SetHead(epoch uint64) error {
+	log.Warn("Rewinding dm", "target", epoch)
 
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
 
 	// Rewind the header chain, deleting all block bodies until then
 	delFn := func(db rawdb.DatabaseDeleter, hash common.Hash, num uint64) {
 		rawdb.DeleteBody(db, hash, num)
 	}
-	bc.hc.SetHead(head, delFn)
-	currentHeader := bc.hc.CurrentHeader()
+	dm.hc.SetHead(epoch, delFn)
+	currentHeader := dm.hc.CurrentPivotHeader()
 
 	// Clear out any stale content from the caches
-	bc.bodyCache.Purge()
-	bc.bodyRLPCache.Purge()
-	bc.blockCache.Purge()
-	bc.futureBlocks.Purge()
+	dm.bodyCache.Purge()
+	dm.bodyRLPCache.Purge()
+	dm.blockCache.Purge()
+	dm.futureBlocks.Purge()
 
 	// Rewind the block chain, ensuring we don't end up with a stateless head block
-	if currentBlock := bc.CurrentBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
-		bc.currentBlock.Store(bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
+	if currentBlock := dm.CurrentPivotBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
+		dm.currentBlock.Store(dm.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
 	}
-	if currentBlock := bc.CurrentBlock(); currentBlock != nil {
-		if _, err := state.New(currentBlock.Root(), bc.stateCache); err != nil {
+	if currentBlock := dm.CurrentPivotBlock(); currentBlock != nil {
+		if _, err := state.New(currentBlock.Root(), dm.stateCache); err != nil {
 			// Rewound state missing, rolled back to before pivot, reset to genesis
-			bc.currentBlock.Store(bc.genesisBlock)
+			dm.currentBlock.Store(dm.genesisBlock)
 		}
 	}
 	// Rewind the fast block in a simpleton way to the target head
-	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock != nil && currentHeader.Number.Uint64() < currentFastBlock.NumberU64() {
-		bc.currentFastBlock.Store(bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
+	if currentFastBlock := dm.CurrentFastBlock(); currentFastBlock != nil && currentHeader.Number.Uint64() < currentFastBlock.NumberU64() {
+		dm.currentFastBlock.Store(dm.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
 	}
 	// If either blocks reached nil, reset to the genesis state
-	if currentBlock := bc.CurrentBlock(); currentBlock == nil {
-		bc.currentBlock.Store(bc.genesisBlock)
+	if currentBlock := dm.CurrentPivotBlock(); currentBlock == nil {
+		dm.currentBlock.Store(dm.genesisBlock)
 	}
-	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock == nil {
-		bc.currentFastBlock.Store(bc.genesisBlock)
+	if currentFastBlock := dm.CurrentFastBlock(); currentFastBlock == nil {
+		dm.currentFastBlock.Store(dm.genesisBlock)
 	}
-	currentBlock := bc.CurrentBlock()
-	currentFastBlock := bc.CurrentFastBlock()
+	currentBlock := dm.CurrentPivotBlock()
+	currentFastBlock := dm.CurrentFastBlock()
 
-	rawdb.WriteHeadBlockHash(bc.db, currentBlock.Hash())
-	rawdb.WriteHeadFastBlockHash(bc.db, currentFastBlock.Hash())
+	rawdb.WriteHeadBlockHash(dm.db, currentBlock.Hash())
+	rawdb.WriteHeadFastBlockHash(dm.db, currentFastBlock.Hash())
 
-	return bc.loadLastState()
+	return dm.loadLastState()
 }
 
 // FastSyncCommitHead sets the current head block to the one defined by the hash
 // irrelevant what the chain contents were prior.
-func (bc *DAGManager) FastSyncCommitHead(hash common.Hash) error {
+func (dm *DAGManager) FastSyncCommitHead(hash common.Hash) error {
 	// Make sure that both the block as well at its state trie exists
-	block := bc.GetBlockByHash(hash)
+	block := dm.GetBlockByHash(hash)
 	if block == nil {
 		return fmt.Errorf("non existent block [%x…]", hash[:4])
 	}
-	if _, err := trie.NewSecure(block.Root(), bc.stateCache.TrieDB(), 0); err != nil {
+	if _, err := trie.NewSecure(block.Root(), dm.stateCache.TrieDB(), 0); err != nil {
 		return err
 	}
 	// If all checks out, manually set the head block
-	bc.mu.Lock()
-	bc.currentBlock.Store(block)
-	bc.mu.Unlock()
+	dm.mu.Lock()
+	dm.currentBlock.Store(block)
+	dm.mu.Unlock()
 
 	log.Info("Committed new head block", "number", block.Number(), "hash", hash)
 	return nil
 }
 
 // GasLimit returns the gas limit of the current HEAD block.
-func (bc *DAGManager) GasLimit() uint64 {
-	return bc.CurrentBlock().GasLimit()
+func (dm *DAGManager) GasLimit() uint64 {
+	return dm.CurrentPivotBlock().GasLimit()
 }
 
-// CurrentBlock retrieves the current head block of the canonical chain. The
+func (dm *DAGManager) GetBlocksByEpoch(epoch uint64) types.Blocks {
+	// TODO: impl
+	return types.Blocks {}
+}
+
+// CurrentPivotHeader() retrieves the current head header of the canonical chain. The
+// header is retrieved from the HeaderChain's internal cache.
+func (dm *DAGManager) CurrentPivotHeader() *types.Header {
+	return dm.hc.CurrentPivotHeader()
+}
+
+// CurrentBlock retrieves the current head block of the pivot chain. The
 // block is retrieved from the blockchain's internal cache.
-func (bc *DAGManager) CurrentBlock() *types.Block {
-	return bc.currentBlock.Load().(*types.Block)
+func (dm *DAGManager) CurrentPivotBlock() *types.Block {
+	return dm.currentBlock.Load().(*types.Block)
 }
 
 // CurrentFastBlock retrieves the current fast-sync head block of the canonical
 // chain. The block is retrieved from the blockchain's internal cache.
-func (bc *DAGManager) CurrentFastBlock() *types.Block {
-	return bc.currentFastBlock.Load().(*types.Block)
+func (dm *DAGManager) CurrentFastBlock() *types.Block {
+	return dm.currentFastBlock.Load().(*types.Block)
 }
 
 // SetProcessor sets the processor required for making state modifications.
-func (bc *DAGManager) SetProcessor(processor Processor) {
-	bc.procmu.Lock()
-	defer bc.procmu.Unlock()
-	bc.processor = processor
+func (dm *DAGManager) SetProcessor(processor Processor) {
+	dm.procmu.Lock()
+	defer dm.procmu.Unlock()
+	dm.processor = processor
 }
 
 // SetValidator sets the validator which is used to validate incoming blocks.
-func (bc *DAGManager) SetValidator(validator Validator) {
-	bc.procmu.Lock()
-	defer bc.procmu.Unlock()
-	bc.validator = validator
+func (dm *DAGManager) SetValidator(validator Validator) {
+	dm.procmu.Lock()
+	defer dm.procmu.Unlock()
+	dm.validator = validator
 }
 
 // Validator returns the current validator.
-func (bc *DAGManager) Validator() Validator {
-	bc.procmu.RLock()
-	defer bc.procmu.RUnlock()
-	return bc.validator
+func (dm *DAGManager) Validator() Validator {
+	dm.procmu.RLock()
+	defer dm.procmu.RUnlock()
+	return dm.validator
 }
 
 // Processor returns the current processor.
-func (bc *DAGManager) Processor() Processor {
-	bc.procmu.RLock()
-	defer bc.procmu.RUnlock()
-	return bc.processor
+func (dm *DAGManager) Processor() Processor {
+	dm.procmu.RLock()
+	defer dm.procmu.RUnlock()
+	return dm.processor
 }
 
 // State returns a new mutable state based on the current HEAD block.
-func (bc *DAGManager) State() (*state.StateDB, error) {
-	return bc.StateAt(bc.CurrentBlock().Root())
+func (dm *DAGManager) State() (*state.StateDB, error) {
+	return dm.StateAt(dm.CurrentPivotBlock().Root())
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
-func (bc *DAGManager) StateAt(root common.Hash) (*state.StateDB, error) {
-	return state.New(root, bc.stateCache)
+func (dm *DAGManager) StateAt(root common.Hash) (*state.StateDB, error) {
+	return state.New(root, dm.stateCache)
 }
 //
-func (bc *DAGManager)GetState(root common.Hash) (*state.StateDB, error) {
-	return state.New(root, bc.stateCache)
+func (dm *DAGManager)GetState(root common.Hash) (*state.StateDB, error) {
+	return state.New(root, dm.stateCache)
 }
 // Reset purges the entire blockchain, restoring it to its genesis state.
-func (bc *DAGManager) Reset() error {
-	return bc.ResetWithGenesisBlock(bc.genesisBlock)
+func (dm *DAGManager) Reset() error {
+	return dm.ResetWithGenesisBlock(dm.genesisBlock)
 }
 
 // ResetWithGenesisBlock purges the entire blockchain, restoring it to the
 // specified genesis state.
-func (bc *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
+func (dm *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
 	// Dump the entire block chain and purge the caches
-	if err := bc.SetHead(0); err != nil {
+	if err := dm.SetHead(0); err != nil {
 		return err
 	}
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
 
 	// Prepare the genesis block and reinitialise the chain
-	if err := bc.hc.WriteTd(genesis.Hash(), genesis.NumberU64(), genesis.Difficulty()); err != nil {
+	if err := dm.hc.WriteTd(genesis.Hash(), genesis.NumberU64(), genesis.Difficulty()); err != nil {
 		log.Crit("Failed to write genesis block TD", "err", err)
 	}
-	rawdb.WriteBlock(bc.db, genesis)
+	rawdb.WriteBlock(dm.db, genesis)
 
-	bc.genesisBlock = genesis
-	bc.insert(bc.genesisBlock)
-	bc.currentBlock.Store(bc.genesisBlock)
-	bc.hc.SetGenesis(bc.genesisBlock.Header())
-	bc.hc.SetCurrentHeader(bc.genesisBlock.Header())
-	bc.currentFastBlock.Store(bc.genesisBlock)
+	dm.genesisBlock = genesis
+	dm.insert(dm.genesisBlock)
+	dm.currentBlock.Store(dm.genesisBlock)
+	dm.hc.SetGenesis(dm.genesisBlock.Header())
+	dm.hc.SetCurrentHeader(dm.genesisBlock.Header())
+	dm.currentFastBlock.Store(dm.genesisBlock)
 
 	return nil
 }
@@ -426,27 +437,27 @@ func (bc *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
 //
 // This method only rolls back the current block. The current header and current
 // fast block are left intact.
-func (bc *DAGManager) repair(head **types.Block) error {
+func (dm *DAGManager) repair(head **types.Block) error {
 	for {
 		// Abort if we've rewound to a head block that does have associated state
-		if _, err := state.New((*head).Root(), bc.stateCache); err == nil {
+		if _, err := state.New((*head).Root(), dm.stateCache); err == nil {
 			log.Info("Rewound blockchain to past state", "number", (*head).Number(), "hash", (*head).Hash())
 			return nil
 		}
 		// Otherwise rewind one block and recheck state availability there
-		(*head) = bc.GetBlock((*head).ParentHash(), (*head).NumberU64()-1)
+		(*head) = dm.GetBlock((*head).ParentHash(), (*head).NumberU64()-1)
 	}
 }
 
 // Export writes the active chain to the given writer.
-func (bc *DAGManager) Export(w io.Writer) error {
-	return bc.ExportN(w, uint64(0), bc.CurrentBlock().NumberU64())
+func (dm *DAGManager) Export(w io.Writer) error {
+	return dm.ExportN(w, uint64(0), dm.CurrentPivotBlock().NumberU64())
 }
 
 // ExportN writes a subset of the active chain to the given writer.
-func (bc *DAGManager) ExportN(w io.Writer, first uint64, last uint64) error {
-	bc.mu.RLock()
-	defer bc.mu.RUnlock()
+func (dm *DAGManager) ExportN(w io.Writer, first uint64, last uint64) error {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
 
 	if first > last {
 		return fmt.Errorf("export failed: first (%d) is greater than last (%d)", first, last)
@@ -454,7 +465,7 @@ func (bc *DAGManager) ExportN(w io.Writer, first uint64, last uint64) error {
 	log.Info("Exporting batch of blocks", "count", last-first+1)
 
 	for nr := first; nr <= last; nr++ {
-		block := bc.GetBlockByNumber(nr)
+		block := dm.GetBlockByNumber(nr)
 		if block == nil {
 			return fmt.Errorf("export failed on #%d: not found", nr)
 		}
@@ -473,149 +484,149 @@ func (bc *DAGManager) ExportN(w io.Writer, first uint64, last uint64) error {
 // or if they are on a different side chain.
 //
 // Note, this function assumes that the `mu` mutex is held!
-func (bc *DAGManager) insert(block *types.Block) {
+func (dm *DAGManager) insert(block *types.Block) {
 	// If the block is on a side chain or an unknown one, force other heads onto it too
-	updateHeads := rawdb.ReadCanonicalHash(bc.db, block.NumberU64()) != block.Hash()
+	updateHeads := rawdb.ReadCanonicalHash(dm.db, block.NumberU64()) != block.Hash()
 
 	// Add the block to the canonical chain number scheme and mark as the head
-	rawdb.WriteCanonicalHash(bc.db, block.Hash(), block.NumberU64())
-	rawdb.WriteHeadBlockHash(bc.db, block.Hash())
+	rawdb.WriteCanonicalHash(dm.db, block.Hash(), block.NumberU64())
+	rawdb.WriteHeadBlockHash(dm.db, block.Hash())
 
-	bc.currentBlock.Store(block)
+	dm.currentBlock.Store(block)
 
 	// If the block is better than our head or is on a different chain, force update heads
 	if updateHeads {
-		bc.hc.SetCurrentHeader(block.Header())
-		rawdb.WriteHeadFastBlockHash(bc.db, block.Hash())
+		dm.hc.SetCurrentHeader(block.Header())
+		rawdb.WriteHeadFastBlockHash(dm.db, block.Hash())
 
-		bc.currentFastBlock.Store(block)
+		dm.currentFastBlock.Store(block)
 	}
 }
 
 // Genesis retrieves the chain's genesis block.
-func (bc *DAGManager) Genesis() *types.Block {
-	return bc.genesisBlock
+func (dm *DAGManager) Genesis() *types.Block {
+	return dm.genesisBlock
 }
 
 // GetBody retrieves a block body (transactions and uncles) from the database by
 // hash, caching it if found.
-func (bc *DAGManager) GetBody(hash common.Hash) *types.Body {
+func (dm *DAGManager) GetBody(hash common.Hash) *types.Body {
 	// Short circuit if the body's already in the cache, retrieve otherwise
-	if cached, ok := bc.bodyCache.Get(hash); ok {
+	if cached, ok := dm.bodyCache.Get(hash); ok {
 		body := cached.(*types.Body)
 		return body
 	}
-	number := bc.hc.GetBlockNumber(hash)
+	number := dm.hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
 	}
-	body := rawdb.ReadBody(bc.db, hash, *number)
+	body := rawdb.ReadBody(dm.db, hash, *number)
 	if body == nil {
 		return nil
 	}
 	// Cache the found body for next time and return
-	bc.bodyCache.Add(hash, body)
+	dm.bodyCache.Add(hash, body)
 	return body
 }
 
 // GetBodyRLP retrieves a block body in RLP encoding from the database by hash,
 // caching it if found.
-func (bc *DAGManager) GetBodyRLP(hash common.Hash) rlp.RawValue {
+func (dm *DAGManager) GetBodyRLP(hash common.Hash) rlp.RawValue {
 	// Short circuit if the body's already in the cache, retrieve otherwise
-	if cached, ok := bc.bodyRLPCache.Get(hash); ok {
+	if cached, ok := dm.bodyRLPCache.Get(hash); ok {
 		return cached.(rlp.RawValue)
 	}
-	number := bc.hc.GetBlockNumber(hash)
+	number := dm.hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
 	}
-	body := rawdb.ReadBodyRLP(bc.db, hash, *number)
+	body := rawdb.ReadBodyRLP(dm.db, hash, *number)
 	if len(body) == 0 {
 		return nil
 	}
 	// Cache the found body for next time and return
-	bc.bodyRLPCache.Add(hash, body)
+	dm.bodyRLPCache.Add(hash, body)
 	return body
 }
 
 // HasBlock checks if a block is fully present in the database or not.
-func (bc *DAGManager) HasBlock(hash common.Hash, number uint64) bool {
-	if bc.blockCache.Contains(hash) {
+func (dm *DAGManager) HasBlock(hash common.Hash, number uint64) bool {
+	if dm.blockCache.Contains(hash) {
 		return true
 	}
-	return rawdb.HasBody(bc.db, hash, number)
+	return rawdb.HasBody(dm.db, hash, number)
 }
 
 // HasState checks if state trie is fully present in the database or not.
-func (bc *DAGManager) HasState(hash common.Hash) bool {
-	_, err := bc.stateCache.OpenTrie(hash)
+func (dm *DAGManager) HasState(hash common.Hash) bool {
+	_, err := dm.stateCache.OpenTrie(hash)
 	return err == nil
 }
 
 // HasBlockAndState checks if a block and associated state trie is fully present
 // in the database or not, caching it if present.
-func (bc *DAGManager) HasBlockAndState(hash common.Hash, number uint64) bool {
+func (dm *DAGManager) HasBlockAndState(hash common.Hash, number uint64) bool {
 	// Check first that the block itself is known
-	block := bc.GetBlock(hash, number)
+	block := dm.GetBlock(hash, number)
 	if block == nil {
 		return false
 	}
-	return bc.HasState(block.Root())
+	return dm.HasState(block.Root())
 }
 
 // GetBlock retrieves a block from the database by hash and number,
 // caching it if found.
-func (bc *DAGManager) GetBlock(hash common.Hash, number uint64) *types.Block {
+func (dm *DAGManager) GetBlock(hash common.Hash, number uint64) *types.Block {
 	// Short circuit if the block's already in the cache, retrieve otherwise
-	if block, ok := bc.blockCache.Get(hash); ok {
+	if block, ok := dm.blockCache.Get(hash); ok {
 		return block.(*types.Block)
 	}
-	block := rawdb.ReadBlock(bc.db, hash, number)
+	block := rawdb.ReadBlock(dm.db, hash, number)
 	if block == nil {
 		return nil
 	}
 	// Cache the found block for next time and return
-	bc.blockCache.Add(block.Hash(), block)
+	dm.blockCache.Add(block.Hash(), block)
 	return block
 }
 
 // GetBlockByHash retrieves a block from the database by hash, caching it if found.
-func (bc *DAGManager) GetBlockByHash(hash common.Hash) *types.Block {
-	number := bc.hc.GetBlockNumber(hash)
+func (dm *DAGManager) GetBlockByHash(hash common.Hash) *types.Block {
+	number := dm.hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
 	}
-	return bc.GetBlock(hash, *number)
+	return dm.GetBlock(hash, *number)
 }
 
 // GetBlockByNumber retrieves a block from the database by number, caching it
 // (associated with its hash) if found.
-func (bc *DAGManager) GetBlockByNumber(number uint64) *types.Block {
-	hash := rawdb.ReadCanonicalHash(bc.db, number)
+func (dm *DAGManager) GetBlockByNumber(number uint64) *types.Block {
+	hash := rawdb.ReadCanonicalHash(dm.db, number)
 	if hash == (common.Hash{}) {
 		return nil
 	}
-	return bc.GetBlock(hash, number)
+	return dm.GetBlock(hash, number)
 }
 
 // GetReceiptsByHash retrieves the receipts for all transactions in a given block.
-func (bc *DAGManager) GetReceiptsByHash(hash common.Hash) types.Receipts {
-	number := rawdb.ReadHeaderNumber(bc.db, hash)
+func (dm *DAGManager) GetReceiptsByHash(hash common.Hash) types.Receipts {
+	number := rawdb.ReadHeaderNumber(dm.db, hash)
 	if number == nil {
 		return nil
 	}
-	return rawdb.ReadReceipts(bc.db, hash, *number)
+	return rawdb.ReadReceipts(dm.db, hash, *number)
 }
 
 // GetBlocksFromHash returns the block corresponding to hash and up to n-1 ancestors.
 // [deprecated by eth/62]
-func (bc *DAGManager) GetBlocksFromHash(hash common.Hash, n int) (blocks []*types.Block) {
-	number := bc.hc.GetBlockNumber(hash)
+func (dm *DAGManager) GetBlocksFromHash(hash common.Hash, n int) (blocks []*types.Block) {
+	number := dm.hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
 	}
 	for i := 0; i < n; i++ {
-		block := bc.GetBlock(hash, *number)
+		block := dm.GetBlock(hash, *number)
 		if block == nil {
 			break
 		}
@@ -628,45 +639,45 @@ func (bc *DAGManager) GetBlocksFromHash(hash common.Hash, n int) (blocks []*type
 
 // GetUnclesInChain retrieves all the uncles from a given block backwards until
 // a specific distance is reached.
-func (bc *DAGManager) GetUnclesInChain(block *types.Block, length int) []*types.Header {
+func (dm *DAGManager) GetUnclesInChain(block *types.Block, length int) []*types.Header {
 	uncles := []*types.Header{}
 	for i := 0; block != nil && i < length; i++ {
 		uncles = append(uncles, block.Uncles()...)
-		block = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+		block = dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
 	}
 	return uncles
 }
 
 // TrieNode retrieves a blob of data associated with a trie node (or code hash)
 // either from ephemeral in-memory cache, or from persistent storage.
-func (bc *DAGManager) TrieNode(hash common.Hash) ([]byte, error) {
-	return bc.stateCache.TrieDB().Node(hash)
+func (dm *DAGManager) TrieNode(hash common.Hash) ([]byte, error) {
+	return dm.stateCache.TrieDB().Node(hash)
 }
 
 // Stop stops the blockchain service. If any imports are currently in progress
 // it will abort them using the procInterrupt.
-func (bc *DAGManager) Stop() {
-	if !atomic.CompareAndSwapInt32(&bc.running, 0, 1) {
+func (dm *DAGManager) Stop() {
+	if !atomic.CompareAndSwapInt32(&dm.running, 0, 1) {
 		return
 	}
 	// Unsubscribe all subscriptions registered from blockchain
-	bc.scope.Close()
-	close(bc.quit)
-	atomic.StoreInt32(&bc.procInterrupt, 1)
+	dm.scope.Close()
+	close(dm.quit)
+	atomic.StoreInt32(&dm.procInterrupt, 1)
 
-	bc.wg.Wait()
+	dm.wg.Wait()
 
 	// Ensure the state of a recent block is also stored to disk before exiting.
 	// We're writing three different states to catch different restart scenarios:
 	//  - HEAD:     So we don't need to reprocess any blocks in the general case
 	//  - HEAD-1:   So we don't do large reorgs if our HEAD becomes an uncle
 	//  - HEAD-127: So we have a hard limit on the number of blocks reexecuted
-	if !bc.cacheConfig.Disabled {
-		triedb := bc.stateCache.TrieDB()
+	if !dm.cacheConfig.Disabled {
+		triedb := dm.stateCache.TrieDB()
 
 		for _, offset := range []uint64{0, 1, triesInMemory - 1} {
-			if number := bc.CurrentBlock().NumberU64(); number > offset {
-				recent := bc.GetBlockByNumber(number - offset)
+			if number := dm.CurrentPivotBlock().NumberU64(); number > offset {
+				recent := dm.GetBlockByNumber(number - offset)
 
 				log.Info("Writing cached state to disk", "block", recent.Number(), "hash", recent.Hash(), "root", recent.Root())
 				if err := triedb.Commit(recent.Root(), true); err != nil {
@@ -674,8 +685,8 @@ func (bc *DAGManager) Stop() {
 				}
 			}
 		}
-		for !bc.triegc.Empty() {
-			triedb.Dereference(bc.triegc.PopItem().(common.Hash))
+		for !dm.triegc.Empty() {
+			triedb.Dereference(dm.triegc.PopItem().(common.Hash))
 		}
 		if size, _ := triedb.Size(); size != 0 {
 			log.Error("Dangling trie nodes after full cleanup")
@@ -684,10 +695,10 @@ func (bc *DAGManager) Stop() {
 	log.Info("Blockchain manager stopped")
 }
 
-func (bc *DAGManager) procFutureBlocks() {
-	blocks := make([]*types.Block, 0, bc.futureBlocks.Len())
-	for _, hash := range bc.futureBlocks.Keys() {
-		if block, exist := bc.futureBlocks.Peek(hash); exist {
+func (dm *DAGManager) procFutureBlocks() {
+	blocks := make([]*types.Block, 0, dm.futureBlocks.Len())
+	for _, hash := range dm.futureBlocks.Keys() {
+		if block, exist := dm.futureBlocks.Peek(hash); exist {
 			blocks = append(blocks, block.(*types.Block))
 		}
 	}
@@ -696,7 +707,7 @@ func (bc *DAGManager) procFutureBlocks() {
 
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
 		for i := range blocks {
-			bc.InsertChain(blocks[i : i+1])
+			dm.InsertBlocks(blocks[i : i+1])
 		}
 	}
 }
@@ -712,26 +723,26 @@ const (
 
 // Rollback is designed to remove a chain of links from the database that aren't
 // certain enough to be valid.
-func (bc *DAGManager) Rollback(chain []common.Hash) {
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
+func (dm *DAGManager) Rollback(chain []common.Hash) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
 
 	for i := len(chain) - 1; i >= 0; i-- {
 		hash := chain[i]
 
-		currentHeader := bc.hc.CurrentHeader()
+		currentHeader := dm.hc.CurrentPivotHeader()
 		if currentHeader.Hash() == hash {
-			bc.hc.SetCurrentHeader(bc.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64()-1))
+			dm.hc.SetCurrentHeader(dm.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64()-1))
 		}
-		if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock.Hash() == hash {
-			newFastBlock := bc.GetBlock(currentFastBlock.ParentHash(), currentFastBlock.NumberU64()-1)
-			bc.currentFastBlock.Store(newFastBlock)
-			rawdb.WriteHeadFastBlockHash(bc.db, newFastBlock.Hash())
+		if currentFastBlock := dm.CurrentFastBlock(); currentFastBlock.Hash() == hash {
+			newFastBlock := dm.GetBlock(currentFastBlock.ParentHash(), currentFastBlock.NumberU64()-1)
+			dm.currentFastBlock.Store(newFastBlock)
+			rawdb.WriteHeadFastBlockHash(dm.db, newFastBlock.Hash())
 		}
-		if currentBlock := bc.CurrentBlock(); currentBlock.Hash() == hash {
-			newBlock := bc.GetBlock(currentBlock.ParentHash(), currentBlock.NumberU64()-1)
-			bc.currentBlock.Store(newBlock)
-			rawdb.WriteHeadBlockHash(bc.db, newBlock.Hash())
+		if currentBlock := dm.CurrentPivotBlock(); currentBlock.Hash() == hash {
+			newBlock := dm.GetBlock(currentBlock.ParentHash(), currentBlock.NumberU64()-1)
+			dm.currentBlock.Store(newBlock)
+			rawdb.WriteHeadBlockHash(dm.db, newBlock.Hash())
 		}
 	}
 }
@@ -776,9 +787,9 @@ func SetReceiptsData(config *params.ChainConfig, block *types.Block, receipts ty
 
 // InsertReceiptChain attempts to complete an already existing header chain with
 // transaction and receipt data.
-func (bc *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain []types.Receipts) (int, error) {
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+func (dm *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain []types.Receipts) (int, error) {
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
 	// Do a sanity check that the provided chain is actually ordered and linked
 	for i := 1; i < len(blockChain); i++ {
@@ -794,25 +805,25 @@ func (bc *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		stats = struct{ processed, ignored int32 }{}
 		start = time.Now()
 		bytes = 0
-		batch = bc.db.NewBatch()
+		batch = dm.db.NewBatch()
 	)
 	for i, block := range blockChain {
 		receipts := receiptChain[i]
 		// Short circuit insertion if shutting down or processing failed
-		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+		if atomic.LoadInt32(&dm.procInterrupt) == 1 {
 			return 0, nil
 		}
 		// Short circuit if the owner header is unknown
-		if !bc.HasHeader(block.Hash(), block.NumberU64()) {
+		if !dm.HasHeader(block.Hash(), block.NumberU64()) {
 			return i, fmt.Errorf("containing header #%d [%x…] unknown", block.Number(), block.Hash().Bytes()[:4])
 		}
 		// Skip if the entire data is already known
-		if bc.HasBlock(block.Hash(), block.NumberU64()) {
+		if dm.HasBlock(block.Hash(), block.NumberU64()) {
 			stats.ignored++
 			continue
 		}
 		// Compute all the non-consensus fields of the receipts
-		if err := SetReceiptsData(bc.chainConfig, block, receipts); err != nil {
+		if err := SetReceiptsData(dm.chainConfig, block, receipts); err != nil {
 			return i, fmt.Errorf("failed to set receipts data: %v", err)
 		}
 		// Write all the data out into the database
@@ -838,16 +849,16 @@ func (bc *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 	}
 
 	// Update the head fast sync block if better
-	bc.mu.Lock()
+	dm.mu.Lock()
 	head := blockChain[len(blockChain)-1]
-	if td := bc.GetTd(head.Hash(), head.NumberU64()); td != nil { // Rewind may have occurred, skip in that case
-		currentFastBlock := bc.CurrentFastBlock()
-		if bc.GetTd(currentFastBlock.Hash(), currentFastBlock.NumberU64()).Cmp(td) < 0 {
-			rawdb.WriteHeadFastBlockHash(bc.db, head.Hash())
-			bc.currentFastBlock.Store(head)
+	if td := dm.GetTd(head.Hash(), head.NumberU64()); td != nil { // Rewind may have occurred, skip in that case
+		currentFastBlock := dm.CurrentFastBlock()
+		if dm.GetTd(currentFastBlock.Hash(), currentFastBlock.NumberU64()).Cmp(td) < 0 {
+			rawdb.WriteHeadFastBlockHash(dm.db, head.Hash())
+			dm.currentFastBlock.Store(head)
 		}
 	}
-	bc.mu.Unlock()
+	dm.mu.Unlock()
 
 	log.Info("Imported new block receipts",
 		"count", stats.processed,
@@ -864,90 +875,90 @@ var lastWrite uint64
 // WriteBlockWithoutState writes only the block and its metadata to the database,
 // but does not write any state. This is used to construct competing side forks
 // up to the point where they exceed the canonical total difficulty.
-func (bc *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (err error) {
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+func (dm *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (err error) {
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
-	if err := bc.hc.WriteTd(block.Hash(), block.NumberU64(), td); err != nil {
+	if err := dm.hc.WriteTd(block.Hash(), block.NumberU64(), td); err != nil {
 		return err
 	}
-	rawdb.WriteBlock(bc.db, block)
+	rawdb.WriteBlock(dm.db, block)
 
 	return nil
 }
 
 // WriteBlockWithState writes the block and all associated state to the database.
-func (bc *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error) {
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error) {
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
 	// Calculate the total difficulty of the block
-	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+	ptd := dm.GetTd(block.ParentHash(), block.NumberU64()-1)
 	if ptd == nil {
 		return NonStatTy, consensus.ErrUnknownAncestor
 	}
 	// Make sure no inconsistent state is leaked during insertion
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
 
-	currentBlock := bc.CurrentBlock()
-	localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+	currentBlock := dm.CurrentPivotBlock()
+	localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
 	// Irrelevant of the canonical status, write the block itself to the database
-	if err := bc.hc.WriteTd(block.Hash(), block.NumberU64(), externTd); err != nil {
+	if err := dm.hc.WriteTd(block.Hash(), block.NumberU64(), externTd); err != nil {
 		return NonStatTy, err
 	}
 	// Write other block data using a batch.
-	batch := bc.db.NewBatch()
+	batch := dm.db.NewBatch()
 	rawdb.WriteBlock(batch, block)
 
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+	root, err := state.Commit(dm.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
 		return NonStatTy, err
 	}
-	triedb := bc.stateCache.TrieDB()
+	triedb := dm.stateCache.TrieDB()
 
 	// If we're running an archive node, always flush
-	if bc.cacheConfig.Disabled {
+	if dm.cacheConfig.Disabled {
 		if err := triedb.Commit(root, false); err != nil {
 			return NonStatTy, err
 		}
 	} else {
 		// Full but not archive node, do proper garbage collection
 		triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
-		bc.triegc.Push(root, -float32(block.NumberU64()))
+		dm.triegc.Push(root, -float32(block.NumberU64()))
 
 		if current := block.NumberU64(); current > triesInMemory {
 			// If we exceeded our memory allowance, flush matured singleton nodes to disk
 			var (
 				nodes, imgs = triedb.Size()
-				limit       = common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
+				limit       = common.StorageSize(dm.cacheConfig.TrieNodeLimit) * 1024 * 1024
 			)
 			if nodes > limit || imgs > 4*1024*1024 {
 				triedb.Cap(limit - ethdb.IdealBatchSize)
 			}
 			// Find the next state trie we need to commit
-			header := bc.GetHeaderByNumber(current - triesInMemory)
+			header := dm.GetHeaderByNumber(current - triesInMemory)
 			chosen := header.Number.Uint64()
 
 			// If we exceeded out time allowance, flush an entire trie to disk
-			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
+			if dm.gcproc > dm.cacheConfig.TrieTimeLimit {
 				// If we're exceeding limits but haven't reached a large enough memory gap,
 				// warn the user that the system is becoming unstable.
-				if chosen < lastWrite+triesInMemory && bc.gcproc >= 2*bc.cacheConfig.TrieTimeLimit {
-					log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/triesInMemory)
+				if chosen < lastWrite+triesInMemory && dm.gcproc >= 2*dm.cacheConfig.TrieTimeLimit {
+					log.Info("State in memory for too long, committing", "time", dm.gcproc, "allowance", dm.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/triesInMemory)
 				}
 				// Flush an entire trie and restart the counters
 				triedb.Commit(header.Root, true)
 				lastWrite = chosen
-				bc.gcproc = 0
+				dm.gcproc = 0
 			}
 			// Garbage collect anything below our required write retention
-			for !bc.triegc.Empty() {
-				root, number := bc.triegc.Pop()
+			for !dm.triegc.Empty() {
+				root, number := dm.triegc.Pop()
 				if uint64(-number) > chosen {
-					bc.triegc.Push(root, number)
+					dm.triegc.Push(root, number)
 					break
 				}
 				triedb.Dereference(root.(common.Hash))
@@ -960,7 +971,7 @@ func (bc *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	// Second clause in the if statement reduces the vulnerability to selfish mining.
 	// Please refer to http://www.cs.cornell.edu/~ie53/publications/btcProcFC.pdf
 	reorg := externTd.Cmp(localTd) > 0
-	currentBlock = bc.CurrentBlock()
+	currentBlock = dm.CurrentPivotBlock()
 	if !reorg && externTd.Cmp(localTd) == 0 {
 		// Split same-difficulty blocks by number, then at random
 		reorg = block.NumberU64() < currentBlock.NumberU64() || (block.NumberU64() == currentBlock.NumberU64() && mrand.Float64() < 0.5)
@@ -968,7 +979,7 @@ func (bc *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
-			if err := bc.reorg(currentBlock, block); err != nil {
+			if err := dm.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
 		}
@@ -986,9 +997,9 @@ func (bc *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	// Set new head.
 	if status == CanonStatTy {
-		bc.insert(block)
+		dm.insert(block)
 	}
-	bc.futureBlocks.Remove(block.Hash())
+	dm.futureBlocks.Remove(block.Hash())
 	return status, nil
 }
 
@@ -998,16 +1009,16 @@ func (bc *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 // wrong.
 //
 // After insertion is done, all accumulated events will be fired.
-func (bc *DAGManager) InsertChain(chain types.Blocks) (int, error) {
-	n, events, logs, err := bc.insertChain(chain)
-	bc.PostChainEvents(events, logs)
+func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
+	n, events, logs, err := dm.insertBlocks(blocks)
+	dm.PostChainEvents(events, logs)
 	return n, err
 }
 
-// insertChain will execute the actual chain insertion and event aggregation. The
+// insertBlocks will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
-func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*types.Log, error) {
+func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*types.Log, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil, nil, nil
@@ -1024,11 +1035,11 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 	}
 	// Pre-checks passed, start the full block imports
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
-	bc.chainmu.Lock()
-	defer bc.chainmu.Unlock()
+	dm.chainmu.Lock()
+	defer dm.chainmu.Unlock()
 
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
@@ -1053,28 +1064,28 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		seals[i] = true
 		fmt.Printf("getHeader block number : %v &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n", block.Number().String())
 	}
-	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	abort, results := dm.engine.VerifyHeaders(dm, headers, seals)
 	defer close(abort)
 	*/
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
-	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
+	senderCacher.recoverFromBlocks(types.MakeSigner(dm.chainConfig, chain[0].Number()), chain)
 
 	// Iterate over the blocks and insert when the verifier permits
 	for i, block := range chain {
 		headers[0] = block.Header()
 		seals[0] = true
-		abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+		abort, results := dm.engine.VerifyHeaders(dm, headers, seals)
 		defer close(abort)
 
 		// If the chain is terminating, stop processing blocks
-		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+		if atomic.LoadInt32(&dm.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
 			break
 		}
 		// If the header is a banned one, straight out abort
 		if BadHashes[block.Hash()] {
-			bc.reportBlock(block, nil, ErrBlacklistedHash)
+			dm.reportBlock(block, nil, ErrBlacklistedHash)
 			return i, events, coalescedLogs, ErrBlacklistedHash
 		}
 		// Wait for the block's verification to complete
@@ -1082,13 +1093,13 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 		err := <-results
 		if err == nil {
-			err = bc.Validator().ValidateBody(block)
+			err = dm.Validator().ValidateBody(block)
 		}
 		switch {
 		case err == ErrKnownBlock:
 			// Block and state both already known. However if the current block is below
 			// this number we did a rollback and we should reimport it nonetheless.
-			if bc.CurrentBlock().NumberU64() >= block.NumberU64() {
+			if dm.CurrentPivotBlock().NumberU64() >= block.NumberU64() {
 				stats.ignored++
 				continue
 			}
@@ -1100,23 +1111,23 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			if block.Time().Cmp(max) > 0 {
 				return i, events, coalescedLogs, fmt.Errorf("future block: %v > %v", block.Time(), max)
 			}
-			bc.futureBlocks.Add(block.Hash(), block)
+			dm.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
 			continue
 
-		case err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(block.ParentHash()):
-			bc.futureBlocks.Add(block.Hash(), block)
+		case err == consensus.ErrUnknownAncestor && dm.futureBlocks.Contains(block.ParentHash()):
+			dm.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
 			// Block competing with the canonical chain, store in the db, but don't process
 			// until the competitor TD goes above the canonical TD
-			currentBlock := bc.CurrentBlock()
-			localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-			externTd := new(big.Int).Add(bc.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
+			currentBlock := dm.CurrentPivotBlock()
+			localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+			externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
 			if localTd.Cmp(externTd) > 0 {
-				if err = bc.WriteBlockWithoutState(block, externTd); err != nil {
+				if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
 					return i, events, coalescedLogs, err
 				}
 				continue
@@ -1124,18 +1135,18 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			// Competitor chain beat canonical, gather all blocks from the common ancestor
 			var winner []*types.Block
 
-			parent := bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
-			for !bc.HasState(parent.Root()) {
+			parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
+			for !dm.HasState(parent.Root()) {
 				winner = append(winner, parent)
-				parent = bc.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
+				parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
 			}
 			for j := 0; j < len(winner)/2; j++ {
 				winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
 			}
 			// Import all the pruned blocks to make the state available
-			bc.chainmu.Unlock()
-			_, evs, logs, err := bc.insertChain(winner)
-			bc.chainmu.Lock()
+			dm.chainmu.Unlock()
+			_, evs, logs, err := dm.insertBlocks(winner)
+			dm.chainmu.Lock()
 			events, coalescedLogs = evs, logs
 
 			if err != nil {
@@ -1143,40 +1154,40 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			}
 
 		case err != nil:
-			bc.reportBlock(block, nil, err)
+			dm.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err
 		}
 		// Create a new statedb using the parent block and report an
 		// error if it fails.
 		var parent *types.Block
 		if i == 0 {
-			parent = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+			parent = dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
 		} else {
 			parent = chain[i-1]
 		}
-		state, err := state.New(parent.Root(), bc.stateCache)
+		state, err := state.New(parent.Root(), dm.stateCache)
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
-		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
+		receipts, logs, usedGas, err := dm.processor.Process(block, state, dm.vmConfig)
 		if err != nil {
-			bc.reportBlock(block, receipts, err)
+			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
 		// Validate the state using the default validator
-		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
-		//\err2 := bc.Validator().ValidateHeader(block, state)
+		err = dm.Validator().ValidateState(block, parent, state, receipts, usedGas)
+		//\err2 := dm.Validator().ValidateHeader(block, state)
 
 		//\\if err != nil || err2 != nil{
 		if err != nil {
-			bc.reportBlock(block, receipts, err)
+			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
 		proctime := time.Since(bstart)
 
 		// Write the block to the chain and get the status.
-		status, err := bc.WriteBlockWithState(block, receipts, state)
+		status, err := dm.WriteBlockWithState(block, receipts, state)
 		//\\fmt.Printf("write block number : %v =================++++++++++++++++++\n", block.Number().String())
 		if err != nil {
 			return i, events, coalescedLogs, err
@@ -1192,7 +1203,7 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			lastCanon = block
 
 			// Only count canonical blocks for GC processing time
-			bc.gcproc += proctime
+			dm.gcproc += proctime
 
 		case SideStatTy:
 			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "elapsed",
@@ -1204,11 +1215,11 @@ func (bc *DAGManager) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		stats.processed++
 		stats.usedGas += usedGas
 
-		cache, _ := bc.stateCache.TrieDB().Size()
+		cache, _ := dm.stateCache.TrieDB().Size()
 		stats.report(chain, i, cache)
 	}
 	// Append a single chain head event if we've progressed the chain
-	if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
+	if lastCanon != nil && dm.CurrentPivotBlock().Hash() == lastCanon.Hash() {
 		events = append(events, ChainHeadEvent{lastCanon})
 	}
 	return 0, events, coalescedLogs, nil
@@ -1267,7 +1278,7 @@ func countTransactions(chain []*types.Block) (c int) {
 // reorgs takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them
 // to be part of the new canonical chain and accumulates potential missing transactions and post an
 // event about them
-func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
+func (dm *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -1279,11 +1290,11 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 		// These logs are later announced as deleted.
 		collectLogs = func(hash common.Hash) {
 			// Coalesce logs and set 'Removed'.
-			number := bc.hc.GetBlockNumber(hash)
+			number := dm.hc.GetBlockNumber(hash)
 			if number == nil {
 				return
 			}
-			receipts := rawdb.ReadReceipts(bc.db, hash, *number)
+			receipts := rawdb.ReadReceipts(dm.db, hash, *number)
 			for _, receipt := range receipts {
 				for _, log := range receipt.Logs {
 					del := *log
@@ -1297,7 +1308,7 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 	// first reduce whoever is higher bound
 	if oldBlock.NumberU64() > newBlock.NumberU64() {
 		// reduce old chain
-		for ; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = bc.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1) {
+		for ; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = dm.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1) {
 			oldChain = append(oldChain, oldBlock)
 			deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
 
@@ -1305,7 +1316,7 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 		}
 	} else {
 		// reduce new chain and append new chain blocks for inserting later on
-		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
+		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = dm.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
 			newChain = append(newChain, newBlock)
 		}
 	}
@@ -1327,7 +1338,7 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 		deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
 		collectLogs(oldBlock.Hash())
 
-		oldBlock, newBlock = bc.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1), bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1)
+		oldBlock, newBlock = dm.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1), dm.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1)
 		if oldBlock == nil {
 			return fmt.Errorf("Invalid old chain")
 		}
@@ -1350,28 +1361,28 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 	var addedTxs types.Transactions
 	for i := len(newChain) - 1; i >= 0; i-- {
 		// insert the block in the canonical way, re-writing history
-		bc.insert(newChain[i])
+		dm.insert(newChain[i])
 		// write lookup entries for hash based transaction/receipt searches
-		rawdb.WriteTxLookupEntries(bc.db, newChain[i])
+		rawdb.WriteTxLookupEntries(dm.db, newChain[i])
 		addedTxs = append(addedTxs, newChain[i].Transactions()...)
 	}
 	// calculate the difference between deleted and added transactions
 	diff := types.TxDifference(deletedTxs, addedTxs)
 	// When transactions get deleted from the database that means the
 	// receipts that were created in the fork must also be deleted
-	batch := bc.db.NewBatch()
+	batch := dm.db.NewBatch()
 	for _, tx := range diff {
 		rawdb.DeleteTxLookupEntry(batch, tx.Hash())
 	}
 	batch.Write()
 
 	if len(deletedLogs) > 0 {
-		go bc.rmLogsFeed.Send(RemovedLogsEvent{deletedLogs})
+		go dm.rmLogsFeed.Send(RemovedLogsEvent{deletedLogs})
 	}
 	if len(oldChain) > 0 {
 		go func() {
 			for _, block := range oldChain {
-				bc.chainSideFeed.Send(ChainSideEvent{Block: block})
+				dm.chainSideFeed.Send(ChainSideEvent{Block: block})
 			}
 		}()
 	}
@@ -1382,43 +1393,43 @@ func (bc *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 // PostChainEvents iterates over the events generated by a chain insertion and
 // posts them into the event feed.
 // TODO: Should not expose PostChainEvents. The chain events should be posted in WriteBlock.
-func (bc *DAGManager) PostChainEvents(events []interface{}, logs []*types.Log) {
+func (dm *DAGManager) PostChainEvents(events []interface{}, logs []*types.Log) {
 	// post event logs for further processing
 	if logs != nil {
-		bc.logsFeed.Send(logs)
+		dm.logsFeed.Send(logs)
 	}
 	for _, event := range events {
 		switch ev := event.(type) {
 		case ChainEvent:
-			bc.chainFeed.Send(ev)
+			dm.chainFeed.Send(ev)
 
 		case ChainHeadEvent:
-			bc.chainHeadFeed.Send(ev)
+			dm.chainHeadFeed.Send(ev)
 
 		case ChainSideEvent:
-			bc.chainSideFeed.Send(ev)
+			dm.chainSideFeed.Send(ev)
 		}
 	}
 }
 
-func (bc *DAGManager) update() {
+func (dm *DAGManager) update() {
 	futureTimer := time.NewTicker(5 * time.Second)
 	defer futureTimer.Stop()
 	for {
 		select {
 		case <-futureTimer.C:
-			bc.procFutureBlocks()
-		case <-bc.quit:
+			dm.procFutureBlocks()
+		case <-dm.quit:
 			return
 		}
 	}
 }
 
 // BadBlocks returns a list of the last 'bad blocks' that the client has seen on the network
-func (bc *DAGManager) BadBlocks() []*types.Block {
-	blocks := make([]*types.Block, 0, bc.badBlocks.Len())
-	for _, hash := range bc.badBlocks.Keys() {
-		if blk, exist := bc.badBlocks.Peek(hash); exist {
+func (dm *DAGManager) BadBlocks() []*types.Block {
+	blocks := make([]*types.Block, 0, dm.badBlocks.Len())
+	for _, hash := range dm.badBlocks.Keys() {
+		if blk, exist := dm.badBlocks.Peek(hash); exist {
 			block := blk.(*types.Block)
 			blocks = append(blocks, block)
 		}
@@ -1427,13 +1438,13 @@ func (bc *DAGManager) BadBlocks() []*types.Block {
 }
 
 // addBadBlock adds a bad block to the bad-block LRU cache
-func (bc *DAGManager) addBadBlock(block *types.Block) {
-	bc.badBlocks.Add(block.Hash(), block)
+func (dm *DAGManager) addBadBlock(block *types.Block) {
+	dm.badBlocks.Add(block.Hash(), block)
 }
 
 // reportBlock logs a bad block error.
-func (bc *DAGManager) reportBlock(block *types.Block, receipts types.Receipts, err error) {
-	bc.addBadBlock(block)
+func (dm *DAGManager) reportBlock(block *types.Block, receipts types.Receipts, err error) {
+	dm.addBadBlock(block)
 
 	var receiptString string
 	for _, receipt := range receipts {
@@ -1449,7 +1460,7 @@ Hash: 0x%x
 
 Error: %v
 ##############################
-`, bc.chainConfig, block.Number(), block.Hash(), receiptString, err))
+`, dm.chainConfig, block.Number(), block.Hash(), receiptString, err))
 }
 
 // InsertHeaderChain attempts to insert the given header chain in to the local
@@ -1460,28 +1471,28 @@ Error: %v
 // should be done or not. The reason behind the optional check is because some
 // of the header retrieval mechanisms already need to verify nonces, as well as
 // because nonces can be verified sparsely, not needing to check each.
-func (bc *DAGManager) InsertHeaderChain(chain []*types.Header, checkFreq int) (int, error) {
+func (dm *DAGManager) InsertHeaderChain(chain []*types.Header, checkFreq int) (int, error) {
 	start := time.Now()
-	if i, err := bc.hc.ValidateHeaderChain(chain, checkFreq); err != nil {
+	if i, err := dm.hc.ValidateHeaderChain(chain, checkFreq); err != nil {
 		return i, err
 	}
 
 	// Make sure only one thread manipulates the chain at once
-	bc.chainmu.Lock()
-	defer bc.chainmu.Unlock()
+	dm.chainmu.Lock()
+	defer dm.chainmu.Unlock()
 
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
 	whFunc := func(header *types.Header) error {
-		bc.mu.Lock()
-		defer bc.mu.Unlock()
+		dm.mu.Lock()
+		defer dm.mu.Unlock()
 
-		_, err := bc.hc.WriteHeader(header)
+		_, err := dm.hc.WriteHeader(header)
 		return err
 	}
 
-	return bc.hc.InsertHeaderChain(chain, whFunc, start)
+	return dm.hc.InsertHeaderChain(chain, whFunc, start)
 }
 
 // writeHeader writes a header into the local chain, given that its parent is
@@ -1493,57 +1504,51 @@ func (bc *DAGManager) InsertHeaderChain(chain []*types.Header, checkFreq int) (i
 // without the real blocks. Hence, writing headers directly should only be done
 // in two scenarios: pure-header mode of operation (light clients), or properly
 // separated header/block phases (non-archive clients).
-func (bc *DAGManager) writeHeader(header *types.Header) error {
-	bc.wg.Add(1)
-	defer bc.wg.Done()
+func (dm *DAGManager) writeHeader(header *types.Header) error {
+	dm.wg.Add(1)
+	defer dm.wg.Done()
 
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
 
-	_, err := bc.hc.WriteHeader(header)
+	_, err := dm.hc.WriteHeader(header)
 	return err
-}
-
-// CurrentHeader retrieves the current head header of the canonical chain. The
-// header is retrieved from the HeaderChain's internal cache.
-func (bc *DAGManager) CurrentHeader() *types.Header {
-	return bc.hc.CurrentHeader()
 }
 
 // GetTd retrieves a block's total difficulty in the canonical chain from the
 // database by hash and number, caching it if found.
-func (bc *DAGManager) GetTd(hash common.Hash, number uint64) *big.Int {
-	return bc.hc.GetTd(hash, number)
+func (dm *DAGManager) GetTd(hash common.Hash, number uint64) *big.Int {
+	return dm.hc.GetTd(hash, number)
 }
 
 // GetTdByHash retrieves a block's total difficulty in the canonical chain from the
 // database by hash, caching it if found.
-func (bc *DAGManager) GetTdByHash(hash common.Hash) *big.Int {
-	return bc.hc.GetTdByHash(hash)
+func (dm *DAGManager) GetTdByHash(hash common.Hash) *big.Int {
+	return dm.hc.GetTdByHash(hash)
 }
 
 // GetHeader retrieves a block header from the database by hash and number,
 // caching it if found.
-func (bc *DAGManager) GetHeader(hash common.Hash, number uint64) *types.Header {
-	return bc.hc.GetHeader(hash, number)
+func (dm *DAGManager) GetHeader(hash common.Hash, number uint64) *types.Header {
+	return dm.hc.GetHeader(hash, number)
 }
 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if
 // found.
-func (bc *DAGManager) GetHeaderByHash(hash common.Hash) *types.Header {
-	return bc.hc.GetHeaderByHash(hash)
+func (dm *DAGManager) GetHeaderByHash(hash common.Hash) *types.Header {
+	return dm.hc.GetHeaderByHash(hash)
 }
 
 // HasHeader checks if a block header is present in the database or not, caching
 // it if present.
-func (bc *DAGManager) HasHeader(hash common.Hash, number uint64) bool {
-	return bc.hc.HasHeader(hash, number)
+func (dm *DAGManager) HasHeader(hash common.Hash, number uint64) bool {
+	return dm.hc.HasHeader(hash, number)
 }
 
 // GetBlockHashesFromHash retrieves a number of block hashes starting at a given
 // hash, fetching towards the genesis block.
-func (bc *DAGManager) GetBlockHashesFromHash(hash common.Hash, max uint64) []common.Hash {
-	return bc.hc.GetBlockHashesFromHash(hash, max)
+func (dm *DAGManager) GetBlockHashesFromHash(hash common.Hash, max uint64) []common.Hash {
+	return dm.hc.GetBlockHashesFromHash(hash, max)
 }
 
 // GetAncestor retrieves the Nth ancestor of a given block. It assumes that either the given block or
@@ -1551,46 +1556,46 @@ func (bc *DAGManager) GetBlockHashesFromHash(hash common.Hash, max uint64) []com
 // number of blocks to be individually checked before we reach the canonical chain.
 //
 // Note: ancestor == 0 returns the same block, 1 returns its parent and so on.
-func (bc *DAGManager) GetAncestor(hash common.Hash, number, ancestor uint64, maxNonCanonical *uint64) (common.Hash, uint64) {
-	bc.chainmu.Lock()
-	defer bc.chainmu.Unlock()
+func (dm *DAGManager) GetAncestor(hash common.Hash, number, ancestor uint64, maxNonCanonical *uint64) (common.Hash, uint64) {
+	dm.chainmu.Lock()
+	defer dm.chainmu.Unlock()
 
-	return bc.hc.GetAncestor(hash, number, ancestor, maxNonCanonical)
+	return dm.hc.GetAncestor(hash, number, ancestor, maxNonCanonical)
 }
 
 // GetHeaderByNumber retrieves a block header from the database by number,
 // caching it (associated with its hash) if found.
-func (bc *DAGManager) GetHeaderByNumber(number uint64) *types.Header {
-	return bc.hc.GetHeaderByNumber(number)
+func (dm *DAGManager) GetHeaderByNumber(number uint64) *types.Header {
+	return dm.hc.GetHeaderByNumber(number)
 }
 
 // Config retrieves the blockchain's chain configuration.
-func (bc *DAGManager) Config() *params.ChainConfig { return bc.chainConfig }
+func (dm *DAGManager) Config() *params.ChainConfig { return dm.chainConfig }
 
 // Engine retrieves the blockchain's consensus engine.
-func (bc *DAGManager) Engine() consensus.Engine { return bc.engine }
+func (dm *DAGManager) Engine() consensus.Engine { return dm.engine }
 
 // SubscribeRemovedLogsEvent registers a subscription of RemovedLogsEvent.
-func (bc *DAGManager) SubscribeRemovedLogsEvent(ch chan<- RemovedLogsEvent) event.Subscription {
-	return bc.scope.Track(bc.rmLogsFeed.Subscribe(ch))
+func (dm *DAGManager) SubscribeRemovedLogsEvent(ch chan<- RemovedLogsEvent) event.Subscription {
+	return dm.scope.Track(dm.rmLogsFeed.Subscribe(ch))
 }
 
 // SubscribeChainEvent registers a subscription of ChainEvent.
-func (bc *DAGManager) SubscribeChainEvent(ch chan<- ChainEvent) event.Subscription {
-	return bc.scope.Track(bc.chainFeed.Subscribe(ch))
+func (dm *DAGManager) SubscribeChainEvent(ch chan<- ChainEvent) event.Subscription {
+	return dm.scope.Track(dm.chainFeed.Subscribe(ch))
 }
 
 // SubscribeChainHeadEvent registers a subscription of ChainHeadEvent.
-func (bc *DAGManager) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription {
-	return bc.scope.Track(bc.chainHeadFeed.Subscribe(ch))
+func (dm *DAGManager) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription {
+	return dm.scope.Track(dm.chainHeadFeed.Subscribe(ch))
 }
 
 // SubscribeChainSideEvent registers a subscription of ChainSideEvent.
-func (bc *DAGManager) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Subscription {
-	return bc.scope.Track(bc.chainSideFeed.Subscribe(ch))
+func (dm *DAGManager) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Subscription {
+	return dm.scope.Track(dm.chainSideFeed.Subscribe(ch))
 }
 
 // SubscribeLogsEvent registers a subscription of []*types.Log.
-func (bc *DAGManager) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
-	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
+func (dm *DAGManager) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
+	return dm.scope.Track(dm.logsFeed.Subscribe(ch))
 }

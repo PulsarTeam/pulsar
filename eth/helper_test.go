@@ -62,7 +62,7 @@ func newTestProtocolManager(mode downloader.SyncMode, blocks int, generator func
 		blockchain, _ = core.NewDAGManager(db, nil, gspec.Config, engine, vm.Config{})
 	)
 	chain, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, blocks, generator)
-	if _, err := blockchain.InsertChain(chain); err != nil {
+	if _, err := blockchain.InsertBlocks(chain); err != nil {
 		panic(err)
 	}
 
@@ -168,7 +168,7 @@ func newTestPeer(name string, version int, pm *ProtocolManager, shake bool) (*te
 	if shake {
 		var (
 			genesis = pm.blockchain.Genesis()
-			head    = pm.blockchain.CurrentHeader()
+			head    = pm.blockchain.CurrentPivotHeader()
 			td      = pm.blockchain.GetTd(head.Hash(), head.Number.Uint64())
 		)
 		tp.handshake(nil, td, head.Hash(), genesis.Hash())

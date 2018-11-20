@@ -50,14 +50,14 @@ type testBlockChain struct {
 	chainHeadFeed *event.Feed
 }
 
-func (bc *testBlockChain) CurrentBlock() *types.Block {
+func (bc *testBlockChain) CurrentPivotBlock() *types.Block {
 	return types.NewBlock(&types.Header{
 		GasLimit: bc.gasLimit,
 	}, nil, nil, nil)
 }
 
 func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
-	return bc.CurrentBlock()
+	return bc.CurrentPivotBlock()
 }
 
 func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
@@ -265,7 +265,7 @@ func TestInvalidTransactions(t *testing.T) {
 
 	//max fee
 	local, _ := crypto.GenerateKey()
-	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, common.MaxFeeRatio())
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
 	if err := pool.AddRemote(tx); err != ErrFeeLimit{
 		t.Error("expected", ErrFeeLimit, "got", err)
 	}
@@ -274,7 +274,7 @@ func TestInvalidTransactions(t *testing.T) {
 	}
 
 	//type error
-	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, common.MaxFeeRatio())
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
 	from, _ = deriveSender(tx)
 	pool.currentState.SetBalance(from, big.NewInt(0))
 	if err := pool.AddRemote(tx); err != ErrBalanceForRegister{

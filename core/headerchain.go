@@ -104,7 +104,7 @@ func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine c
 			hc.currentHeader.Store(chead)
 		}
 	}
-	hc.currentHeaderHash = hc.CurrentHeader().Hash()
+	hc.currentHeaderHash = hc.CurrentPivotHeader().Hash()
 
 	return hc, nil
 }
@@ -143,7 +143,7 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	if ptd == nil {
 		return NonStatTy, consensus.ErrUnknownAncestor
 	}
-	localTd := hc.GetTd(hc.currentHeaderHash, hc.CurrentHeader().Number.Uint64())
+	localTd := hc.GetTd(hc.currentHeaderHash, hc.CurrentPivotHeader().Number.Uint64())
 	externTd := new(big.Int).Add(header.Difficulty, ptd)
 
 	// Irrelevant of the canonical status, write the td and header to the database
@@ -426,9 +426,9 @@ func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.Header {
 	return hc.GetHeader(hash, number)
 }
 
-// CurrentHeader retrieves the current head header of the canonical chain. The
+// CurrentPivotHeader() retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
-func (hc *HeaderChain) CurrentHeader() *types.Header {
+func (hc *HeaderChain) CurrentPivotHeader() *types.Header {
 	return hc.currentHeader.Load().(*types.Header)
 }
 
@@ -449,11 +449,11 @@ type DeleteCallback func(rawdb.DatabaseDeleter, common.Hash, uint64)
 func (hc *HeaderChain) SetHead(head uint64, delFn DeleteCallback) {
 	height := uint64(0)
 
-	if hdr := hc.CurrentHeader(); hdr != nil {
+	if hdr := hc.CurrentPivotHeader(); hdr != nil {
 		height = hdr.Number.Uint64()
 	}
 	batch := hc.chainDb.NewBatch()
-	for hdr := hc.CurrentHeader(); hdr != nil && hdr.Number.Uint64() > head; hdr = hc.CurrentHeader() {
+	for hdr := hc.CurrentPivotHeader(); hdr != nil && hdr.Number.Uint64() > head; hdr = hc.CurrentPivotHeader() {
 		hash := hdr.Hash()
 		num := hdr.Number.Uint64()
 		if delFn != nil {
@@ -475,10 +475,10 @@ func (hc *HeaderChain) SetHead(head uint64, delFn DeleteCallback) {
 	hc.tdCache.Purge()
 	hc.numberCache.Purge()
 
-	if hc.CurrentHeader() == nil {
+	if hc.CurrentPivotHeader() == nil {
 		hc.currentHeader.Store(hc.genesisHeader)
 	}
-	hc.currentHeaderHash = hc.CurrentHeader().Hash()
+	hc.currentHeaderHash = hc.CurrentPivotHeader().Hash()
 
 	rawdb.WriteHeadHeaderHash(hc.chainDb, hc.currentHeaderHash)
 }

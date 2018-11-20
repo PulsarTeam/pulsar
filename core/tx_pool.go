@@ -150,7 +150,7 @@ const (
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
-	CurrentBlock() *types.Block
+	CurrentPivotBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
 	StateAt(root common.Hash) (*state.StateDB, error)
 
@@ -268,7 +268,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(pool.all)
-	pool.reset(nil, chain.CurrentBlock().Header())
+	pool.reset(nil, chain.CurrentPivotBlock().Header())
 
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
@@ -310,7 +310,7 @@ func (pool *TxPool) loop() {
 	defer journal.Stop()
 
 	// Track the previous head headers for transaction reorgs
-	head := pool.chain.CurrentBlock()
+	head := pool.chain.CurrentPivotBlock()
 
 	// Keep waiting for and reacting to the various events
 	for {
@@ -434,7 +434,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	// Initialize the internal state to the current head
 	if newHead == nil {
-		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
+		newHead = pool.chain.CurrentPivotBlock().Header() // Special case during testing
 	}
 	statedb, err := pool.chain.StateAt(newHead.Root)
 	if err != nil {
@@ -607,7 +607,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
-	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should be valid
+	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should not larger than params.MaxDelegateFeeLimit
 	//notice: at first stage, wo not check times of this op, at the second stage, this op should happen one time for a miner
 	if tx.TxType() == params.DelegateMinerRegisterTx{
 		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
@@ -626,7 +626,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		if err != nil{
 			return ErrTxTypematch
 		}
-		if !common.FeeRatioValidity(fee) {
+		if !common.FeeRatioValidity(fee){
 			return ErrFeeLimit
 		}
 	}

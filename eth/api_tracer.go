@@ -100,7 +100,7 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 	case rpc.PendingBlockNumber:
 		from = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
-		from = api.eth.blockchain.CurrentBlock()
+		from = api.eth.blockchain.CurrentPivotBlock()
 	default:
 		from = api.eth.blockchain.GetBlockByNumber(uint64(start))
 	}
@@ -108,7 +108,7 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 	case rpc.PendingBlockNumber:
 		to = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
-		to = api.eth.blockchain.CurrentBlock()
+		to = api.eth.blockchain.CurrentPivotBlock()
 	default:
 		to = api.eth.blockchain.GetBlockByNumber(uint64(end))
 	}
@@ -345,7 +345,7 @@ func (api *PrivateDebugAPI) TraceBlockByNumber(ctx context.Context, number rpc.B
 	case rpc.PendingBlockNumber:
 		block = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
-		block = api.eth.blockchain.CurrentBlock()
+		block = api.eth.blockchain.CurrentPivotBlock()
 	default:
 		block = api.eth.blockchain.GetBlockByNumber(uint64(number))
 	}

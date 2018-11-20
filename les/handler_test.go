@@ -112,20 +112,20 @@ func testGetBlockHeaders(t *testing.T, protocol int) {
 			&getBlockHeadersData{Origin: hashOrNumber{Number: 0}, Amount: 1},
 			[]common.Hash{bc.GetBlockByNumber(0).Hash()},
 		}, {
-			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentBlock().NumberU64()}, Amount: 1},
-			[]common.Hash{bc.CurrentBlock().Hash()},
+			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentPivotBlock().NumberU64()}, Amount: 1},
+			[]common.Hash{bc.CurrentPivotBlock().Hash()},
 		},
 		// Ensure protocol limits are honored
 		/*{
-			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentBlock().NumberU64() - 1}, Amount: limit + 10, Reverse: true},
-			bc.GetBlockHashesFromHash(bc.CurrentBlock().Hash(), limit),
+			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentPivotBlock().NumberU64() - 1}, Amount: limit + 10, Reverse: true},
+			bc.GetBlockHashesFromHash(bc.CurrentPivotBlock().Hash(), limit),
 		},*/
 		// Check that requesting more than available is handled gracefully
 		{
-			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentBlock().NumberU64() - 4}, Skip: 3, Amount: 3},
+			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentPivotBlock().NumberU64() - 4}, Skip: 3, Amount: 3},
 			[]common.Hash{
-				bc.GetBlockByNumber(bc.CurrentBlock().NumberU64() - 4).Hash(),
-				bc.GetBlockByNumber(bc.CurrentBlock().NumberU64()).Hash(),
+				bc.GetBlockByNumber(bc.CurrentPivotBlock().NumberU64() - 4).Hash(),
+				bc.GetBlockByNumber(bc.CurrentPivotBlock().NumberU64()).Hash(),
 			},
 		}, {
 			&getBlockHeadersData{Origin: hashOrNumber{Number: 4}, Skip: 3, Amount: 3, Reverse: true},
@@ -136,10 +136,10 @@ func testGetBlockHeaders(t *testing.T, protocol int) {
 		},
 		// Check that requesting more than available is handled gracefully, even if mid skip
 		{
-			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentBlock().NumberU64() - 4}, Skip: 2, Amount: 3},
+			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentPivotBlock().NumberU64() - 4}, Skip: 2, Amount: 3},
 			[]common.Hash{
-				bc.GetBlockByNumber(bc.CurrentBlock().NumberU64() - 4).Hash(),
-				bc.GetBlockByNumber(bc.CurrentBlock().NumberU64() - 1).Hash(),
+				bc.GetBlockByNumber(bc.CurrentPivotBlock().NumberU64() - 4).Hash(),
+				bc.GetBlockByNumber(bc.CurrentPivotBlock().NumberU64() - 1).Hash(),
 			},
 		}, {
 			&getBlockHeadersData{Origin: hashOrNumber{Number: 4}, Skip: 2, Amount: 3, Reverse: true},
@@ -153,7 +153,7 @@ func testGetBlockHeaders(t *testing.T, protocol int) {
 			&getBlockHeadersData{Origin: hashOrNumber{Hash: unknown}, Amount: 1},
 			[]common.Hash{},
 		}, {
-			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentBlock().NumberU64() + 1}, Amount: 1},
+			&getBlockHeadersData{Origin: hashOrNumber{Number: bc.CurrentPivotBlock().NumberU64() + 1}, Amount: 1},
 			[]common.Hash{},
 		},
 	}
@@ -198,7 +198,7 @@ func testGetBlockBodies(t *testing.T, protocol int) {
 		{limit, nil, nil, limit}, // The maximum possible blocks should be retrievable
 		//{limit + 1, nil, nil, limit},                                  // No more than the possible block count should be returned
 		{0, []common.Hash{bc.Genesis().Hash()}, []bool{true}, 1},      // The genesis block should be retrievable
-		{0, []common.Hash{bc.CurrentBlock().Hash()}, []bool{true}, 1}, // The chains head block should be retrievable
+		{0, []common.Hash{bc.CurrentPivotBlock().Hash()}, []bool{true}, 1}, // The chains head block should be retrievable
 		{0, []common.Hash{{}}, []bool{false}, 0},                      // A non existent block should not be returned
 
 		// Existing and non-existing blocks interleaved should not cause problems
@@ -221,7 +221,7 @@ func testGetBlockBodies(t *testing.T, protocol int) {
 
 		for j := 0; j < tt.random; j++ {
 			for {
-				num := rand.Int63n(int64(bc.CurrentBlock().NumberU64()))
+				num := rand.Int63n(int64(bc.CurrentPivotBlock().NumberU64()))
 				if !seen[num] {
 					seen[num] = true
 
@@ -265,7 +265,7 @@ func testGetCode(t *testing.T, protocol int) {
 	var codereqs []*CodeReq
 	var codes [][]byte
 
-	for i := uint64(0); i <= bc.CurrentBlock().NumberU64(); i++ {
+	for i := uint64(0); i <= bc.CurrentPivotBlock().NumberU64(); i++ {
 		header := bc.GetHeaderByNumber(i)
 		req := &CodeReq{
 			BHash:  header.Hash(),
@@ -298,7 +298,7 @@ func testGetReceipt(t *testing.T, protocol int) {
 
 	// Collect the hashes to request, and the response to expect
 	hashes, receipts := []common.Hash{}, []types.Receipts{}
-	for i := uint64(0); i <= bc.CurrentBlock().NumberU64(); i++ {
+	for i := uint64(0); i <= bc.CurrentPivotBlock().NumberU64(); i++ {
 		block := bc.GetBlockByNumber(i)
 
 		hashes = append(hashes, block.Hash())
@@ -331,7 +331,7 @@ func testGetProofs(t *testing.T, protocol int) {
 	proofsV2 := light.NewNodeSet()
 
 	accounts := []common.Address{testBankAddress, acc1Addr, acc2Addr, {}}
-	for i := uint64(0); i <= bc.CurrentBlock().NumberU64(); i++ {
+	for i := uint64(0); i <= bc.CurrentPivotBlock().NumberU64(); i++ {
 		header := bc.GetHeaderByNumber(i)
 		root := header.Root
 		trie, _ := trie.New(root, trie.NewDatabase(db))
@@ -538,7 +538,7 @@ func TestTransactionStatusLes2(t *testing.T) {
 		block.AddTx(tx1)
 		block.AddTx(tx2)
 	})
-	if _, err := chain.InsertChain(gchain); err != nil {
+	if _, err := chain.InsertBlocks(gchain); err != nil {
 		panic(err)
 	}
 	// wait until TxPool processes the inserted block
@@ -559,7 +559,7 @@ func TestTransactionStatusLes2(t *testing.T) {
 
 	// create a reorg that rolls them back
 	gchain, _ = core.GenerateChain(params.TestChainConfig, chain.GetBlockByNumber(0), ethash.NewFaker(), db, 2, func(i int, block *core.BlockGen) {})
-	if _, err := chain.InsertChain(gchain); err != nil {
+	if _, err := chain.InsertBlocks(gchain); err != nil {
 		panic(err)
 	}
 	// wait until TxPool processes the reorg

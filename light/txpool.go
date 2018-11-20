@@ -99,8 +99,8 @@ func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBacke
 		relay:       relay,
 		odr:         chain.Odr(),
 		chainDb:     chain.Odr().Database(),
-		head:        chain.CurrentHeader().Hash(),
-		clearIdx:    chain.CurrentHeader().Number.Uint64(),
+		head:        chain.CurrentPivotHeader().Hash(),
+		clearIdx:    chain.CurrentPivotHeader().Number.Uint64(),
 	}
 	// Subscribe events from blockchain
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
@@ -111,7 +111,7 @@ func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBacke
 
 // currentState returns the light state of the current head header
 func (pool *TxPool) currentState(ctx context.Context) *state.StateDB {
-	return NewState(ctx, pool.chain.CurrentHeader(), pool.odr)
+	return NewState(ctx, pool.chain.CurrentPivotHeader(), pool.odr)
 }
 
 // GetNonce returns the "pending" nonce of a given address. It always queries

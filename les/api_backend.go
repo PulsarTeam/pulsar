@@ -47,8 +47,8 @@ func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
 
-func (b *LesApiBackend) CurrentBlock() *types.Block {
-	return types.NewBlockWithHeader(b.eth.DAGManager().CurrentHeader())
+func (b *LesApiBackend) CurrentPivotBlock() *types.Block {
+	return types.NewBlockWithHeader(b.eth.DAGManager().CurrentPivotHeader())
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {
@@ -58,7 +58,7 @@ func (b *LesApiBackend) SetHead(number uint64) {
 
 func (b *LesApiBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
 	if blockNr == rpc.LatestBlockNumber || blockNr == rpc.PendingBlockNumber {
-		return b.eth.blockchain.CurrentHeader(), nil
+		return b.eth.blockchain.CurrentPivotHeader(), nil
 	}
 
 	return b.eth.blockchain.GetHeaderByNumberOdr(ctx, uint64(blockNr))

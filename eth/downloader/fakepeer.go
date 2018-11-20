@@ -44,7 +44,7 @@ func NewFakePeer(id string, db ethdb.Database, hc *core.HeaderChain, dl *Downloa
 // Head implements downloader.Peer, returning the current head hash and number
 // of the best known header.
 func (p *FakePeer) Head() (common.Hash, *big.Int) {
-	header := p.hc.CurrentHeader()
+	header := p.hc.CurrentPivotHeader()
 	return header.Hash(), header.Number
 }
 

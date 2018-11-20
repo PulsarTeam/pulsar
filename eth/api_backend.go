@@ -48,8 +48,8 @@ func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
 
-func (b *EthAPIBackend) CurrentBlock() *types.Block {
-	return b.eth.blockchain.CurrentBlock()
+func (b *EthAPIBackend) CurrentPivotBlock() *types.Block {
+	return b.eth.blockchain.CurrentPivotBlock()
 }
 
 func (b *EthAPIBackend) SetHead(number uint64) {
@@ -65,7 +65,7 @@ func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNum
 	}
 	// Otherwise resolve and return the block
 	if blockNr == rpc.LatestBlockNumber {
-		return b.eth.blockchain.CurrentBlock().Header(), nil
+		return b.eth.blockchain.CurrentPivotBlock().Header(), nil
 	}
 	return b.eth.blockchain.GetHeaderByNumber(uint64(blockNr)), nil
 }
@@ -78,7 +78,7 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumb
 	}
 	// Otherwise resolve and return the block
 	if blockNr == rpc.LatestBlockNumber {
-		return b.eth.blockchain.CurrentBlock(), nil
+		return b.eth.blockchain.CurrentPivotBlock(), nil
 	}
 	return b.eth.blockchain.GetBlockByNumber(uint64(blockNr)), nil
 }

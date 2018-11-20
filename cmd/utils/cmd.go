@@ -161,7 +161,7 @@ func ImportChain(chain *core.DAGManager, fn string) error {
 			log.Info("Skipping batch as all blocks present", "batch", batch, "first", blocks[0].Hash(), "last", blocks[i-1].Hash())
 			continue
 		}
-		if _, err := chain.InsertChain(missing); err != nil {
+		if _, err := chain.InsertBlocks(missing); err != nil {
 			return fmt.Errorf("invalid block %d: %v", n, err)
 		}
 	}
@@ -169,7 +169,7 @@ func ImportChain(chain *core.DAGManager, fn string) error {
 }
 
 func missingBlocks(chain *core.DAGManager, blocks []*types.Block) []*types.Block {
-	head := chain.CurrentBlock()
+	head := chain.CurrentPivotBlock()
 	for i, block := range blocks {
 		// If we're behind the chain head, only check block, state is available at head
 		if head.NumberU64() > block.NumberU64() {

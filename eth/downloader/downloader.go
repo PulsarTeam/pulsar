@@ -158,8 +158,8 @@ type LightChain interface {
 	// GetHeaderByHash retrieves a header from the local chain.
 	GetHeaderByHash(common.Hash) *types.Header
 
-	// CurrentHeader retrieves the head header from the local chain.
-	CurrentHeader() *types.Header
+	// CurrentPivotHeader() retrieves the head header from the local chain.
+	CurrentPivotHeader() *types.Header
 
 	// GetTd returns the total difficulty of a local block.
 	GetTd(common.Hash, uint64) *big.Int
@@ -182,7 +182,7 @@ type DAGManager interface {
 	GetBlockByHash(common.Hash) *types.Block
 
 	// CurrentBlock retrieves the head block from the local chain.
-	CurrentBlock() *types.Block
+	CurrentPivotBlock() *types.Block
 
 	// CurrentFastBlock retrieves the head fast block from the local chain.
 	CurrentFastBlock() *types.Block
@@ -191,7 +191,7 @@ type DAGManager interface {
 	FastSyncCommitHead(common.Hash) error
 
 	// InsertChain inserts a batch of blocks into the local chain.
-	InsertChain(types.Blocks) (int, error)
+	InsertBlocks(types.Blocks) (int, error)
 
 	// InsertReceiptChain inserts a batch of receipts into the local chain.
 	InsertReceiptChain(types.Blocks, []types.Receipts) (int, error)
@@ -248,11 +248,11 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 	current := uint64(0)
 	switch d.mode {
 	case FullSync:
-		current = d.blockchain.CurrentBlock().NumberU64()
+		current = d.blockchain.CurrentPivotBlock().NumberU64()
 	case FastSync:
 		current = d.blockchain.CurrentFastBlock().NumberU64()
 	case LightSync:
-		current = d.lightchain.CurrentHeader().Number.Uint64()
+		current = d.lightchain.CurrentPivotHeader().Number.Uint64()
 	}
 	return ethereum.SyncProgress{
 		StartingBlock: d.syncStatsChainOrigin,
@@ -591,10 +591,10 @@ func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, height uint64) (uint64, error) {
 	// Figure out the valid ancestor range to prevent rewrite attacks
-	floor, ceil := int64(-1), d.lightchain.CurrentHeader().Number.Uint64()
+	floor, ceil := int64(-1), d.lightchain.CurrentPivotHeader().Number.Uint64()
 
 	if d.mode == FullSync {
-		ceil = d.blockchain.CurrentBlock().NumberU64()
+		ceil = d.blockchain.CurrentPivotBlock().NumberU64()
 	} else if d.mode == FastSync {
 		ceil = d.blockchain.CurrentFastBlock().NumberU64()
 	}
@@ -1167,19 +1167,19 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 			for i, header := range rollback {
 				hashes[i] = header.Hash()
 			}
-			lastHeader, lastFastBlock, lastBlock := d.lightchain.CurrentHeader().Number, common.Big0, common.Big0
+			lastHeader, lastFastBlock, lastBlock := d.lightchain.CurrentPivotHeader().Number, common.Big0, common.Big0
 			if d.mode != LightSync {
 				lastFastBlock = d.blockchain.CurrentFastBlock().Number()
-				lastBlock = d.blockchain.CurrentBlock().Number()
+				lastBlock = d.blockchain.CurrentPivotBlock().Number()
 			}
 			d.lightchain.Rollback(hashes)
 			curFastBlock, curBlock := common.Big0, common.Big0
 			if d.mode != LightSync {
 				curFastBlock = d.blockchain.CurrentFastBlock().Number()
-				curBlock = d.blockchain.CurrentBlock().Number()
+				curBlock = d.blockchain.CurrentPivotBlock().Number()
 			}
 			log.Warn("Rolled back headers", "count", len(hashes),
-				"header", fmt.Sprintf("%d->%d", lastHeader, d.lightchain.CurrentHeader().Number),
+				"header", fmt.Sprintf("%d->%d", lastHeader, d.lightchain.CurrentPivotHeader().Number),
 				"fast", fmt.Sprintf("%d->%d", lastFastBlock, curFastBlock),
 				"block", fmt.Sprintf("%d->%d", lastBlock, curBlock))
 		}
@@ -1216,7 +1216,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 				// L: Request new headers up from 11 (R's TD was higher, it must have something)
 				// R: Nothing to give
 				if d.mode != LightSync {
-					head := d.blockchain.CurrentBlock()
+					head := d.blockchain.CurrentPivotBlock()
 					if !gotHeaders && td.Cmp(d.blockchain.GetTd(head.Hash(), head.NumberU64())) > 0 {
 						return errStallingPeer
 					}
@@ -1229,7 +1229,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 				// queued for processing when the header download completes. However, as long as the
 				// peer gave us something useful, we're already happy/progressed (above check).
 				if d.mode == FastSync || d.mode == LightSync {
-					head := d.lightchain.CurrentHeader()
+					head := d.lightchain.CurrentPivotHeader()
 					if td.Cmp(d.lightchain.GetTd(head.Hash(), head.Number.Uint64())) > 0 {
 						return errStallingPeer
 					}
@@ -1358,7 +1358,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	for i, result := range results {
 		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 	}
-	if index, err := d.blockchain.InsertChain(blocks); err != nil {
+	if index, err := d.blockchain.InsertBlocks(blocks); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 		return errInvalidChain
 	}

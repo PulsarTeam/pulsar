@@ -42,13 +42,13 @@ func TestNodeIterator(t *testing.T) {
 	gspec.MustCommit(lightdb)
 	blockchain, _ := core.NewDAGManager(fulldb, nil, params.TestChainConfig, ethash.NewFullFaker(), vm.Config{})
 	gchain, _ := core.GenerateChain(params.TestChainConfig, genesis, ethash.NewFaker(), fulldb, 4, testChainGen)
-	if _, err := blockchain.InsertChain(gchain); err != nil {
+	if _, err := blockchain.InsertBlocks(gchain); err != nil {
 		panic(err)
 	}
 
 	ctx := context.Background()
 	odr := &testOdr{sdb: fulldb, ldb: lightdb}
-	head := blockchain.CurrentHeader()
+	head := blockchain.CurrentPivotHeader()
 	lightTrie, _ := NewStateDatabase(ctx, head, odr).OpenTrie(head.Root)
 	fullTrie, _ := state.NewDatabase(fulldb).OpenTrie(head.Root)
 	if err := diffTries(fullTrie, lightTrie); err != nil {

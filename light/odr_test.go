@@ -254,7 +254,7 @@ func testChainOdr(t *testing.T, protocol int, fn odrTestFn) {
 	// Assemble the test environment
 	blockchain, _ := core.NewDAGManager(sdb, nil, params.TestChainConfig, ethash.NewFullFaker(), vm.Config{})
 	gchain, _ := core.GenerateChain(params.TestChainConfig, genesis, ethash.NewFaker(), sdb, 4, testChainGen)
-	if _, err := blockchain.InsertChain(gchain); err != nil {
+	if _, err := blockchain.InsertBlocks(gchain); err != nil {
 		t.Fatal(err)
 	}
 
@@ -272,7 +272,7 @@ func testChainOdr(t *testing.T, protocol int, fn odrTestFn) {
 	}
 
 	test := func(expFail int) {
-		for i := uint64(0); i <= blockchain.CurrentHeader().Number.Uint64(); i++ {
+		for i := uint64(0); i <= blockchain.CurrentPivotHeader().Number.Uint64(); i++ {
 			bhash := rawdb.ReadCanonicalHash(sdb, i)
 			b1, err := fn(NoOdr, sdb, blockchain, nil, bhash)
 			if err != nil {

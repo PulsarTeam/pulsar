@@ -121,7 +121,7 @@ func (t *BlockTest) Run() error {
 	if err != nil {
 		return err
 	}
-	cmlast := chain.CurrentBlock().Hash()
+	cmlast := chain.CurrentPivotBlock().Hash()
 	if common.Hash(t.json.BestBlock) != cmlast {
 		return fmt.Errorf("last block hash validation mismatch: want: %x, have: %x", t.json.BestBlock, cmlast)
 	}
@@ -177,7 +177,7 @@ func (t *BlockTest) insertBlocks(blockchain *core.DAGManager) ([]btBlock, error)
 		}
 		// RLP decoding worked, try to insert into chain:
 		blocks := types.Blocks{cb}
-		i, err := blockchain.InsertChain(blocks)
+		i, err := blockchain.InsertBlocks(blocks)
 		if err != nil {
 			if b.BlockHeader == nil {
 				continue // OK - block is supposed to be invalid, continue with next block
@@ -278,7 +278,7 @@ func (t *BlockTest) validateImportedHeaders(cm *core.DAGManager, validBlocks []b
 	// block-by-block, so we can only validate imported headers after
 	// all blocks have been processed by DAG Manager, as they may not
 	// be part of the longest chain until last block is imported.
-	for b := cm.CurrentBlock(); b != nil && b.NumberU64() != 0; b = cm.GetBlockByHash(b.Header().ParentHash) {
+	for b := cm.CurrentPivotBlock(); b != nil && b.NumberU64() != 0; b = cm.GetBlockByHash(b.Header().ParentHash) {
 		if err := validateHeader(bmap[b.Hash()].BlockHeader, b.Header()); err != nil {
 			return fmt.Errorf("Imported block header validation failed: %v", err)
 		}

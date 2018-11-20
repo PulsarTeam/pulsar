@@ -166,7 +166,7 @@ func newTestProtocolManager(lightSync bool, blocks int, generator func(int, *cor
 		bloomIndexer.Start(blockchain)
 
 		gchain, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, blocks, generator)
-		if _, err := blockchain.InsertChain(gchain); err != nil {
+		if _, err := blockchain.InsertBlocks(gchain); err != nil {
 			panic(err)
 		}
 		chain = blockchain
@@ -247,7 +247,7 @@ func newTestPeer(t *testing.T, name string, version int, pm *ProtocolManager, sh
 	if shake {
 		var (
 			genesis = pm.blockchain.Genesis()
-			head    = pm.blockchain.CurrentHeader()
+			head    = pm.blockchain.CurrentPivotHeader()
 			td      = pm.blockchain.GetTd(head.Hash(), head.Number.Uint64())
 		)
 		tp.handshake(t, td, head.Hash(), head.Number.Uint64(), genesis.Hash())
