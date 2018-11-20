@@ -110,7 +110,7 @@ type Downloader struct {
 	syncStatsLock        sync.RWMutex // Lock protecting the sync stats fields
 
 	lightchain LightChain
-	blockchain BlockChain
+	blockchain DAGManager
 
 	// Callbacks
 	dropPeer peerDropFn // Drops a peer for misbehaving
@@ -171,8 +171,8 @@ type LightChain interface {
 	Rollback([]common.Hash)
 }
 
-// BlockChain encapsulates functions required to sync a (full or fast) blockchain.
-type BlockChain interface {
+// DAGManager encapsulates functions required to sync a (full or fast) blockchain.
+type DAGManager interface {
 	LightChain
 
 	// HasBlock verifies a block's presence in the local chain.
@@ -198,7 +198,7 @@ type BlockChain interface {
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
-func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn) *Downloader {
+func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGManager, lightchain LightChain, dropPeer peerDropFn) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}

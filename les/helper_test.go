@@ -145,7 +145,7 @@ func newTestProtocolManager(lightSync bool, blocks int, generator func(int, *cor
 			Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
 		}
 		genesis = gspec.MustCommit(db)
-		chain   BlockChain
+		chain   DAGManager
 	)
 	if peers == nil {
 		peers = newPeerSet()
@@ -154,7 +154,7 @@ func newTestProtocolManager(lightSync bool, blocks int, generator func(int, *cor
 	if lightSync {
 		chain, _ = light.NewLightChain(odr, gspec.Config, engine)
 	} else {
-		blockchain, _ := core.NewBlockChain(db, nil, gspec.Config, engine, vm.Config{})
+		blockchain, _ := core.NewDAGManager(db, nil, gspec.Config, engine, vm.Config{})
 
 		chtIndexer := light.NewChtIndexer(db, false)
 		chtIndexer.Start(blockchain)

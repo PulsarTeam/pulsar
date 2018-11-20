@@ -48,7 +48,7 @@ func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 }
 
 func (b *LesApiBackend) CurrentBlock() *types.Block {
-	return types.NewBlockWithHeader(b.eth.BlockChain().CurrentHeader())
+	return types.NewBlockWithHeader(b.eth.DAGManager().CurrentHeader())
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {
