@@ -35,7 +35,7 @@ type BlockGen struct {
 	i           int
 	parent      *types.Block
 	chain       []*types.Block
-	chainReader consensus.ChainReader
+	chainReader consensus.BlockReader
 	header      *types.Header
 	statedb     *state.StateDB
 
@@ -210,7 +210,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	return blocks, receipts
 }
 
-func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
+func makeHeader(chain consensus.BlockReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
 	var time *big.Int
 	if parent.Time() == nil {
 		time = big.NewInt(10)

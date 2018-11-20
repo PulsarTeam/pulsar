@@ -125,7 +125,7 @@ func TestSetupGenesis(t *testing.T) {
 
 				blocks, _ := GenerateChain(oldcustomg.Config, genesis, ethash.NewFaker(), db, 4, nil)
 				bc.InsertBlocks(blocks)
-				bc.CurrentPivotBlock()
+				bc.CurrentBlock()
 				// This should return a compatibility error.
 				return SetupGenesisBlock(db, &customg)
 			},

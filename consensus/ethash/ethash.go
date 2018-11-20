@@ -203,7 +203,7 @@ func NewShared() *Ethash {
 }
 
 // calculate the pos target.
-func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 
 	if header.Difficulty.Int64() < ethash.minDifficulty {
 		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
@@ -240,7 +240,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.ChainReader, header *types.Head
 }
 
 // returns the pos weight in a certain cycle.
-func (ethash *Ethash) PosWeight(chain consensus.ChainReader, header *types.Header, headers []*types.Header) uint32 {
+func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Header, headers []*types.Header) uint32 {
 	if header.Number.Uint64() < core.MinMatureBlockNumber() {
 		return uint32(initPosWeight)
 	}
@@ -274,7 +274,7 @@ func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header
 
 
 // returns the total pow production in the previous mature cycle.
-func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPowProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	for i := start; i < end; i++ {
@@ -291,7 +291,7 @@ func (ethash *Ethash) GetPowProduction(chain consensus.ChainReader, header *type
 }
 
 // returns the total pos production in the previous mature cycle.
-func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
 	for i := start; i < end; i++ {
@@ -308,7 +308,7 @@ func (ethash *Ethash) GetPosProduction(chain consensus.ChainReader, header *type
 }
 
 // returns the total supply of pos in all previous mature cycles.
-func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
 	for i := uint64(0); i < end; i++ {
@@ -325,7 +325,7 @@ func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.ChainReader, heade
 }
 
 // returns the total supply of pow in all previous mature cycles.
-func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.ChainReader, header *types.Header, headers []*types.Header) *big.Int {
+func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPow := big.NewInt(0)
 	for i := uint64(0); i < end; i++ {
@@ -380,7 +380,7 @@ func (ethash *Ethash) Hashrate() float64 {
 
 // APIs implements consensus.Engine, returning the user facing RPC APIs. Currently
 // that is empty.
-func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
+func (ethash *Ethash) APIs(chain consensus.BlockReader) []rpc.API {
 	return nil
 }
 

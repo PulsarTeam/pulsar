@@ -77,7 +77,7 @@ type DAGManager interface {
 	HasHeader(hash common.Hash, number uint64) bool
 	GetHeader(hash common.Hash, number uint64) *types.Header
 	GetHeaderByHash(hash common.Hash) *types.Header
-	CurrentPivotHeader() *types.Header
+	CurrentHeader() *types.Header
 	GetTd(hash common.Hash, number uint64) *big.Int
 	State() (*state.StateDB, error)
 	InsertHeaderChain(chain []*types.Header, checkFreq int) (int, error)
@@ -273,7 +273,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Execute the LES handshake
 	var (
 		genesis = pm.blockchain.Genesis()
-		head    = pm.blockchain.CurrentPivotHeader()
+		head    = pm.blockchain.CurrentHeader()
 		hash    = head.Hash()
 		number  = head.Number.Uint64()
 		td      = pm.blockchain.GetTd(hash, number)
@@ -1196,7 +1196,7 @@ type NodeInfo struct {
 
 // NodeInfo retrieves some protocol metadata about the running host node.
 func (self *ProtocolManager) NodeInfo() *NodeInfo {
-	head := self.blockchain.CurrentPivotHeader()
+	head := self.blockchain.CurrentHeader()
 	hash := head.Hash()
 
 	return &NodeInfo{

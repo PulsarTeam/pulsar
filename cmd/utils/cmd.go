@@ -169,7 +169,7 @@ func ImportChain(chain *core.DAGManager, fn string) error {
 }
 
 func missingBlocks(chain *core.DAGManager, blocks []*types.Block) []*types.Block {
-	head := chain.CurrentPivotBlock()
+	head := chain.CurrentBlock()
 	for i, block := range blocks {
 		// If we're behind the chain head, only check block, state is available at head
 		if head.NumberU64() > block.NumberU64() {

@@ -44,7 +44,7 @@ func testStatusMsgErrors(t *testing.T, protocol int) {
 	pm, _ := newTestProtocolManagerMust(t, downloader.FullSync, 0, nil, nil)
 	var (
 		genesis = pm.blockchain.Genesis()
-		head    = pm.blockchain.CurrentPivotHeader()
+		head    = pm.blockchain.CurrentHeader()
 		td      = pm.blockchain.GetTd(head.Hash(), head.Number.Uint64())
 	)
 	defer pm.Stop()

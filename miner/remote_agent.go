@@ -41,7 +41,7 @@ type RemoteAgent struct {
 	workCh   chan *Work
 	returnCh chan<- *Result
 
-	chain       consensus.ChainReader
+	chain       consensus.BlockReader
 	engine      consensus.Engine
 	currentWork *Work
 	work        map[common.Hash]*Work
@@ -52,7 +52,7 @@ type RemoteAgent struct {
 	running int32 // running indicates whether the agent is active. Call atomically
 }
 
-func NewRemoteAgent(chain consensus.ChainReader, engine consensus.Engine) *RemoteAgent {
+func NewRemoteAgent(chain consensus.BlockReader, engine consensus.Engine) *RemoteAgent {
 	return &RemoteAgent{
 		chain:    chain,
 		engine:   engine,

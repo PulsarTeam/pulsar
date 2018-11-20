@@ -70,14 +70,14 @@ func (ap *testerAccountPool) address(account string) common.Address {
 	return crypto.PubkeyToAddress(ap.accounts[account].PublicKey)
 }
 
-// testerChainReader implements consensus.ChainReader to access the genesis
+// testerChainReader implements consensus.BlockReader to access the genesis
 // block. All other methods and requests will panic.
 type testerChainReader struct {
 	db ethdb.Database
 }
 
 func (r *testerChainReader) Config() *params.ChainConfig                 { return params.AllCliqueProtocolChanges }
-func (r *testerChainReader) CurrentPivotHeader() *types.Header                { panic("not supported") }
+func (r *testerChainReader) CurrentHeader() *types.Header                { panic("not supported") }
 func (r *testerChainReader) GetHeader(common.Hash, uint64) *types.Header { panic("not supported") }
 func (r *testerChainReader) GetBlock(common.Hash, uint64) *types.Block   { panic("not supported") }
 func (r *testerChainReader) GetHeaderByHash(common.Hash) *types.Header   { panic("not supported") }

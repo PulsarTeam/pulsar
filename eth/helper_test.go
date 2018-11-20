@@ -168,7 +168,7 @@ func newTestPeer(name string, version int, pm *ProtocolManager, shake bool) (*te
 	if shake {
 		var (
 			genesis = pm.blockchain.Genesis()
-			head    = pm.blockchain.CurrentPivotHeader()
+			head    = pm.blockchain.CurrentHeader()
 			td      = pm.blockchain.GetTd(head.Hash(), head.Number.Uint64())
 		)
 		tp.handshake(nil, td, head.Hash(), genesis.Hash())

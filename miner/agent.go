@@ -33,13 +33,13 @@ type CpuAgent struct {
 	quitCurrentOp chan struct{}
 	returnCh      chan<- *Result
 
-	chain  consensus.ChainReader
+	chain  consensus.BlockReader
 	engine consensus.Engine
 
 	isMining int32 // isMining indicates whether the agent is currently mining
 }
 
-func NewCpuAgent(chain consensus.ChainReader, engine consensus.Engine) *CpuAgent {
+func NewCpuAgent(chain consensus.BlockReader, engine consensus.Engine) *CpuAgent {
 	miner := &CpuAgent{
 		chain:  chain,
 		engine: engine,

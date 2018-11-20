@@ -50,14 +50,14 @@ type testBlockChain struct {
 	chainHeadFeed *event.Feed
 }
 
-func (bc *testBlockChain) CurrentPivotBlock() *types.Block {
+func (bc *testBlockChain) CurrentBlock() *types.Block {
 	return types.NewBlock(&types.Header{
 		GasLimit: bc.gasLimit,
 	}, nil, nil, nil)
 }
 
 func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
-	return bc.CurrentPivotBlock()
+	return bc.CurrentBlock()
 }
 
 func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {

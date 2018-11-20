@@ -68,7 +68,7 @@ type Backend interface {
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 
 	ChainConfig() *params.ChainConfig
-	CurrentPivotBlock() *types.Block
+	CurrentBlock() *types.Block
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

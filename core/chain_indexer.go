@@ -49,8 +49,8 @@ type ChainIndexerBackend interface {
 
 // ChainIndexerChain interface is used for connecting the indexer to a blockchain
 type ChainIndexerChain interface {
-	// CurrentPivotHeader() retrieves the latest locally known header.
-	CurrentPivotHeader() *types.Header
+	// CurrentHeader() retrieves the latest locally known header.
+	CurrentHeader() *types.Header
 
 	// SubscribeChainEvent subscribes to new head header notifications.
 	SubscribeChainEvent(ch chan<- ChainEvent) event.Subscription
@@ -130,7 +130,7 @@ func (c *ChainIndexer) Start(chain ChainIndexerChain) {
 	events := make(chan ChainEvent, 10)
 	sub := chain.SubscribeChainEvent(events)
 
-	go c.eventLoop(chain.CurrentPivotHeader(), events, sub)
+	go c.eventLoop(chain.CurrentHeader(), events, sub)
 }
 
 // Close tears down all goroutines belonging to the indexer and returns any error

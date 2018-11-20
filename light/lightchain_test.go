@@ -97,14 +97,14 @@ func testFork(t *testing.T, LightChain *LightChain, i, n int, comparator func(td
 		t.Errorf("chain content mismatch at %d: have hash %v, want hash %v", i, hash2, hash1)
 	}
 	// Extend the newly created chain
-	headerChainB := makeHeaderChain(LightChain2.CurrentPivotHeader(), n, db, forkSeed)
+	headerChainB := makeHeaderChain(LightChain2.CurrentHeader(), n, db, forkSeed)
 	if _, err := LightChain2.InsertHeaderChain(headerChainB, 1); err != nil {
 		t.Fatalf("failed to insert forking chain: %v", err)
 	}
 	// Sanity check that the forked chain can be imported into the original
 	var tdPre, tdPost *big.Int
 
-	tdPre = LightChain.GetTdByHash(LightChain.CurrentPivotHeader().Hash())
+	tdPre = LightChain.GetTdByHash(LightChain.CurrentHeader().Hash())
 	if err := testHeaderChainImport(headerChainB, LightChain); err != nil {
 		t.Fatalf("failed to import forked header chain: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestBrokenHeaderChain(t *testing.T) {
 		t.Fatalf("failed to make new canonical chain: %v", err)
 	}
 	// Create a forked chain, and try to insert with a missing link
-	chain := makeHeaderChain(LightChain.CurrentPivotHeader(), 5, db, forkSeed)[1:]
+	chain := makeHeaderChain(LightChain.CurrentHeader(), 5, db, forkSeed)[1:]
 	if err := testHeaderChainImport(chain, LightChain); err == nil {
 		t.Errorf("broken header chain not reported")
 	}
@@ -295,15 +295,15 @@ func testReorg(t *testing.T, first, second []int, td int64) {
 	bc.InsertHeaderChain(makeHeaderChainWithDiff(bc.genesisBlock, first, 11), 1)
 	bc.InsertHeaderChain(makeHeaderChainWithDiff(bc.genesisBlock, second, 22), 1)
 	// Check that the chain is valid number and link wise
-	prev := bc.CurrentPivotHeader()
-	for header := bc.GetHeaderByNumber(bc.CurrentPivotHeader().Number.Uint64() - 1); header.Number.Uint64() != 0; prev, header = header, bc.GetHeaderByNumber(header.Number.Uint64()-1) {
+	prev := bc.CurrentHeader()
+	for header := bc.GetHeaderByNumber(bc.CurrentHeader().Number.Uint64() - 1); header.Number.Uint64() != 0; prev, header = header, bc.GetHeaderByNumber(header.Number.Uint64()-1) {
 		if prev.ParentHash != header.Hash() {
 			t.Errorf("parent header hash mismatch: have %x, want %x", prev.ParentHash, header.Hash())
 		}
 	}
 	// Make sure the chain total difficulty is the correct one
 	want := new(big.Int).Add(bc.genesisBlock.Difficulty(), big.NewInt(td))
-	if have := bc.GetTdByHash(bc.CurrentPivotHeader().Hash()); have.Cmp(want) != 0 {
+	if have := bc.GetTdByHash(bc.CurrentHeader().Hash()); have.Cmp(want) != 0 {
 		t.Errorf("total difficulty mismatch: have %v, want %v", have, want)
 	}
 }
@@ -332,8 +332,8 @@ func TestReorgBadHeaderHashes(t *testing.T) {
 	if _, err := bc.InsertHeaderChain(headers, 1); err != nil {
 		t.Fatalf("failed to import headers: %v", err)
 	}
-	if bc.CurrentPivotHeader().Hash() != headers[3].Hash() {
-		t.Errorf("last header hash mismatch: have: %x, want %x", bc.CurrentPivotHeader().Hash(), headers[3].Hash())
+	if bc.CurrentHeader().Hash() != headers[3].Hash() {
+		t.Errorf("last header hash mismatch: have: %x, want %x", bc.CurrentHeader().Hash(), headers[3].Hash())
 	}
 	core.BadHashes[headers[3].Hash()] = true
 	defer func() { delete(core.BadHashes, headers[3].Hash()) }()
@@ -343,7 +343,7 @@ func TestReorgBadHeaderHashes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create new chain manager: %v", err)
 	}
-	if ncm.CurrentPivotHeader().Hash() != headers[2].Hash() {
-		t.Errorf("last header hash mismatch: have: %x, want %x", ncm.CurrentPivotHeader().Hash(), headers[2].Hash())
+	if ncm.CurrentHeader().Hash() != headers[2].Hash() {
+		t.Errorf("last header hash mismatch: have: %x, want %x", ncm.CurrentHeader().Hash(), headers[2].Hash())
 	}
 }

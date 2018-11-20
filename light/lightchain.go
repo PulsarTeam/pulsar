@@ -153,7 +153,7 @@ func (self *LightChain) loadLastState() error {
 	}
 
 	// Issue a status log and return
-	header := self.hc.CurrentPivotHeader()
+	header := self.hc.CurrentHeader()
 	headerTd := self.GetTd(header.Hash(), header.Number.Uint64())
 	log.Info("Loaded most recent local header", "number", header.Number, "hash", header.Hash(), "td", headerTd)
 
@@ -172,7 +172,7 @@ func (bc *LightChain) SetHead(head uint64) {
 
 // GasLimit returns the gas limit of the current HEAD block.
 func (self *LightChain) GasLimit() uint64 {
-	return self.hc.CurrentPivotHeader().GasLimit
+	return self.hc.CurrentHeader().GasLimit
 }
 
 // Reset purges the entire blockchain, restoring it to its genesis state.
@@ -319,7 +319,7 @@ func (self *LightChain) Rollback(chain []common.Hash) {
 	for i := len(chain) - 1; i >= 0; i-- {
 		hash := chain[i]
 
-		if head := self.hc.CurrentPivotHeader(); head.Hash() == hash {
+		if head := self.hc.CurrentHeader(); head.Hash() == hash {
 			self.hc.SetCurrentHeader(self.GetHeader(head.ParentHash, head.Number.Uint64()-1))
 		}
 	}
@@ -331,7 +331,7 @@ func (self *LightChain) postChainEvents(events []interface{}) {
 	for _, event := range events {
 		switch ev := event.(type) {
 		case core.ChainEvent:
-			if self.CurrentPivotHeader().Hash() == ev.Hash {
+			if self.CurrentHeader().Hash() == ev.Hash {
 				self.chainHeadFeed.Send(core.ChainHeadEvent{Block: ev.Block})
 			}
 			self.chainFeed.Send(ev)
@@ -391,10 +391,10 @@ func (self *LightChain) InsertHeaderChain(chain []*types.Header, checkFreq int) 
 	return i, err
 }
 
-// CurrentPivotHeader() retrieves the current head header of the canonical chain. The
+// CurrentHeader() retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
-func (self *LightChain) CurrentPivotHeader() *types.Header {
-	return self.hc.CurrentPivotHeader()
+func (self *LightChain) CurrentHeader() *types.Header {
+	return self.hc.CurrentHeader()
 }
 
 // GetTd retrieves a block's total difficulty in the canonical chain from the
@@ -467,14 +467,14 @@ func (self *LightChain) SyncCht(ctx context.Context) bool {
 	if self.odr.ChtIndexer() == nil {
 		return false
 	}
-	headNum := self.CurrentPivotHeader().Number.Uint64()
+	headNum := self.CurrentHeader().Number.Uint64()
 	chtCount, _, _ := self.odr.ChtIndexer().Sections()
 	if headNum+1 < chtCount*CHTFrequencyClient {
 		num := chtCount*CHTFrequencyClient - 1
 		header, err := GetHeaderByNumber(ctx, self.odr, num)
 		if header != nil && err == nil {
 			self.mu.Lock()
-			if self.hc.CurrentPivotHeader().Number.Uint64() < header.Number.Uint64() {
+			if self.hc.CurrentHeader().Number.Uint64() < header.Number.Uint64() {
 				self.hc.SetCurrentHeader(header)
 			}
 			self.mu.Unlock()

@@ -60,7 +60,7 @@ var cachedStates = matureStateSet{
 	minBlock: 0,
 }
 
-func GetMatureState(chain consensus.ChainReader,  blockNum uint64, backup []*types.Header) *MatureState {
+func GetMatureState(chain consensus.BlockReader,  blockNum uint64, backup []*types.Header) *MatureState {
 	cachedStates.cs.Lock()
 	defer cachedStates.cs.Unlock()
 	if cachedStates.current != nil {
@@ -143,7 +143,7 @@ func getHeaderFromBuffer(buf []*types.Header, blockNum uint64) *types.Header {
 	return nil
 }
 
-func newMatureState(chain consensus.ChainReader, backup []*types.Header, blockNum uint64) *MatureState {
+func newMatureState(chain consensus.BlockReader, backup []*types.Header, blockNum uint64) *MatureState {
 	// get the state
 	header := chain.GetHeaderByNumber(blockNum)
 	if header == nil {

@@ -96,12 +96,12 @@ func testFork(t *testing.T, blockchain *DAGManager, i, n int, full bool, compara
 		headerChainB []*types.Header
 	)
 	if full {
-		blockChainB = makeBlockChain(blockchain2.CurrentPivotBlock(), n, ethash.NewFaker(), db, forkSeed)
+		blockChainB = makeBlockChain(blockchain2.CurrentBlock(), n, ethash.NewFaker(), db, forkSeed)
 		if _, err := blockchain2.InsertBlocks(blockChainB); err != nil {
 			t.Fatalf("failed to insert forking chain: %v", err)
 		}
 	} else {
-		headerChainB = makeHeaderChain(blockchain2.CurrentPivotHeader(), n, ethash.NewFaker(), db, forkSeed)
+		headerChainB = makeHeaderChain(blockchain2.CurrentHeader(), n, ethash.NewFaker(), db, forkSeed)
 		if _, err := blockchain2.InsertHeaderChain(headerChainB, 1); err != nil {
 			t.Fatalf("failed to insert forking chain: %v", err)
 		}
@@ -110,13 +110,13 @@ func testFork(t *testing.T, blockchain *DAGManager, i, n int, full bool, compara
 	var tdPre, tdPost *big.Int
 
 	if full {
-		tdPre = blockchain.GetTdByHash(blockchain.CurrentPivotBlock().Hash())
+		tdPre = blockchain.GetTdByHash(blockchain.CurrentBlock().Hash())
 		if err := testBlockChainImport(blockChainB, blockchain); err != nil {
 			t.Fatalf("failed to import forked block chain: %v", err)
 		}
 		tdPost = blockchain.GetTdByHash(blockChainB[len(blockChainB)-1].Hash())
 	} else {
-		tdPre = blockchain.GetTdByHash(blockchain.CurrentPivotHeader().Hash())
+		tdPre = blockchain.GetTdByHash(blockchain.CurrentHeader().Hash())
 		if err := testHeaderChainImport(headerChainB, blockchain); err != nil {
 			t.Fatalf("failed to import forked header chain: %v", err)
 		}
@@ -127,7 +127,7 @@ func testFork(t *testing.T, blockchain *DAGManager, i, n int, full bool, compara
 }
 
 func printDAG(bc *DAGManager) {
-	for i := bc.CurrentPivotBlock().Number().Uint64(); i > 0; i-- {
+	for i := bc.CurrentBlock().Number().Uint64(); i > 0; i-- {
 		b := bc.GetBlockByNumber(uint64(i))
 		fmt.Printf("\t%x %v\n", b.Hash(), b.Difficulty())
 	}
@@ -204,7 +204,7 @@ func TestLastBlock(t *testing.T) {
 	}
 	defer blockchain.Stop()
 
-	blocks := makeBlockChain(blockchain.CurrentPivotBlock(), 1, ethash.NewFullFaker(), blockchain.db, 0)
+	blocks := makeBlockChain(blockchain.CurrentBlock(), 1, ethash.NewFullFaker(), blockchain.db, 0)
 	if _, err := blockchain.InsertBlocks(blocks); err != nil {
 		t.Fatalf("Failed to insert block: %v", err)
 	}
@@ -345,12 +345,12 @@ func testBrokenChain(t *testing.T, full bool) {
 
 	// Create a forked chain, and try to insert with a missing link
 	if full {
-		chain := makeBlockChain(blockchain.CurrentPivotBlock(), 5, ethash.NewFaker(), db, forkSeed)[1:]
+		chain := makeBlockChain(blockchain.CurrentBlock(), 5, ethash.NewFaker(), db, forkSeed)[1:]
 		if err := testBlockChainImport(chain, blockchain); err == nil {
 			t.Errorf("broken block chain not reported")
 		}
 	} else {
-		chain := makeHeaderChain(blockchain.CurrentPivotHeader(), 5, ethash.NewFaker(), db, forkSeed)[1:]
+		chain := makeHeaderChain(blockchain.CurrentHeader(), 5, ethash.NewFaker(), db, forkSeed)[1:]
 		if err := testHeaderChainImport(chain, blockchain); err == nil {
 			t.Errorf("broken header chain not reported")
 		}
@@ -395,10 +395,10 @@ func testReorg(t *testing.T, first, second []int64, td int64, full bool) {
 	defer blockchain.Stop()
 
 	// Insert an easy and a difficult chain afterwards
-	easyBlocks, _ := GenerateChain(params.TestChainConfig, blockchain.CurrentPivotBlock(), ethash.NewFaker(), db, len(first), func(i int, b *BlockGen) {
+	easyBlocks, _ := GenerateChain(params.TestChainConfig, blockchain.CurrentBlock(), ethash.NewFaker(), db, len(first), func(i int, b *BlockGen) {
 		b.OffsetTime(first[i])
 	})
-	diffBlocks, _ := GenerateChain(params.TestChainConfig, blockchain.CurrentPivotBlock(), ethash.NewFaker(), db, len(second), func(i int, b *BlockGen) {
+	diffBlocks, _ := GenerateChain(params.TestChainConfig, blockchain.CurrentBlock(), ethash.NewFaker(), db, len(second), func(i int, b *BlockGen) {
 		b.OffsetTime(second[i])
 	})
 	if full {
@@ -426,15 +426,15 @@ func testReorg(t *testing.T, first, second []int64, td int64, full bool) {
 	}
 	// Check that the chain is valid number and link wise
 	if full {
-		prev := blockchain.CurrentPivotBlock()
-		for block := blockchain.GetBlockByNumber(blockchain.CurrentPivotBlock().NumberU64() - 1); block.NumberU64() != 0; prev, block = block, blockchain.GetBlockByNumber(block.NumberU64()-1) {
+		prev := blockchain.CurrentBlock()
+		for block := blockchain.GetBlockByNumber(blockchain.CurrentBlock().NumberU64() - 1); block.NumberU64() != 0; prev, block = block, blockchain.GetBlockByNumber(block.NumberU64()-1) {
 			if prev.ParentHash() != block.Hash() {
 				t.Errorf("parent block hash mismatch: have %x, want %x", prev.ParentHash(), block.Hash())
 			}
 		}
 	} else {
-		prev := blockchain.CurrentPivotHeader()
-		for header := blockchain.GetHeaderByNumber(blockchain.CurrentPivotHeader().Number.Uint64() - 1); header.Number.Uint64() != 0; prev, header = header, blockchain.GetHeaderByNumber(header.Number.Uint64()-1) {
+		prev := blockchain.CurrentHeader()
+		for header := blockchain.GetHeaderByNumber(blockchain.CurrentHeader().Number.Uint64() - 1); header.Number.Uint64() != 0; prev, header = header, blockchain.GetHeaderByNumber(header.Number.Uint64()-1) {
 			if prev.ParentHash != header.Hash() {
 				t.Errorf("parent header hash mismatch: have %x, want %x", prev.ParentHash, header.Hash())
 			}
@@ -443,11 +443,11 @@ func testReorg(t *testing.T, first, second []int64, td int64, full bool) {
 	// Make sure the chain total difficulty is the correct one
 	want := new(big.Int).Add(blockchain.genesisBlock.Difficulty(), big.NewInt(td))
 	if full {
-		if have := blockchain.GetTdByHash(blockchain.CurrentPivotBlock().Hash()); have.Cmp(want) != 0 {
+		if have := blockchain.GetTdByHash(blockchain.CurrentBlock().Hash()); have.Cmp(want) != 0 {
 			t.Errorf("total difficulty mismatch: have %v, want %v", have, want)
 		}
 	} else {
-		if have := blockchain.GetTdByHash(blockchain.CurrentPivotHeader().Hash()); have.Cmp(want) != 0 {
+		if have := blockchain.GetTdByHash(blockchain.CurrentHeader().Hash()); have.Cmp(want) != 0 {
 			t.Errorf("total difficulty mismatch: have %v, want %v", have, want)
 		}
 	}
@@ -467,14 +467,14 @@ func testBadHashes(t *testing.T, full bool) {
 
 	// Create a chain, ban a hash and try to import
 	if full {
-		blocks := makeBlockChain(blockchain.CurrentPivotBlock(), 3, ethash.NewFaker(), db, 10)
+		blocks := makeBlockChain(blockchain.CurrentBlock(), 3, ethash.NewFaker(), db, 10)
 
 		BadHashes[blocks[2].Header().Hash()] = true
 		defer func() { delete(BadHashes, blocks[2].Header().Hash()) }()
 
 		_, err = blockchain.InsertBlocks(blocks)
 	} else {
-		headers := makeHeaderChain(blockchain.CurrentPivotHeader(), 3, ethash.NewFaker(), db, 10)
+		headers := makeHeaderChain(blockchain.CurrentHeader(), 3, ethash.NewFaker(), db, 10)
 
 		BadHashes[headers[2].Hash()] = true
 		defer func() { delete(BadHashes, headers[2].Hash()) }()
@@ -498,15 +498,15 @@ func testReorgBadHashes(t *testing.T, full bool) {
 		t.Fatalf("failed to create pristine chain: %v", err)
 	}
 	// Create a chain, import and ban afterwards
-	headers := makeHeaderChain(blockchain.CurrentPivotHeader(), 4, ethash.NewFaker(), db, 10)
-	blocks := makeBlockChain(blockchain.CurrentPivotBlock(), 4, ethash.NewFaker(), db, 10)
+	headers := makeHeaderChain(blockchain.CurrentHeader(), 4, ethash.NewFaker(), db, 10)
+	blocks := makeBlockChain(blockchain.CurrentBlock(), 4, ethash.NewFaker(), db, 10)
 
 	if full {
 		if _, err = blockchain.InsertBlocks(blocks); err != nil {
 			t.Errorf("failed to import blocks: %v", err)
 		}
-		if blockchain.CurrentPivotBlock().Hash() != blocks[3].Hash() {
-			t.Errorf("last block hash mismatch: have: %x, want %x", blockchain.CurrentPivotBlock().Hash(), blocks[3].Header().Hash())
+		if blockchain.CurrentBlock().Hash() != blocks[3].Hash() {
+			t.Errorf("last block hash mismatch: have: %x, want %x", blockchain.CurrentBlock().Hash(), blocks[3].Header().Hash())
 		}
 		BadHashes[blocks[3].Header().Hash()] = true
 		defer func() { delete(BadHashes, blocks[3].Header().Hash()) }()
@@ -514,8 +514,8 @@ func testReorgBadHashes(t *testing.T, full bool) {
 		if _, err = blockchain.InsertHeaderChain(headers, 1); err != nil {
 			t.Errorf("failed to import headers: %v", err)
 		}
-		if blockchain.CurrentPivotHeader().Hash() != headers[3].Hash() {
-			t.Errorf("last header hash mismatch: have: %x, want %x", blockchain.CurrentPivotHeader().Hash(), headers[3].Hash())
+		if blockchain.CurrentHeader().Hash() != headers[3].Hash() {
+			t.Errorf("last header hash mismatch: have: %x, want %x", blockchain.CurrentHeader().Hash(), headers[3].Hash())
 		}
 		BadHashes[headers[3].Hash()] = true
 		defer func() { delete(BadHashes, headers[3].Hash()) }()
@@ -528,15 +528,15 @@ func testReorgBadHashes(t *testing.T, full bool) {
 		t.Fatalf("failed to create new chain manager: %v", err)
 	}
 	if full {
-		if ncm.CurrentPivotBlock().Hash() != blocks[2].Header().Hash() {
-			t.Errorf("last block hash mismatch: have: %x, want %x", ncm.CurrentPivotBlock().Hash(), blocks[2].Header().Hash())
+		if ncm.CurrentBlock().Hash() != blocks[2].Header().Hash() {
+			t.Errorf("last block hash mismatch: have: %x, want %x", ncm.CurrentBlock().Hash(), blocks[2].Header().Hash())
 		}
 		if blocks[2].Header().GasLimit != ncm.GasLimit() {
 			t.Errorf("last  block gasLimit mismatch: have: %d, want %d", ncm.GasLimit(), blocks[2].Header().GasLimit)
 		}
 	} else {
-		if ncm.CurrentPivotHeader().Hash() != headers[2].Hash() {
-			t.Errorf("last header hash mismatch: have: %x, want %x", ncm.CurrentPivotHeader().Hash(), headers[2].Hash())
+		if ncm.CurrentHeader().Hash() != headers[2].Hash() {
+			t.Errorf("last header hash mismatch: have: %x, want %x", ncm.CurrentHeader().Hash(), headers[2].Hash())
 		}
 	}
 	ncm.Stop()
@@ -562,7 +562,7 @@ func testInsertNonceError(t *testing.T, full bool) {
 			failNum uint64
 		)
 		if full {
-			blocks := makeBlockChain(blockchain.CurrentPivotBlock(), i, ethash.NewFaker(), db, 0)
+			blocks := makeBlockChain(blockchain.CurrentBlock(), i, ethash.NewFaker(), db, 0)
 
 			failAt = rand.Int() % len(blocks)
 			failNum = blocks[failAt].NumberU64()
@@ -570,7 +570,7 @@ func testInsertNonceError(t *testing.T, full bool) {
 			blockchain.engine = ethash.NewFakeFailer(failNum)
 			failRes, err = blockchain.InsertBlocks(blocks)
 		} else {
-			headers := makeHeaderChain(blockchain.CurrentPivotHeader(), i, ethash.NewFaker(), db, 0)
+			headers := makeHeaderChain(blockchain.CurrentHeader(), i, ethash.NewFaker(), db, 0)
 
 			failAt = rand.Int() % len(headers)
 			failNum = headers[failAt].Number.Uint64()
@@ -708,13 +708,13 @@ func TestLightVsFastVsFullChainHeads(t *testing.T) {
 	}
 	// Create a small assertion method to check the three heads
 	assert := func(t *testing.T, kind string, chain *DAGManager, header uint64, fast uint64, block uint64) {
-		if num := chain.CurrentPivotBlock().NumberU64(); num != block {
+		if num := chain.CurrentBlock().NumberU64(); num != block {
 			t.Errorf("%s head block mismatch: have #%v, want #%v", kind, num, block)
 		}
 		if num := chain.CurrentFastBlock().NumberU64(); num != fast {
 			t.Errorf("%s head fast-block mismatch: have #%v, want #%v", kind, num, fast)
 		}
-		if num := chain.CurrentPivotHeader().Number.Uint64(); num != header {
+		if num := chain.CurrentHeader().Number.Uint64(); num != header {
 			t.Errorf("%s head header mismatch: have #%v, want #%v", kind, num, header)
 		}
 	}
@@ -1263,14 +1263,14 @@ func TestBlockchainHeaderchainReorgConsistency(t *testing.T) {
 		if _, err := chain.InsertBlocks(blocks[i : i+1]); err != nil {
 			t.Fatalf("block %d: failed to insert into chain: %v", i, err)
 		}
-		if chain.CurrentPivotBlock().Hash() != chain.CurrentPivotHeader().Hash() {
-			t.Errorf("block %d: current block/header mismatch: block #%d [%x…], header #%d [%x…]", i, chain.CurrentPivotBlock().Number(), chain.CurrentPivotBlock().Hash().Bytes()[:4], chain.CurrentPivotHeader().Number, chain.CurrentPivotHeader().Hash().Bytes()[:4])
+		if chain.CurrentBlock().Hash() != chain.CurrentHeader().Hash() {
+			t.Errorf("block %d: current block/header mismatch: block #%d [%x…], header #%d [%x…]", i, chain.CurrentBlock().Number(), chain.CurrentBlock().Hash().Bytes()[:4], chain.CurrentHeader().Number, chain.CurrentHeader().Hash().Bytes()[:4])
 		}
 		if _, err := chain.InsertBlocks(forks[i : i+1]); err != nil {
 			t.Fatalf(" fork %d: failed to insert into chain: %v", i, err)
 		}
-		if chain.CurrentPivotBlock().Hash() != chain.CurrentPivotHeader().Hash() {
-			t.Errorf(" fork %d: current block/header mismatch: block #%d [%x…], header #%d [%x…]", i, chain.CurrentPivotBlock().Number(), chain.CurrentPivotBlock().Hash().Bytes()[:4], chain.CurrentPivotHeader().Number, chain.CurrentPivotHeader().Hash().Bytes()[:4])
+		if chain.CurrentBlock().Hash() != chain.CurrentHeader().Hash() {
+			t.Errorf(" fork %d: current block/header mismatch: block #%d [%x…], header #%d [%x…]", i, chain.CurrentBlock().Number(), chain.CurrentBlock().Hash().Bytes()[:4], chain.CurrentHeader().Number, chain.CurrentHeader().Hash().Bytes()[:4])
 		}
 	}
 }
@@ -1429,7 +1429,7 @@ func benchmarkLargeNumberOfValueToNonexisting(b *testing.B, numTxs, numBlocks in
 			b.Fatalf("failed to insert shared chain: %v", err)
 		}
 		b.StopTimer()
-		if got := chain.CurrentPivotBlock().Transactions().Len(); got != numTxs*numBlocks {
+		if got := chain.CurrentBlock().Transactions().Len(); got != numTxs*numBlocks {
 			b.Fatalf("Transactions were not included, expected %d, got %d", (numTxs * numBlocks), got)
 
 		}

@@ -272,7 +272,7 @@ func testChainOdr(t *testing.T, protocol int, fn odrTestFn) {
 	}
 
 	test := func(expFail int) {
-		for i := uint64(0); i <= blockchain.CurrentPivotHeader().Number.Uint64(); i++ {
+		for i := uint64(0); i <= blockchain.CurrentHeader().Number.Uint64(); i++ {
 			bhash := rawdb.ReadCanonicalHash(sdb, i)
 			b1, err := fn(NoOdr, sdb, blockchain, nil, bhash)
 			if err != nil {

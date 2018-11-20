@@ -26,7 +26,7 @@ import (
 // API is a user facing RPC API to allow controlling the signer and voting
 // mechanisms of the proof-of-authority scheme.
 type API struct {
-	chain  consensus.ChainReader
+	chain  consensus.BlockReader
 	clique *Clique
 }
 
@@ -35,7 +35,7 @@ func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
-		header = api.chain.CurrentPivotHeader()
+		header = api.chain.CurrentHeader()
 	} else {
 		header = api.chain.GetHeaderByNumber(uint64(number.Int64()))
 	}
@@ -60,7 +60,7 @@ func (api *API) GetSigners(number *rpc.BlockNumber) ([]common.Address, error) {
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
-		header = api.chain.CurrentPivotHeader()
+		header = api.chain.CurrentHeader()
 	} else {
 		header = api.chain.GetHeaderByNumber(uint64(number.Int64()))
 	}

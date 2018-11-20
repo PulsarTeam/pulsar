@@ -105,7 +105,7 @@ func testAccess(t *testing.T, protocol int, fn accessTestFn) {
 	lpm.synchronise(lpeer)
 
 	test := func(expFail uint64) {
-		for i := uint64(0); i <= pm.blockchain.CurrentPivotHeader().Number.Uint64(); i++ {
+		for i := uint64(0); i <= pm.blockchain.CurrentHeader().Number.Uint64(); i++ {
 			bhash := rawdb.ReadCanonicalHash(db, i)
 			if req := fn(ldb, bhash, i); req != nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)

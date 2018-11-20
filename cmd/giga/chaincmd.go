@@ -391,7 +391,7 @@ func copyDb(ctx *cli.Context) error {
 	// Synchronise with the simulated peer
 	start := time.Now()
 
-	currentHeader := hc.CurrentPivotHeader()
+	currentHeader := hc.CurrentHeader()
 	if err = dl.Synchronise("local", currentHeader.Hash(), hc.GetTd(currentHeader.Hash(), currentHeader.Number.Uint64()), syncmode); err != nil {
 		return err
 	}

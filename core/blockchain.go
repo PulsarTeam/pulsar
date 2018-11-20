@@ -273,7 +273,7 @@ func (dm *DAGManager) SetHead(epoch uint64) error {
 		rawdb.DeleteBody(db, hash, num)
 	}
 	dm.hc.SetHead(epoch, delFn)
-	currentHeader := dm.hc.CurrentPivotHeader()
+	currentHeader := dm.hc.CurrentHeader()
 
 	// Clear out any stale content from the caches
 	dm.bodyCache.Purge()
@@ -282,10 +282,10 @@ func (dm *DAGManager) SetHead(epoch uint64) error {
 	dm.futureBlocks.Purge()
 
 	// Rewind the block chain, ensuring we don't end up with a stateless head block
-	if currentBlock := dm.CurrentPivotBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
+	if currentBlock := dm.CurrentBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
 		dm.currentBlock.Store(dm.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
 	}
-	if currentBlock := dm.CurrentPivotBlock(); currentBlock != nil {
+	if currentBlock := dm.CurrentBlock(); currentBlock != nil {
 		if _, err := state.New(currentBlock.Root(), dm.stateCache); err != nil {
 			// Rewound state missing, rolled back to before pivot, reset to genesis
 			dm.currentBlock.Store(dm.genesisBlock)
@@ -296,13 +296,13 @@ func (dm *DAGManager) SetHead(epoch uint64) error {
 		dm.currentFastBlock.Store(dm.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
 	}
 	// If either blocks reached nil, reset to the genesis state
-	if currentBlock := dm.CurrentPivotBlock(); currentBlock == nil {
+	if currentBlock := dm.CurrentBlock(); currentBlock == nil {
 		dm.currentBlock.Store(dm.genesisBlock)
 	}
 	if currentFastBlock := dm.CurrentFastBlock(); currentFastBlock == nil {
 		dm.currentFastBlock.Store(dm.genesisBlock)
 	}
-	currentBlock := dm.CurrentPivotBlock()
+	currentBlock := dm.CurrentBlock()
 	currentFastBlock := dm.CurrentFastBlock()
 
 	rawdb.WriteHeadBlockHash(dm.db, currentBlock.Hash())
@@ -333,7 +333,7 @@ func (dm *DAGManager) FastSyncCommitHead(hash common.Hash) error {
 
 // GasLimit returns the gas limit of the current HEAD block.
 func (dm *DAGManager) GasLimit() uint64 {
-	return dm.CurrentPivotBlock().GasLimit()
+	return dm.CurrentBlock().GasLimit()
 }
 
 func (dm *DAGManager) GetBlocksByEpoch(epoch uint64) types.Blocks {
@@ -341,15 +341,15 @@ func (dm *DAGManager) GetBlocksByEpoch(epoch uint64) types.Blocks {
 	return types.Blocks {}
 }
 
-// CurrentPivotHeader() retrieves the current head header of the canonical chain. The
+// CurrentHeader() retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
-func (dm *DAGManager) CurrentPivotHeader() *types.Header {
-	return dm.hc.CurrentPivotHeader()
+func (dm *DAGManager) CurrentHeader() *types.Header {
+	return dm.hc.CurrentHeader()
 }
 
-// CurrentBlock retrieves the current head block of the pivot chain. The
+// CurrentBlock retrieves the current head block of the canonical chain. The
 // block is retrieved from the blockchain's internal cache.
-func (dm *DAGManager) CurrentPivotBlock() *types.Block {
+func (dm *DAGManager) CurrentBlock() *types.Block {
 	return dm.currentBlock.Load().(*types.Block)
 }
 
@@ -389,7 +389,7 @@ func (dm *DAGManager) Processor() Processor {
 
 // State returns a new mutable state based on the current HEAD block.
 func (dm *DAGManager) State() (*state.StateDB, error) {
-	return dm.StateAt(dm.CurrentPivotBlock().Root())
+	return dm.StateAt(dm.CurrentBlock().Root())
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
@@ -451,7 +451,7 @@ func (dm *DAGManager) repair(head **types.Block) error {
 
 // Export writes the active chain to the given writer.
 func (dm *DAGManager) Export(w io.Writer) error {
-	return dm.ExportN(w, uint64(0), dm.CurrentPivotBlock().NumberU64())
+	return dm.ExportN(w, uint64(0), dm.CurrentBlock().NumberU64())
 }
 
 // ExportN writes a subset of the active chain to the given writer.
@@ -676,7 +676,7 @@ func (dm *DAGManager) Stop() {
 		triedb := dm.stateCache.TrieDB()
 
 		for _, offset := range []uint64{0, 1, triesInMemory - 1} {
-			if number := dm.CurrentPivotBlock().NumberU64(); number > offset {
+			if number := dm.CurrentBlock().NumberU64(); number > offset {
 				recent := dm.GetBlockByNumber(number - offset)
 
 				log.Info("Writing cached state to disk", "block", recent.Number(), "hash", recent.Hash(), "root", recent.Root())
@@ -730,7 +730,7 @@ func (dm *DAGManager) Rollback(chain []common.Hash) {
 	for i := len(chain) - 1; i >= 0; i-- {
 		hash := chain[i]
 
-		currentHeader := dm.hc.CurrentPivotHeader()
+		currentHeader := dm.hc.CurrentHeader()
 		if currentHeader.Hash() == hash {
 			dm.hc.SetCurrentHeader(dm.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64()-1))
 		}
@@ -739,7 +739,7 @@ func (dm *DAGManager) Rollback(chain []common.Hash) {
 			dm.currentFastBlock.Store(newFastBlock)
 			rawdb.WriteHeadFastBlockHash(dm.db, newFastBlock.Hash())
 		}
-		if currentBlock := dm.CurrentPivotBlock(); currentBlock.Hash() == hash {
+		if currentBlock := dm.CurrentBlock(); currentBlock.Hash() == hash {
 			newBlock := dm.GetBlock(currentBlock.ParentHash(), currentBlock.NumberU64()-1)
 			dm.currentBlock.Store(newBlock)
 			rawdb.WriteHeadBlockHash(dm.db, newBlock.Hash())
@@ -901,7 +901,7 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	currentBlock := dm.CurrentPivotBlock()
+	currentBlock := dm.CurrentBlock()
 	localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
@@ -971,7 +971,7 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	// Second clause in the if statement reduces the vulnerability to selfish mining.
 	// Please refer to http://www.cs.cornell.edu/~ie53/publications/btcProcFC.pdf
 	reorg := externTd.Cmp(localTd) > 0
-	currentBlock = dm.CurrentPivotBlock()
+	currentBlock = dm.CurrentBlock()
 	if !reorg && externTd.Cmp(localTd) == 0 {
 		// Split same-difficulty blocks by number, then at random
 		reorg = block.NumberU64() < currentBlock.NumberU64() || (block.NumberU64() == currentBlock.NumberU64() && mrand.Float64() < 0.5)
@@ -1003,7 +1003,7 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	return status, nil
 }
 
-// InsertChain attempts to insert the given batch of blocks in to the canonical
+// InsertBlocks attempts to insert the given batch of blocks in to the canonical
 // chain or, otherwise, create a fork. If an error is returned it will return
 // the index number of the failing block as well an error describing what went
 // wrong.
@@ -1018,23 +1018,11 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 // insertBlocks will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
-func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*types.Log, error) {
-	// Sanity check that we have something meaningful to import
-	if len(chain) == 0 {
+func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*types.Log, error) {
+	if len(blocks) == 0 {
 		return 0, nil, nil, nil
 	}
-	// Do a sanity check that the provided chain is actually ordered and linked
-	for i := 1; i < len(chain); i++ {
-		if chain[i].NumberU64() != chain[i-1].NumberU64()+1 || chain[i].ParentHash() != chain[i-1].Hash() {
-			// Chain broke ancestry, log a messge (programming error) and skip insertion
-			log.Error("Non contiguous block insert", "number", chain[i].Number(), "hash", chain[i].Hash(),
-				"parent", chain[i].ParentHash(), "prevnumber", chain[i-1].Number(), "prevhash", chain[i-1].Hash())
 
-			return 0, nil, nil, fmt.Errorf("non contiguous insert: item %d is #%d [%x…], item %d is #%d [%x…] (parent [%x…])", i-1, chain[i-1].NumberU64(),
-				chain[i-1].Hash().Bytes()[:4], i, chain[i].NumberU64(), chain[i].Hash().Bytes()[:4], chain[i].ParentHash().Bytes()[:4])
-		}
-	}
-	// Pre-checks passed, start the full block imports
 	dm.wg.Add(1)
 	defer dm.wg.Done()
 
@@ -1046,7 +1034,7 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 	// acquiring.
 	var (
 		stats         = insertStats{startTime: mclock.Now()}
-		events        = make([]interface{}, 0, len(chain))
+		events        = make([]interface{}, 0, len(blocks))
 		lastCanon     *types.Block
 		coalescedLogs []*types.Log
 	)
@@ -1069,10 +1057,10 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 	*/
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
-	senderCacher.recoverFromBlocks(types.MakeSigner(dm.chainConfig, chain[0].Number()), chain)
+	senderCacher.recoverFromBlocks(types.MakeSigner(dm.chainConfig, blocks[0].Number()), blocks)
 
 	// Iterate over the blocks and insert when the verifier permits
-	for i, block := range chain {
+	for i, block := range blocks {
 		headers[0] = block.Header()
 		seals[0] = true
 		abort, results := dm.engine.VerifyHeaders(dm, headers, seals)
@@ -1099,7 +1087,7 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 		case err == ErrKnownBlock:
 			// Block and state both already known. However if the current block is below
 			// this number we did a rollback and we should reimport it nonetheless.
-			if dm.CurrentPivotBlock().NumberU64() >= block.NumberU64() {
+			if dm.CurrentBlock().NumberU64() >= block.NumberU64() {
 				stats.ignored++
 				continue
 			}
@@ -1123,7 +1111,7 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 		case err == consensus.ErrPrunedAncestor:
 			// Block competing with the canonical chain, store in the db, but don't process
 			// until the competitor TD goes above the canonical TD
-			currentBlock := dm.CurrentPivotBlock()
+			currentBlock := dm.CurrentBlock()
 			localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
 			externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
 			if localTd.Cmp(externTd) > 0 {
@@ -1163,7 +1151,7 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 		if i == 0 {
 			parent = dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
 		} else {
-			parent = chain[i-1]
+			parent = blocks[i-1]
 		}
 		state, err := state.New(parent.Root(), dm.stateCache)
 		if err != nil {
@@ -1188,7 +1176,6 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 
 		// Write the block to the chain and get the status.
 		status, err := dm.WriteBlockWithState(block, receipts, state)
-		//\\fmt.Printf("write block number : %v =================++++++++++++++++++\n", block.Number().String())
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
@@ -1216,10 +1203,10 @@ func (dm *DAGManager) insertBlocks(chain types.Blocks) (int, []interface{}, []*t
 		stats.usedGas += usedGas
 
 		cache, _ := dm.stateCache.TrieDB().Size()
-		stats.report(chain, i, cache)
+		stats.report(blocks, i, cache)
 	}
 	// Append a single chain head event if we've progressed the chain
-	if lastCanon != nil && dm.CurrentPivotBlock().Hash() == lastCanon.Hash() {
+	if lastCanon != nil && dm.CurrentBlock().Hash() == lastCanon.Hash() {
 		events = append(events, ChainHeadEvent{lastCanon})
 	}
 	return 0, events, coalescedLogs, nil
