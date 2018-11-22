@@ -58,6 +58,11 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		}
 		return consensus.ErrPrunedAncestor
 	}
+	for i := 0; i < len(block.Uncles()); i++ {
+		if !v.bc.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
+			return ErrUnclesNotCompletely
+		}
+	}
 	// Header validity is known at this point, check the uncles and transactions
 	header := block.Header()
 	if err := v.engine.VerifyUncles(v.bc, block); err != nil {

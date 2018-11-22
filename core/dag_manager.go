@@ -340,7 +340,7 @@ func (dm *DAGManager) GasLimit() uint64 {
 
 func (dm *DAGManager) GetBlocksByEpoch(epoch uint64) types.Blocks {
 	// TODO: impl
-	return types.Blocks {}
+	return types.Blocks{}
 }
 
 // CurrentHeader() retrieves the current head header of the canonical chain. The
@@ -411,10 +411,12 @@ func (dm *DAGManager) State() (*state.StateDB, error) {
 func (dm *DAGManager) StateAt(root common.Hash) (*state.StateDB, error) {
 	return state.New(root, dm.stateCache)
 }
+
 //
-func (dm *DAGManager)GetState(root common.Hash) (*state.StateDB, error) {
+func (dm *DAGManager) GetState(root common.Hash) (*state.StateDB, error) {
 	return state.New(root, dm.stateCache)
 }
+
 // Reset purges the entire blockchain, restoring it to its genesis state.
 func (dm *DAGManager) Reset() error {
 	return dm.ResetWithGenesisBlock(dm.genesisBlock)
@@ -918,7 +920,7 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	blocks = append(blocks, block)
 	reorg, oldblocks, err := dm.dag.IsReorg(blocks)
 
-	if err != nil{
+	if err != nil {
 		return NonStatTy, err
 	}
 
@@ -978,19 +980,19 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 			}
 		}
 	}
-	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)//\\
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts) //\\
 
 	//reorg
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
-		if oldblocks  != nil {
+		if oldblocks != nil {
 			if err := dm.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
 		}
 		// Write the positional metadata for transaction/receipt lookups and preimages
-		rawdb.WriteTxLookupEntries(batch, block)//\\
-		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())//\\
+		rawdb.WriteTxLookupEntries(batch, block)                          //\\
+		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages()) //\\
 
 		status = CanonStatTy
 	} else {
@@ -1006,8 +1008,8 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 		dm.dag.InsertBlocks(blocks)
 	}
 
-	for _, b := range blocks{
-		dm.futureBlocks.Remove(b.Hash())//\\  waitUncleBlocks.Remove
+	for _, b := range blocks {
+		dm.futureBlocks.Remove(b.Hash()) //\\  waitUncleBlocks.Remove
 	}
 
 	return status, nil
@@ -1023,6 +1025,16 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 	n, events, logs, err := dm.insertBlocks(blocks)
 	dm.PostChainEvents(events, logs)
 	return n, err
+}
+
+func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
+	var refers types.Blocks
+	for i := 0; i < len(block.Uncles()); i++ {
+		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
+			refers = append(refers, dm.GetBlockByHash(block.Uncles()[i].Hash()))
+		}
+	}
+	return refers
 }
 
 // insertBlocks will execute the actual chain insertion and event aggregation. The
@@ -1057,13 +1069,13 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 	seals := make([]bool, 1)
 
 	/*
-	for i, block := range chain {
-		headers[i] = block.Header()
-		seals[i] = true
-		fmt.Printf("getHeader block number : %v &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n", block.Number().String())
-	}
-	abort, results := dm.engine.VerifyHeaders(dm, headers, seals)
-	defer close(abort)
+		for i, block := range chain {
+			headers[i] = block.Header()
+			seals[i] = true
+			fmt.Printf("getHeader block number : %v &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n", block.Number().String())
+		}
+		abort, results := dm.engine.VerifyHeaders(dm, headers, seals)
+		defer close(abort)
 	*/
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
@@ -1168,7 +1180,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
-		receipts, logs, usedGas, err := dm.processor.Process(block, state, dm.vmConfig)
+		receipts, logs, usedGas, err := dm.processor.Process(block, types.RemoveConflictTxs(block, dm.getPivotBlockReferences(block)), state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
