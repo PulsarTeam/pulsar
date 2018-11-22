@@ -45,3 +45,10 @@ type Validator interface {
 type Processor interface {
 	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error)
 }
+
+type DagState interface{
+	IsReorg(blocks []*types.Block)(isReorg bool, oldblocks []*types.Block, err error)
+	InsertBlocks(epocblocks []*types.Block)
+	GetFutureReferenceBlock()(blocks []*types.Block, err error)
+	CurrentBlock()(block *types.Block, err error)
+}

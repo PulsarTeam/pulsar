@@ -126,6 +126,7 @@ type DAGManager struct {
 	engine    consensus.Engine
 	processor Processor // block processor interface
 	validator Validator // block and state validator interface
+	dag       DagState  //set dag
 	vmConfig  vm.Config
 
 	badBlocks *lru.Cache // Bad block cache
@@ -164,6 +165,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 	dm.SetValidator(NewBlockValidator(chainConfig, dm, engine))
 	dm.SetProcessor(NewStateProcessor(chainConfig, dm, engine))
+	dm.SetDag(NewDAG(dm))
 
 	var err error
 	dm.hc, err = NewHeaderChain(db, chainConfig, engine, dm.getProcInterrupt)
@@ -371,6 +373,19 @@ func (dm *DAGManager) SetValidator(validator Validator) {
 	dm.procmu.Lock()
 	defer dm.procmu.Unlock()
 	dm.validator = validator
+}
+
+//SetDag
+func (dm *DAGManager) SetDag(dag DagState) {
+	dm.procmu.Lock()
+	defer dm.procmu.Unlock()
+	dm.dag = dag
+}
+
+func (dm *DAGManager) Dag() DagState {
+	dm.procmu.RLock()
+	defer dm.procmu.RUnlock()
+	return dm.dag
 }
 
 // Validator returns the current validator.
@@ -889,26 +904,24 @@ func (dm *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (e
 
 // WriteBlockWithState writes the block and all associated state to the database.
 func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error) {
+	//\\func (bc *DAGManager) WriteBlockWithState(blocks []*types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error)
 	dm.wg.Add(1)
 	defer dm.wg.Done()
 
-	// Calculate the total difficulty of the block
-	ptd := dm.GetTd(block.ParentHash(), block.NumberU64()-1)
-	if ptd == nil {
-		return NonStatTy, consensus.ErrUnknownAncestor
-	}
 	// Make sure no inconsistent state is leaked during insertion
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	currentBlock := dm.CurrentBlock()
-	localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-	externTd := new(big.Int).Add(block.Difficulty(), ptd)
+	//dag
+	var blocks []*types.Block
+	var oldblocks []*types.Block
+	blocks = append(blocks, block)
+	reorg, oldblocks, err := dm.dag.IsReorg(blocks)
 
-	// Irrelevant of the canonical status, write the block itself to the database
-	if err := dm.hc.WriteTd(block.Hash(), block.NumberU64(), externTd); err != nil {
+	if err != nil{
 		return NonStatTy, err
 	}
+
 	// Write other block data using a batch.
 	batch := dm.db.NewBatch()
 	rawdb.WriteBlock(batch, block)
@@ -965,27 +978,19 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 			}
 		}
 	}
-	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)//\\
 
-	// If the total difficulty is higher than our known, add it to the canonical chain
-	// Second clause in the if statement reduces the vulnerability to selfish mining.
-	// Please refer to http://www.cs.cornell.edu/~ie53/publications/btcProcFC.pdf
-	reorg := externTd.Cmp(localTd) > 0
-	currentBlock = dm.CurrentBlock()
-	if !reorg && externTd.Cmp(localTd) == 0 {
-		// Split same-difficulty blocks by number, then at random
-		reorg = block.NumberU64() < currentBlock.NumberU64() || (block.NumberU64() == currentBlock.NumberU64() && mrand.Float64() < 0.5)
-	}
+	//reorg
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
-		if block.ParentHash() != currentBlock.Hash() {
+		if oldblocks  != nil {
 			if err := dm.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
 		}
 		// Write the positional metadata for transaction/receipt lookups and preimages
-		rawdb.WriteTxLookupEntries(batch, block)
-		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())
+		rawdb.WriteTxLookupEntries(batch, block)//\\
+		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())//\\
 
 		status = CanonStatTy
 	} else {
@@ -998,8 +1003,13 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		dm.insert(block)
+		dm.dag.InsertBlocks(blocks)
 	}
-	dm.futureBlocks.Remove(block.Hash())
+
+	for _, b := range blocks{
+		dm.futureBlocks.Remove(b.Hash())//\\  waitUncleBlocks.Remove
+	}
+
 	return status, nil
 }
 
