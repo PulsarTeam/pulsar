@@ -199,7 +199,7 @@ type storageblock struct {
 }
 
 // RemoveConflictxs removes the conflict tx in some blocks
-func RomoveConflictTxs(b *Block, uncles []*Block) []Transaction {
+func RomoveConflictTxs(b *Block, uncles []*Block) []*Transaction {
 	return nil
 }
 
