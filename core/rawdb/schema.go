@@ -61,13 +61,15 @@ var (
 
 	preimageCounter    = metrics.NewRegisteredCounter("db/preimage/total", nil)
 	preimageHitCounter = metrics.NewRegisteredCounter("db/preimage/hits", nil)
+
+	epochDataPrefix = []byte("e")
 )
 
 // TxLookupEntry is a positional metadata to help looking up the data content of
 // a transaction or receipt given only its hash.
 type TxLookupEntry struct {
 	BlockHash  common.Hash
-	BlockIndex uint64
+	EpochIndex uint64
 	Index      uint64
 }
 
@@ -104,7 +106,7 @@ func blockBodyKey(number uint64, hash common.Hash) []byte {
 }
 
 // blockReceiptsKey = blockReceiptsPrefix + num (uint64 big endian) + hash
-func blockReceiptsKey(number uint64, hash common.Hash) []byte {
+func epochReceiptsKey(number uint64, hash common.Hash) []byte {
 	return append(append(blockReceiptsPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
@@ -131,4 +133,8 @@ func preimageKey(hash common.Hash) []byte {
 // configKey = configPrefix + hash
 func configKey(hash common.Hash) []byte {
 	return append(configPrefix, hash.Bytes()...)
+}
+
+func epochDataKey(number uint64, hash common.Hash) []byte{
+	return append(append(epochDataPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }

@@ -1,7 +1,7 @@
 package types
 
 type EpochData struct {
-	pivotBlockHeader      *Header
-	referenceBlockHeader  []*Header
-	transactions 		  Transactions
+	PivotBlockHeader      *Header
+	ReferenceBlockHeader  []*Header
+	Transactions 		  Transactions
 }

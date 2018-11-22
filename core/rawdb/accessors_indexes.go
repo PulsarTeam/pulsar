@@ -35,16 +35,16 @@ func ReadTxLookupEntry(db DatabaseReader, hash common.Hash) (common.Hash, uint64
 		log.Error("Invalid transaction lookup entry RLP", "hash", hash, "err", err)
 		return common.Hash{}, 0, 0
 	}
-	return entry.BlockHash, entry.BlockIndex, entry.Index
+	return entry.BlockHash, entry.EpochIndex, entry.Index
 }
 
 // WriteTxLookupEntries stores a positional metadata for every transaction from
 // a epoch, enabling hash based transaction and receipt lookups.
-func WriteTxLookupEntries(db DatabaseWriter, block *types.Block) {
-	for i, tx := range block.Transactions() {
+func WriteTxLookupEntries(db DatabaseWriter, transactions types.Transactions, pivotBlock *types.Block) {
+	for i, tx := range transactions{
 		entry := TxLookupEntry{
-			BlockHash:  block.Hash(),
-			BlockIndex: block.NumberU64(),
+			BlockHash:  pivotBlock.Hash(),
+			EpochIndex: pivotBlock.NumberU64(),
 			Index:      uint64(i),
 		}
 		data, err := rlp.EncodeToBytes(entry)
@@ -65,31 +65,31 @@ func DeleteTxLookupEntry(db DatabaseDeleter, hash common.Hash) {
 // ReadTransaction retrieves a specific transaction from the database, along with
 // its added positional metadata.
 func ReadTransaction(db DatabaseReader, hash common.Hash) (*types.Transaction, common.Hash, uint64, uint64) {
-	blockHash, blockNumber, txIndex := ReadTxLookupEntry(db, hash)
+	blockHash, epochNumber, txIndex := ReadTxLookupEntry(db, hash)
 	if blockHash == (common.Hash{}) {
 		return nil, common.Hash{}, 0, 0
 	}
-	body := ReadBody(db, blockHash, blockNumber)
-	if body == nil || len(body.Transactions) <= int(txIndex) {
-		log.Error("Transaction referenced missing", "number", blockNumber, "hash", blockHash, "index", txIndex)
+	epochData := ReadEpochData(db, blockHash, epochNumber)
+	if epochData == nil || len(epochData.Transactions) <= int(txIndex) {
+		log.Error("Transaction referenced missing", "number", epochNumber, "hash", blockHash, "index", txIndex)
 		return nil, common.Hash{}, 0, 0
 	}
-	return body.Transactions[txIndex], blockHash, blockNumber, txIndex
+	return epochData.Transactions[txIndex], blockHash, epochNumber, txIndex
 }
 
 // ReadReceipt retrieves a specific transaction receipt from the database, along with
 // its added positional metadata.
 func ReadReceipt(db DatabaseReader, hash common.Hash) (*types.Receipt, common.Hash, uint64, uint64) {
-	blockHash, blockNumber, receiptIndex := ReadTxLookupEntry(db, hash)
+	blockHash, epochNumber, receiptIndex := ReadTxLookupEntry(db, hash)
 	if blockHash == (common.Hash{}) {
 		return nil, common.Hash{}, 0, 0
 	}
-	receipts := ReadReceipts(db, blockHash, blockNumber)
+	receipts := ReadReceipts(db, blockHash, epochNumber)
 	if len(receipts) <= int(receiptIndex) {
-		log.Error("Receipt refereced missing", "number", blockNumber, "hash", blockHash, "index", receiptIndex)
+		log.Error("Receipt refereced missing", "number", epochNumber, "hash", blockHash, "index", receiptIndex)
 		return nil, common.Hash{}, 0, 0
 	}
-	return receipts[receiptIndex], blockHash, blockNumber, receiptIndex
+	return receipts[receiptIndex], blockHash, epochNumber, receiptIndex
 }
 
 // ReadBloomBits retrieves the compressed bloom bit vector belonging to the given
