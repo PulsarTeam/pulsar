@@ -68,37 +68,37 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
-	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
-	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
-	Coinbase    common.Address `json:"miner"            gencodec:"required"`
-	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
-	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
-	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
-	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
-	Number      *big.Int       `json:"number"           gencodec:"required"`
-	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
-	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
-	Time        *big.Int       `json:"timestamp"        gencodec:"required"`
-	Extra       []byte         `json:"extraData"        gencodec:"required"`
-	MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
-	Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
-	PosWeight   uint32         `json:"posWeight"        gencodec:"required"`
-	PosProduction *big.Int     `json:"posProduction"    gencodec:"required"`
-	PowProduction *big.Int     `json:"powProduction"    gencodec:"required"`
+	ParentHash    common.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash     common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase      common.Address `json:"miner"            gencodec:"required"`
+	Root          common.Hash    `json:"stateRoot"        gencodec:"required"`
+	TxHash        common.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash   common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom         Bloom          `json:"logsBloom"        gencodec:"required"`
+	Difficulty    *big.Int       `json:"difficulty"       gencodec:"required"`
+	Number        *big.Int       `json:"number"           gencodec:"required"`
+	GasLimit      uint64         `json:"gasLimit"         gencodec:"required"`
+	GasUsed       uint64         `json:"gasUsed"          gencodec:"required"`
+	Time          *big.Int       `json:"timestamp"        gencodec:"required"`
+	Extra         []byte         `json:"extraData"        gencodec:"required"`
+	MixDigest     common.Hash    `json:"mixHash"          gencodec:"required"`
+	Nonce         BlockNonce     `json:"nonce"            gencodec:"required"`
+	PosWeight     uint32         `json:"posWeight"        gencodec:"required"`
+	PosProduction *big.Int       `json:"posProduction"    gencodec:"required"`
+	PowProduction *big.Int       `json:"powProduction"    gencodec:"required"`
 }
 
 // field type overrides for gencodec
 type headerMarshaling struct {
-	Difficulty *hexutil.Big
-	Number     *hexutil.Big
-	GasLimit   hexutil.Uint64
-	GasUsed    hexutil.Uint64
-	Time       *hexutil.Big
-	Extra      hexutil.Bytes
+	Difficulty    *hexutil.Big
+	Number        *hexutil.Big
+	GasLimit      hexutil.Uint64
+	GasUsed       hexutil.Uint64
+	Time          *hexutil.Big
+	Extra         hexutil.Bytes
 	PosProduction *hexutil.Big
 	PowProduction *hexutil.Big
-	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	Hash          common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
@@ -196,6 +196,11 @@ type storageblock struct {
 	Txs    []*Transaction
 	Uncles []*Header
 	TD     *big.Int
+}
+
+// RemoveConflictxs removes the conflict tx in some blocks
+func RomoveConflictTxs(b *Block, uncles []*Block) []Transaction {
+	return nil
 }
 
 // NewBlock creates a new block. The input data is copied,
@@ -315,14 +320,14 @@ func (b *Block) Transaction(hash common.Hash) *Transaction {
 	return nil
 }
 
-func (b *Block) Number() *big.Int     { return new(big.Int).Set(b.header.Number) }
-func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
-func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
-func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
-func (b *Block) PosWeight() uint32      { return b.header.PosWeight }
+func (b *Block) Number() *big.Int        { return new(big.Int).Set(b.header.Number) }
+func (b *Block) GasLimit() uint64        { return b.header.GasLimit }
+func (b *Block) GasUsed() uint64         { return b.header.GasUsed }
+func (b *Block) Difficulty() *big.Int    { return new(big.Int).Set(b.header.Difficulty) }
+func (b *Block) PosWeight() uint32       { return b.header.PosWeight }
 func (b *Block) PosProduction() *big.Int { return new(big.Int).Set(b.header.PosProduction) }
 func (b *Block) PowProduction() *big.Int { return new(big.Int).Set(b.header.PowProduction) }
-func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
+func (b *Block) Time() *big.Int          { return new(big.Int).Set(b.header.Time) }
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }
