@@ -5,74 +5,99 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"math/big"
 	mrand1 "math/rand"
-	"github.com/ethereum/go-ethereum/core/rawdb"
+	"errors"
+	"fmt"
 )
 
 type DAG struct{
-	bc *DAGManager
+	dm *DAGManager
 }
 
 func NewDAG(dm *DAGManager) *DAG {
 	return &DAG{dm}
 }
 
-func (dag *DAG)IsReorg(blocks []*types.Block)(isReorg bool, oldblocks []*types.Block, err error){
-	block := blocks[len(blocks)-1]
-
-	// Calculate the total difficulty of the block
-	ptd := dag.bc.GetTd(block.ParentHash(), block.NumberU64()-1)
-	if ptd == nil {
-		return false, nil, consensus.ErrUnknownAncestor
-	}
-
-	currentBlock := dag.bc.CurrentBlock()
-	localTd := dag.bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-	externTd := new(big.Int).Add(block.Difficulty(), ptd)
-
-	// Irrelevant of the canonical status, write the block itself to the database
-	if err := dag.bc.hc.WriteTd(block.Hash(), block.NumberU64(), externTd); err != nil {
-		return false, nil, err
-	}
-
-	reorg := externTd.Cmp(localTd) > 0
-	currentBlock = dag.bc.CurrentBlock()
-	if !reorg && externTd.Cmp(localTd) == 0 {
-		// Split same-difficulty blocks by number, then at random
-		reorg = block.NumberU64() < currentBlock.NumberU64() || (block.NumberU64() == currentBlock.NumberU64() && mrand1.Float64() < 0.5)
-	}
-
-	if reorg {
-		if block.ParentHash() != currentBlock.Hash() {
-			oldblocks = append(oldblocks, currentBlock)
-		}else{
-			oldblocks = nil
+func (dag *DAG)GetSplitChain(newHeader, oldHeader *types.Header)(oldPivotChain []*types.Header, newPivotChain []*types.Header, err error) {
+	// first reduce whoever is higher bound
+	if oldHeader.Number.Uint64() > newHeader.Number.Uint64() {
+		// reduce old chain
+		for ; oldHeader != nil && oldHeader.Number.Uint64() != newHeader.Number.Uint64(); oldHeader = dag.dm.GetBlock(oldHeader.ParentHash, oldHeader.Number.Uint64()-1).Header() {
+			oldPivotChain = append(oldPivotChain, oldHeader)
+		}
+	} else {
+		// reduce new chain and append new chain blocks for inserting later on
+		for ; newHeader != nil && newHeader.Number.Uint64() != oldHeader.Number.Uint64(); newHeader = dag.dm.GetBlock(newHeader.ParentHash, newHeader.Number.Uint64()-1).Header() {
+			newPivotChain = append(newPivotChain, newHeader)
 		}
 	}
 
-	return reorg, oldblocks, nil
-}
-
-func (dag *DAG)InsertBlocks(epocblocks []*types.Block){
-	//\\//\\
-	block := epocblocks[len(epocblocks)-1]
-
-	// If the block is on a side chain or an unknown one, force other heads onto it too
-	updateHeads := rawdb.ReadCanonicalHash(dag.bc.db, block.NumberU64()) != block.Hash()
-
-	// Add the block to the canonical chain number scheme and mark as the head
-	rawdb.WriteCanonicalHash(dag.bc.db, block.Hash(), block.NumberU64())
-	rawdb.WriteHeadBlockHash(dag.bc.db, block.Hash())
-
-	dag.bc.currentBlock.Store(block)
-
-	// If the block is better than our head or is on a different chain, force update heads
-	if updateHeads {
-		dag.bc.hc.SetCurrentHeader(block.Header())
-		rawdb.WriteHeadFastBlockHash(dag.bc.db, block.Hash())
-
-		dag.bc.currentFastBlock.Store(block)
+	if oldHeader == nil {
+		return nil, nil, fmt.Errorf("Invalid old pivot chain")
+	}
+	if newHeader == nil {
+		return nil, nil, fmt.Errorf("Invalid new pivot chain")
 	}
 
+	for {
+		if oldHeader.Hash() == newHeader.Hash() {
+			break
+		}
+
+		oldPivotChain = append(oldPivotChain, oldHeader)
+		newPivotChain = append(newPivotChain, newHeader)
+
+		oldHeader, newHeader = dag.dm.GetBlock(oldHeader.ParentHash, oldHeader.Number.Uint64()-1).Header(), dag.dm.GetBlock(newHeader.ParentHash, newHeader.Number.Uint64()-1).Header()
+		if oldHeader == nil {
+			return nil, nil, fmt.Errorf("Invalid old pivot chain")
+		}
+		if newHeader == nil {
+			return nil, nil, fmt.Errorf("Invalid new pivot chain")
+		}
+	}
+
+	return oldPivotChain, newPivotChain, nil
+}
+
+func (dag *DAG)IsReorg(epochHeaders []*types.Header)(isReorg bool, oldPivotChain []*types.Header, newPivotChain []*types.Header, err error){
+	//pivot header is the end of the epochHeaders
+	header := epochHeaders[len(epochHeaders)-1]
+
+	// Calculate the total difficulty of the block
+	ptd := dag.dm.GetTd(header.ParentHash , header.Number.Uint64()-1)
+	if ptd == nil {
+		return false, nil, nil, consensus.ErrUnknownAncestor
+	}
+
+	currentBlock := dag.dm.CurrentBlock()
+	localTd := dag.dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+	externTd := new(big.Int).Add(header.Difficulty, ptd)
+
+	// Irrelevant of the canonical status, write the block itself to the database
+	if err := dag.dm.hc.WriteTd(header.Hash(), header.Number.Uint64(), externTd); err != nil {
+		return false, nil, nil, err
+	}
+
+	reorg := externTd.Cmp(localTd) > 0
+	currentBlock = dag.dm.CurrentBlock()
+	if !reorg && externTd.Cmp(localTd) == 0 {
+		// Split same-difficulty blocks by number, then at random
+		reorg = header.Number.Uint64() < currentBlock.NumberU64() || (header.Number.Uint64() == currentBlock.NumberU64() && mrand1.Float64() < 0.5)
+	}
+
+	if reorg && header.ParentHash != currentBlock.Hash() {
+		oldPivotChain, newPivotChain, err = dag.GetSplitChain(header, currentBlock.Header())
+		if err != nil{
+			return false, nil, nil, errors.New("find split block error")
+		}
+	} else {
+		newPivotChain = append(newPivotChain, header)
+	}
+
+	return reorg, oldPivotChain, newPivotChain, nil
+}
+
+func (dag *DAG)InsertBlocks(epochHeaders []*types.Header){
+	//block insert into dag
 }
 
 func (dag *DAG)GetFutureReferenceBlock()(blocks []*types.Block, err error){
