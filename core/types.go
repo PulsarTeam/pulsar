@@ -46,9 +46,10 @@ type Processor interface {
 	Process(block *types.Block, txs types.Transactions, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error)
 }
 
-type DagState interface {
-	IsReorg(blocks []*types.Block) (isReorg bool, oldblocks []*types.Block, err error)
-	InsertBlocks(epocblocks []*types.Block)
-	GetFutureReferenceBlock() (blocks []*types.Block, err error)
-	CurrentBlock() (block *types.Block, err error)
+
+type DagState interface{
+	IsReorg(epochHeaders []*types.Header)(isReorg bool, oldPivotChain []*types.Header, newPivotChain []*types.Header, err error)
+	InsertBlocks(epochHeaders []*types.Header)
+	GetFutureReferenceBlock()(blocks []*types.Block, err error)
+	CurrentBlock()(block *types.Block, err error)
 }

@@ -116,6 +116,8 @@ type DAGManager struct {
 	bodyRLPCache *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
 	blockCache   *lru.Cache     // Cache for the most recent entire blocks
 	futureBlocks *lru.Cache     // future blocks are blocks added for later processing
+	epochDataCache *lru.Cache   // Cache for the most recent epoch data
+
 
 	quit    chan struct{} // blockchain quit channel
 	running int32         // running must be called atomically
@@ -607,6 +609,22 @@ func (dm *DAGManager) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return block
 }
 
+// GetEpoch retrieves a epoch data from the database by hash and number,
+// caching it if found.
+func (dm *DAGManager) GetEpochData(hash common.Hash, number uint64) *types.EpochData {
+	// Short circuit if the epoch data is already in the cache, retrieve otherwise
+	if epochData, ok := dm.epochDataCache.Get(hash); ok {
+		return epochData.(*types.EpochData)
+	}
+	epochData := rawdb.ReadEpochData(dm.db, hash, number)
+	if epochData == nil {
+		return nil
+	}
+	// Cache the found epoch data for next time and return
+	dm.blockCache.Add(epochData.PivotBlockHeader.Hash(), epochData)
+	return epochData
+}
+
 // GetBlockByHash retrieves a block from the database by hash, caching it if found.
 func (dm *DAGManager) GetBlockByHash(hash common.Hash) *types.Block {
 	number := dm.hc.GetBlockNumber(hash)
@@ -904,9 +922,69 @@ func (dm *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (e
 	return nil
 }
 
-// WriteBlockWithState writes the block and all associated state to the database.
-func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error) {
-	//\\func (bc *DAGManager) WriteBlockWithState(blocks []*types.Block, receipts []*types.Receipt, state *state.StateDB) (status WriteStatus, err error)
+func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header)(err error){
+	var (
+		deletedLogs []*types.Log
+
+		collectLogs = func(hash common.Hash) {
+			// Coalesce logs and set 'Removed'.
+			number := dm.hc.GetBlockNumber(hash)
+			if number == nil {
+				return
+			}
+			receipts := rawdb.ReadReceipts(dm.db, hash, *number)
+			for _, receipt := range receipts {
+				for _, log := range receipt.Logs {
+					del := *log
+					del.Removed = true
+					deletedLogs = append(deletedLogs, &del)
+				}
+			}
+		}
+	)
+
+	batch := dm.db.NewBatch()
+	// delete transactions on the old pivot chain
+	if len(oldPivotChain)  != 0 {
+		for _, h := range oldPivotChain{
+			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
+			for _, tx := range epoc.Transactions{
+				rawdb.DeleteTxLookupEntry(batch, tx.Hash())
+			}
+
+			collectLogs(h.Hash())
+		}
+	}
+	batch.Write()
+	if err := batch.Write(); err != nil {
+		return errors.New("Delete old transactions from db error!")
+	}
+
+
+	if len(deletedLogs) > 0 {
+		go dm.rmLogsFeed.Send(RemovedLogsEvent{deletedLogs})
+	}
+
+	//1.0 should send side blocks to prossible uncles
+	//2.0 should get these blocks from dag
+	if len(oldPivotChain) > 0 {
+		go func() {
+			for _, h := range oldPivotChain {
+				b := dm.GetBlock(h.Hash(), h.Number.Uint64())
+				dm.chainSideFeed.Send(ChainSideEvent{Block: b})
+			}
+		}()
+	}
+
+	return nil
+}
+
+// WriteBlockWithState write epoch data and all associated state to the database.
+func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
+										referenceBlocks []*types.Block,
+										transactions types.Transactions,
+										receipts types.Receipts,
+										state *state.StateDB) (status WriteStatus, err error){
 	dm.wg.Add(1)
 	defer dm.wg.Done()
 
@@ -914,20 +992,41 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
+	var referenceHeaders []*types.Header
+	for _, b := range referenceBlocks{
+		referenceHeaders = append(referenceHeaders, b.Header())
+	}
+
+	epochData := &types.EpochData{
+		PivotBlockHeader:		pivotBlock.Header(),
+		ReferenceBlockHeader : 	referenceHeaders,
+		Transactions: 		  	transactions,
+		Receipts:				receipts,
+	}
+
 	//dag
-	var blocks []*types.Block
-	var oldblocks []*types.Block
-	blocks = append(blocks, block)
-	reorg, oldblocks, err := dm.dag.IsReorg(blocks)
+	referenceHeaders = append(referenceHeaders, pivotBlock.Header())
+	reorg, oldPivotChain, newPivotChain, err := dm.Dag().IsReorg(referenceHeaders)
 
 	if err != nil {
 		return NonStatTy, err
 	}
 
-	// Write other block data using a batch.
+	// Write other block data using a batch
 	batch := dm.db.NewBatch()
-	rawdb.WriteBlock(batch, block)
+	for _, b := range referenceBlocks{
+		if dm.GetBlock(b.Hash(), b.NumberU64()) != nil{
+			continue
+		}
+		rawdb.WriteBlock(batch, b)
+	}
+	rawdb.WriteBlock(batch, pivotBlock)
 
+	//write epoch data
+	rawdb.WriteEpochData(batch, epochData.PivotBlockHeader.Hash(), epochData.PivotBlockHeader.Number.Uint64(), epochData)
+
+	//get pivotBlock and commit db
+	block := pivotBlock
 	root, err := state.Commit(dm.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
 		return NonStatTy, err
@@ -980,19 +1079,23 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 			}
 		}
 	}
-	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts) //\\
+
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
 
 	//reorg
 	if reorg {
-		// Reorganise the chain if the parent is not the head block
-		if oldblocks != nil {
-			if err := dm.reorg(currentBlock, block); err != nil {
-				return NonStatTy, err
-			}
+		if err := dm.deleteOldTransaction(oldPivotChain); err != nil{
+			return NonStatTy, err
 		}
-		// Write the positional metadata for transaction/receipt lookups and preimages
-		rawdb.WriteTxLookupEntries(batch, block)                          //\\
-		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages()) //\\
+
+		//write transactions on the new pivot chain
+		for _, h := range newPivotChain{
+			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
+			rawdb.WriteTxLookupEntries(batch, epoc.Transactions, pivotBlock)
+		}
+
+		// Write the positional metadata for preimages
+		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())
 
 		status = CanonStatTy
 	} else {
@@ -1005,11 +1108,12 @@ func (dm *DAGManager) WriteBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		dm.insert(block)
-		dm.dag.InsertBlocks(blocks)
+		dm.Dag().InsertBlocks(referenceHeaders)
 	}
 
-	for _, b := range blocks {
-		dm.futureBlocks.Remove(b.Hash()) //\\  waitUncleBlocks.Remove
+
+	for _, h := range referenceHeaders{
+		dm.futureBlocks.Remove(h.Hash())//\\  waitUncleBlocks.Remove
 	}
 
 	return status, nil
