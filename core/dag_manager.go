@@ -59,6 +59,8 @@ const (
 	maxTimeFutureBlocks = 30
 	badBlockLimit       = 10
 	triesInMemory       = 128
+	epochCacheLimit     = 1024
+
 
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	BlockChainVersion = 3
@@ -116,7 +118,7 @@ type DAGManager struct {
 	bodyRLPCache *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
 	blockCache   *lru.Cache     // Cache for the most recent entire blocks
 	futureBlocks *lru.Cache     // future blocks are blocks added for later processing
-	epochDataCache *lru.Cache   // Cache for the most recent epoch data
+	epochCache *lru.Cache   // Cache for the most recent epoch data
 
 
 	quit    chan struct{} // blockchain quit channel
@@ -149,6 +151,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	blockCache, _ := lru.New(blockCacheLimit)
 	futureBlocks, _ := lru.New(maxFutureBlocks)
 	badBlocks, _ := lru.New(badBlockLimit)
+	epochCache, _ := lru.New(epochCacheLimit)
 
 	dm := &DAGManager{
 		chainConfig:  chainConfig,
@@ -161,6 +164,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		bodyRLPCache: bodyRLPCache,
 		blockCache:   blockCache,
 		futureBlocks: futureBlocks,
+		epochCache:   epochCache,
 		engine:       engine,
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
@@ -613,7 +617,7 @@ func (dm *DAGManager) GetBlock(hash common.Hash, number uint64) *types.Block {
 // caching it if found.
 func (dm *DAGManager) GetEpochData(hash common.Hash, number uint64) *types.EpochData {
 	// Short circuit if the epoch data is already in the cache, retrieve otherwise
-	if epochData, ok := dm.epochDataCache.Get(hash); ok {
+	if epochData, ok := dm.epochCache.Get(hash); ok {
 		return epochData.(*types.EpochData)
 	}
 	epochData := rawdb.ReadEpochData(dm.db, hash, number)
@@ -621,7 +625,7 @@ func (dm *DAGManager) GetEpochData(hash common.Hash, number uint64) *types.Epoch
 		return nil
 	}
 	// Cache the found epoch data for next time and return
-	dm.blockCache.Add(epochData.PivotBlockHeader.Hash(), epochData)
+	dm.epochCache.Add(epochData.PivotBlockHeader.Hash(), epochData)
 	return epochData
 }
 
