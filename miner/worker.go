@@ -599,3 +599,70 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, c
 
 	return nil, receipt.Logs
 }
+
+type TxWithAccount struct {
+	account	common.Address
+	tx	*types.Transaction
+	removed bool
+}
+
+func newTxWithAccount(account common.Address, tx *types.Transaction) *TxWithAccount {
+	return &TxWithAccount{
+		account: account,
+		tx: tx,
+		removed: false,
+	}
+}
+
+func (self *worker) handleConflictTransactions(block *types.Block, uncles []*types.Block) types.Transactions {
+	var orderedTxs, unclesTxs types.Transactions
+	var txsWithAccount []*TxWithAccount
+
+	pivotTxs := block.Transactions()
+
+	if len(uncles) == 0 {
+		orderedTxs = pivotTxs
+	} else {
+		unclesTxs = uncles[0].Transactions()
+		for _, initTx := range unclesTxs {
+			// Get the sender address of tx from the signer
+			account, _ := types.Sender(self.current.signer, initTx)
+			txWithAccount := newTxWithAccount(account, initTx)
+			txsWithAccount = append(txsWithAccount, txWithAccount)
+		}
+		if len(uncles) > 1 {
+			for i, uncle := range uncles {
+				if i == 0 {
+					break
+				}
+				for _, uncleTx := range uncle.Transactions() {
+					txsWithAccount = self.validateTxWithAccount(uncleTx, txsWithAccount)
+				}
+			}
+		}
+	}
+
+	for _, pivotTx := range pivotTxs {
+		txsWithAccount = self.validateTxWithAccount(pivotTx, txsWithAccount)
+	}
+
+	for _, txWithAccount := range txsWithAccount {
+		if !txWithAccount.removed {
+			orderedTxs =  append(orderedTxs, txWithAccount.tx)
+		}
+	}
+
+	return orderedTxs
+}
+
+func (self *worker) validateTxWithAccount(tx *types.Transaction, txsWithAccount []*TxWithAccount) []*TxWithAccount {
+	account, _ := types.Sender(self.current.signer, tx)
+	for _, txWithAccount := range txsWithAccount {
+		if account == txWithAccount.account && tx.Nonce() == txWithAccount.tx.Nonce() && tx.GasPrice().Cmp(txWithAccount.tx.GasPrice()) > 0 {
+			txWithAccount.removed = true
+		}
+		newTxWithAccount := newTxWithAccount(account, tx)
+		txsWithAccount = append(txsWithAccount, newTxWithAccount)
+	}
+	return txsWithAccount
+}
