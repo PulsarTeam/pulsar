@@ -435,8 +435,9 @@ func (self *worker) commitNewWork() {
 	}
 	// compute uncles for the new block.
 	var (
-		uncles    []*types.Header
-		badUncles []common.Hash
+		uncles         []*types.Header
+		badUncles      []common.Hash
+		unclesWithBody []*types.Block
 	)
 	for hash, uncle := range self.possibleUncles {
 		if len(uncles) == 2 {
@@ -450,6 +451,7 @@ func (self *worker) commitNewWork() {
 		} else {
 			log.Debug("Committing new uncle to block", "hash", hash)
 			uncles = append(uncles, uncle.Header())
+			unclesWithBody = append(unclesWithBody, uncle)
 		}
 	}
 	for _, hash := range badUncles {
@@ -458,8 +460,33 @@ func (self *worker) commitNewWork() {
 	for i := 0; i < len(uncles); i++ {
 		header.GasLimit += uncles[i].GasLimit
 	}
-	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
+	// the result tx with account
+	txWithAcc := make(map[common.Address]types.Transactions)
+	// the map for temporary txs
+	txWithAccTmp := make(map[common.Address]map[uint64]*types.Transaction)
+	// build txWithAccTmp with uncle block's txs
+	for i := 0; i < len(unclesWithBody); i++ {
+		for _, tx := range unclesWithBody[i].Transactions() {
+			acc, _ := types.Sender(self.current.signer, tx)
+			// if the tx is existed and its gasPrice bigger than the old tx, update it.
+			if t, ok := txWithAccTmp[acc][tx.Nonce()]; ok {
+				if tx.GasPrice().Cmp(t.GasPrice()) > 0 {
+					txWithAccTmp[acc][tx.Nonce()] = tx
+				}
+			}
+		}
+	}
+	// get the every account's txs
+	for acc, mp := range txWithAccTmp {
+		for _, tx := range mp {
+			txWithAcc[acc] = append(txWithAcc[acc], tx)
+		}
+	}
+
+	tmpTxs := self.removeConflictTxs(txWithAcc, pending)
+	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, tmpTxs)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
@@ -472,6 +499,27 @@ func (self *worker) commitNewWork() {
 	}
 	self.push(work)
 	self.updateSnapshot()
+}
+
+// removeConflictTxs removes the conflict txs two txs set.
+func (w *worker) removeConflictTxs(txMp1, txMp2 map[common.Address]types.Transactions) map[common.Address]types.Transactions {
+	var resMp = make(map[common.Address]types.Transactions)
+	for acc, txList := range txMp1 {
+		resMp[acc] = txList
+	}
+
+	for acc, txList := range txMp2 {
+		if _, ok := resMp[acc]; ok {
+			for i, tx := range txList {
+				if resMp[acc][i].Nonce() == tx.Nonce() && tx.GasPrice().Cmp(resMp[acc][i].GasPrice()) > 0 {
+					resMp[acc][i] = tx
+				}
+			}
+		} else {
+			resMp[acc] = txList
+		}
+	}
+	return resMp
 }
 
 func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
