@@ -456,7 +456,7 @@ func (self *worker) commitNewWork() {
 		delete(self.possibleUncles, hash)
 	}
 	for i := 0; i < len(uncles); i++ {
-		header.GasLimit += uncles[i].GasLimit
+		work.header.GasLimit += uncles[i].GasLimit
 	}
 	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
