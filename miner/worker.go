@@ -433,9 +433,6 @@ func (self *worker) commitNewWork() {
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
-	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
-	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
-
 	// compute uncles for the new block.
 	var (
 		uncles    []*types.Header
@@ -458,12 +455,16 @@ func (self *worker) commitNewWork() {
 	for _, hash := range badUncles {
 		delete(self.possibleUncles, hash)
 	}
+	for i := 0; i < len(uncles); i++ {
+		header.GasLimit += uncles[i].GasLimit
+	}
+	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
+	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
 	}
-
 	// We only care about logging if we're actually mining.
 	if atomic.LoadInt32(&self.mining) == 1 {
 		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
@@ -601,15 +602,15 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, c
 }
 
 type TxWithAccount struct {
-	account	common.Address
-	tx	*types.Transaction
+	account common.Address
+	tx      *types.Transaction
 	removed bool
 }
 
 func newTxWithAccount(account common.Address, tx *types.Transaction) *TxWithAccount {
 	return &TxWithAccount{
 		account: account,
-		tx: tx,
+		tx:      tx,
 		removed: false,
 	}
 }
@@ -648,7 +649,7 @@ func (self *worker) handleConflictTransactions(block *types.Block, uncles []*typ
 
 	for _, txWithAccount := range txsWithAccount {
 		if !txWithAccount.removed {
-			orderedTxs =  append(orderedTxs, txWithAccount.tx)
+			orderedTxs = append(orderedTxs, txWithAccount.tx)
 		}
 	}
 
