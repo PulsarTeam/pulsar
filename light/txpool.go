@@ -184,7 +184,7 @@ func (pool *TxPool) checkMinedTxs(ctx context.Context, hash common.Hash, number 
 		if _, err := GetBlockReceipts(ctx, pool.odr, hash, number); err != nil { // ODR caches, ignore results
 			return err
 		}
-		rawdb.WriteTxLookupEntries(pool.chainDb, block)
+		rawdb.WriteTxLookupEntries(pool.chainDb, nil, block)
 
 		// Update the transaction pool's state
 		for _, tx := range list {

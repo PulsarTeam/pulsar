@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	//mrand "math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -132,7 +131,81 @@ type DAGManager struct {
 	vmConfig  vm.Config
 
 	badBlocks *lru.Cache // Bad block cache
+
+	pbm *pendingBlocksManager
 }
+
+type pendingData struct {
+	block *types.Block
+	waitedHash map[common.Hash]struct{}
+}
+
+type pendingBlocksManager struct {
+	pendingBlocks map[common.Hash]pendingData
+	waitedBlocks map[common.Hash]map[common.Hash]struct{}
+}
+
+func newPendingBlocksManager() *pendingBlocksManager {
+	return &pendingBlocksManager{
+		pendingBlocks: make(map[common.Hash]pendingData),
+		waitedBlocks: make(map[common.Hash]map[common.Hash]struct{}),
+	}
+}
+
+func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
+	if _, exist := pbm.pendingBlocks[block.Hash()]; exist {
+		return
+	}
+
+	refs := block.Body().Uncles
+	if len(refs) == 0 {
+		panic("block has no reference block, should not be added")
+	}
+	data := pendingData {
+		block: block,
+		waitedHash: make(map[common.Hash]struct{}, len(refs)),
+	}
+	for _, ref := range refs {
+		data.waitedHash[ref.Hash()] = struct{}{}
+		waitedBlock, exist := pbm.waitedBlocks[ref.Hash()]
+		if exist {
+			waitedBlock[block.Hash()] = struct{}{}
+		} else {
+			tmp := make(map[common.Hash]struct{})
+			tmp[block.Hash()] = struct{}{}
+			pbm.waitedBlocks[ref.Hash()] = tmp
+		}
+	}
+	pbm.pendingBlocks[block.Hash()] = data
+}
+
+func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
+	var blocks types.Blocks
+	waitedSet, exist := pbm.waitedBlocks[block.Hash()]
+	if exist {
+		for waited := range waitedSet {
+			// Waited is the hash of the block which is on the pending list and waited for us
+			pending, ok := pbm.pendingBlocks[waited]
+			if !ok {
+				panic("logical error: no pending data")
+			}
+			_, ok1 := pending.waitedHash[block.Hash()]
+			if !ok1 {
+				// check if we are on the waited list for the pending block
+				panic("logical error: not waited hash")
+			}
+			delete(pending.waitedHash, block.Hash())
+			if len(pending.waitedHash) == 0 {
+				// the pending block waited list is empty, then it can be processed.
+				blocks = append(blocks, pending.block)
+				delete(pbm.pendingBlocks, pending.block.Hash())
+			}
+		}
+		delete(pbm.waitedBlocks, block.Hash())
+	}
+	return blocks
+}
+
 
 // NewDAGManager returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
@@ -166,6 +239,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:       engine,
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
+		pbm:           newPendingBlocksManager(),
 	}
 	dm.SetValidator(NewBlockValidator(chainConfig, dm, engine))
 	dm.SetProcessor(NewStateProcessor(chainConfig, dm, engine))
@@ -1268,10 +1342,15 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 				return i, events, coalescedLogs, err
 			}
 
+		case err == ErrUnclesNotCompletely:
+			dm.pbm.addBlock(block)
+			continue
+
 		case err != nil:
 			dm.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err
 		}
+
 		// Create a new statedb using the parent block and report an
 		// error if it fails.
 		var parent *types.Block
@@ -1305,6 +1384,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 
 		// Write the block to the chain and get the status.
 		status, err := dm.WriteBlockWithState(block, referenceBlocks, orderedTransactions, receipts, state)
+		blockList := dm.pbm.processBlock(block)
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
@@ -1333,6 +1413,10 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 
 		cache, _ := dm.stateCache.TrieDB().Size()
 		stats.report(blocks, i, cache)
+
+		if len(blockList) > 0 {
+			return dm.insertBlocks(blockList)
+		}
 	}
 	// Append a single chain head event if we've progressed the chain
 	if lastCanon != nil && dm.CurrentBlock().Hash() == lastCanon.Hash() {

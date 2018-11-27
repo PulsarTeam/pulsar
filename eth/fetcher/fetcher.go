@@ -19,7 +19,6 @@ package fetcher
 
 import (
 	"errors"
-	"math/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -373,7 +372,7 @@ func (f *Fetcher) loop() {
 				if time.Since(announces[0].time) > arriveTimeout-gatherSlack {
 					// Pick a random peer to retrieve from, reset all others
 					//announce := announces[rand.Intn(len(announces))]
-					for i,announce := range announces{
+					for _,announce := range announces{
 						f.forgetHash(hash)
 
 						// If the block still didn't arrive, queue for fetching

@@ -1177,7 +1177,7 @@ func (pm *ProtocolManager) txStatus(hashes []common.Hash) []txStatus {
 		if stat == core.TxStatusUnknown {
 			if block, number, index := rawdb.ReadTxLookupEntry(pm.chainDb, hashes[i]); block != (common.Hash{}) {
 				stats[i].Status = core.TxStatusIncluded
-				stats[i].Lookup = &rawdb.TxLookupEntry{BlockHash: block, EpochIndex: number, Index: index}
+				stats[i].Lookup = &rawdb.TxLookupEntry{PivotHash: block, EpochIndex: number, Index: index}
 			}
 		}
 	}
