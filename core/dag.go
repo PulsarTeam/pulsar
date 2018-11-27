@@ -107,3 +107,7 @@ func (dag *DAG)GetFutureReferenceBlock()(blocks []*types.Block, err error){
 func (dag *DAG)CurrentBlock()(block *types.Block, err error){
 	return nil, nil
 }
+
+func (dag *DAG)GetEpochHeaders(epochNumber uint64)(epochHeaders []*types.Header, err error){
+	return nil, nil
+}

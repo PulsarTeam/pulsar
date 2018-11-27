@@ -52,4 +52,5 @@ type DagState interface{
 	InsertBlocks(epochHeaders []*types.Header)
 	GetFutureReferenceBlock()(blocks []*types.Block, err error)
 	CurrentBlock()(block *types.Block, err error)
+	GetEpochHeaders(epochNumber uint64)(epochHeaders []*types.Header, err error)
 }
