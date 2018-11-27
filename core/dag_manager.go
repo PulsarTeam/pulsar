@@ -1415,7 +1415,12 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		stats.report(blocks, i, cache)
 
 		if len(blockList) > 0 {
-			return dm.insertBlocks(blockList)
+			_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(blockList)
+			events = append(events, pendingEvs)
+			coalescedLogs = append(coalescedLogs, pendingLogs...)
+			if pendingErr != nil {
+				return 0, events, coalescedLogs, pendingErr
+			}
 		}
 	}
 	// Append a single chain head event if we've progressed the chain
