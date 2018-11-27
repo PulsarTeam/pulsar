@@ -1288,7 +1288,9 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
-		receipts, logs, usedGas, err := dm.processor.Process(block, types.RemoveConflictTxs(block, dm.getPivotBlockReferences(block)), state, dm.vmConfig)
+		referenceBlocks := dm.getPivotBlockReferences(block)
+		orderedTransactions := types.RemoveConflictTxs(block, referenceBlocks)
+		receipts, logs, usedGas, err := dm.processor.Process(block, orderedTransactions, state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
@@ -1305,7 +1307,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		proctime := time.Since(bstart)
 
 		// Write the block to the chain and get the status.
-		status, err := dm.WriteBlockWithState(block, receipts, state)
+		status, err := dm.WriteBlockWithState(block, referenceBlocks, orderedTransactions, receipts, state)
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
