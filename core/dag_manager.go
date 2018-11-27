@@ -61,7 +61,6 @@ const (
 	triesInMemory       = 128
 	epochCacheLimit     = 1024
 
-
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	BlockChainVersion = 3
 )
@@ -118,8 +117,7 @@ type DAGManager struct {
 	bodyRLPCache *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
 	blockCache   *lru.Cache     // Cache for the most recent entire blocks
 	futureBlocks *lru.Cache     // future blocks are blocks added for later processing
-	epochCache *lru.Cache   // Cache for the most recent epoch data
-
+	epochCache   *lru.Cache     // Cache for the most recent epoch data
 
 	quit    chan struct{} // blockchain quit channel
 	running int32         // running must be called atomically
@@ -868,7 +866,7 @@ func (dm *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		// Write all the data out into the database
 		rawdb.WriteBody(batch, block.Hash(), block.NumberU64(), block.Body())
 		rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
-		rawdb.WriteTxLookupEntries(batch, block.Transactions(), block)//\\fast mode need modify
+		rawdb.WriteTxLookupEntries(batch, block.Transactions(), block) //\\fast mode need modify
 
 		stats.processed++
 
@@ -926,7 +924,7 @@ func (dm *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (e
 	return nil
 }
 
-func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header)(err error){
+func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header) (err error) {
 	var (
 		deletedLogs []*types.Log
 
@@ -949,10 +947,10 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header)(err er
 
 	batch := dm.db.NewBatch()
 	// delete transactions on the old pivot chain
-	if len(oldPivotChain)  != 0 {
-		for _, h := range oldPivotChain{
+	if len(oldPivotChain) != 0 {
+		for _, h := range oldPivotChain {
 			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
-			for _, tx := range epoc.Transactions{
+			for _, tx := range epoc.Transactions {
 				rawdb.DeleteTxLookupEntry(batch, tx.Hash())
 			}
 
@@ -963,7 +961,6 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header)(err er
 	if err := batch.Write(); err != nil {
 		return errors.New("Delete old transactions from db error!")
 	}
-
 
 	if len(deletedLogs) > 0 {
 		go dm.rmLogsFeed.Send(RemovedLogsEvent{deletedLogs})
@@ -985,10 +982,10 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header)(err er
 
 // WriteBlockWithState write epoch data and all associated state to the database.
 func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
-										referenceBlocks []*types.Block,
-										transactions types.Transactions,
-										receipts types.Receipts,
-										state *state.StateDB) (status WriteStatus, err error){
+	referenceBlocks []*types.Block,
+	transactions types.Transactions,
+	receipts types.Receipts,
+	state *state.StateDB) (status WriteStatus, err error) {
 	dm.wg.Add(1)
 	defer dm.wg.Done()
 
@@ -997,15 +994,15 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	defer dm.mu.Unlock()
 
 	var referenceHeaders []*types.Header
-	for _, b := range referenceBlocks{
+	for _, b := range referenceBlocks {
 		referenceHeaders = append(referenceHeaders, b.Header())
 	}
 
 	epochData := &types.EpochData{
-		PivotBlockHeader:		pivotBlock.Header(),
-		ReferenceBlockHeader : 	referenceHeaders,
-		Transactions: 		  	transactions,
-		Receipts:				receipts,
+		PivotBlockHeader:     pivotBlock.Header(),
+		ReferenceBlockHeader: referenceHeaders,
+		Transactions:         transactions,
+		Receipts:             receipts,
 	}
 
 	//dag
@@ -1018,8 +1015,8 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	// Write other block data using a batch
 	batch := dm.db.NewBatch()
-	for _, b := range referenceBlocks{
-		if dm.GetBlock(b.Hash(), b.NumberU64()) != nil{
+	for _, b := range referenceBlocks {
+		if dm.GetBlock(b.Hash(), b.NumberU64()) != nil {
 			continue
 		}
 		rawdb.WriteBlock(batch, b)
@@ -1088,12 +1085,12 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	//reorg
 	if reorg {
-		if err := dm.deleteOldTransaction(oldPivotChain); err != nil{
+		if err := dm.deleteOldTransaction(oldPivotChain); err != nil {
 			return NonStatTy, err
 		}
 
 		//write transactions on the new pivot chain
-		for _, h := range newPivotChain{
+		for _, h := range newPivotChain {
 			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
 			rawdb.WriteTxLookupEntries(batch, epoc.Transactions, pivotBlock)
 		}
@@ -1115,9 +1112,8 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		dm.Dag().InsertBlocks(referenceHeaders)
 	}
 
-
-	for _, h := range referenceHeaders{
-		dm.futureBlocks.Remove(h.Hash())//\\  waitUncleBlocks.Remove
+	for _, h := range referenceHeaders {
+		dm.futureBlocks.Remove(h.Hash()) //\\  waitUncleBlocks.Remove
 	}
 
 	return status, nil
@@ -1135,6 +1131,7 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 	return n, err
 }
 
+//Based pivot block fetch uncles
 func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
 	var refers types.Blocks
 	for i := 0; i < len(block.Uncles()); i++ {
@@ -1289,7 +1286,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		}
 		// Process block using the parent state as reference point.
 		referenceBlocks := dm.getPivotBlockReferences(block)
-		orderedTransactions := types.RemoveConflictTxs(block, referenceBlocks)
+		orderedTransactions := types.RemoveConflictTxs(types.MakeSigner(dm.chainConfig, block.Number()), block, referenceBlocks)
 		receipts, logs, usedGas, err := dm.processor.Process(block, orderedTransactions, state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)

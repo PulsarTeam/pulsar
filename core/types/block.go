@@ -198,9 +198,52 @@ type storageblock struct {
 	TD     *big.Int
 }
 
-// RemoveConflictxs removes the conflict tx in some blocks
-func RemoveConflictTxs(block *Block, uncles Blocks) Transactions {
-	return nil
+func removeTx(signer Signer, tx1, tx2 []*Transaction) []*Transaction {
+	resTx := make([]*Transaction, len(tx1))
+	resTx = append(resTx, tx1...)
+	len1 := len(resTx)
+	len2 := len(tx2)
+
+	for i := 0; i < len1; i++ {
+		for j := 0; j < len2; j++ {
+			acc1, _ := Sender(signer, resTx[i])
+			acc2, _ := Sender(signer, tx2[j])
+			if acc1 == acc2 {
+				if tx2[j].GasPrice().Cmp(resTx[i].GasPrice()) > 0 {
+					resTx[i] = tx2[j]
+				}
+			} else {
+				resTx = append(resTx, tx2[j])
+			}
+		}
+	}
+	return resTx
+}
+
+// RemoveConflictxs removes the conflict tx in some blocks.
+func RemoveConflictTxs(signer Signer, b *Block, uncles []*Block) []*Transaction {
+	if len(uncles) == 0 {
+		if b != nil {
+			return b.Transactions()
+		}
+		return nil
+	}
+
+	if len(uncles) == 1 {
+		if b != nil {
+			return removeTx(signer, uncles[0].Transactions(), b.Transactions())
+		}
+		return uncles[0].Transactions()
+	}
+
+	txs := make([]*Transaction, 0)
+	if len(uncles) == 2 {
+		txs = removeTx(signer, uncles[0].Transactions(), uncles[1].Transactions())
+		if b != nil {
+			return removeTx(signer, txs, b.Transactions())
+		}
+	}
+	return txs
 }
 
 // NewBlock creates a new block. The input data is copied,
