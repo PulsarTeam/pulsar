@@ -35,7 +35,7 @@ func ReadTxLookupEntry(db DatabaseReader, hash common.Hash) (common.Hash, uint64
 		log.Error("Invalid transaction lookup entry RLP", "hash", hash, "err", err)
 		return common.Hash{}, 0, 0
 	}
-	return entry.BlockHash, entry.EpochIndex, entry.Index
+	return entry.PivotHash, entry.EpochIndex, entry.Index
 }
 
 // WriteTxLookupEntries stores a positional metadata for every transaction from
@@ -43,7 +43,7 @@ func ReadTxLookupEntry(db DatabaseReader, hash common.Hash) (common.Hash, uint64
 func WriteTxLookupEntries(db DatabaseWriter, transactions types.Transactions, pivotBlock *types.Block) {
 	for i, tx := range transactions{
 		entry := TxLookupEntry{
-			BlockHash:  pivotBlock.Hash(),
+			PivotHash:  pivotBlock.Hash(),
 			EpochIndex: pivotBlock.NumberU64(),
 			Index:      uint64(i),
 		}

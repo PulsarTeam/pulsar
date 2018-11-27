@@ -68,7 +68,7 @@ var (
 // TxLookupEntry is a positional metadata to help looking up the data content of
 // a transaction or receipt given only its hash.
 type TxLookupEntry struct {
-	BlockHash  common.Hash
+	PivotHash  common.Hash
 	EpochIndex uint64
 	Index      uint64
 }
