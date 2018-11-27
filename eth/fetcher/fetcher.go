@@ -123,6 +123,7 @@ type Fetcher struct {
 	fetching   map[common.Hash]*announce   // Announced blocks, currently fetching
 	fetched    map[common.Hash][]*announce // Blocks with headers fetched, scheduled for body retrieval
 	completing map[common.Hash]*announce   // Blocks with headers, currently body-completing
+	broad      map[string]*announce
 
 	// Block cache
 	queue  *prque.Prque            // Queue containing the import operations (block number sorted)
@@ -160,6 +161,7 @@ func New(getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBloc
 		fetching:       make(map[common.Hash]*announce),
 		fetched:        make(map[common.Hash][]*announce),
 		completing:     make(map[common.Hash]*announce),
+		broad:      	make(map[string]*announce),
 		queue:          prque.New(),
 		queues:         make(map[string]int),
 		queued:         make(map[common.Hash]*inject),
@@ -306,7 +308,8 @@ func (f *Fetcher) loop() {
 				break
 			}
 			// Otherwise if fresh and still unknown, try and import
-			if number+maxUncleDist < height || f.getBlock(hash) != nil {
+			//if number+maxUncleDist < height || f.getBlock(hash) != nil {
+			if  f.getBlock(hash) != nil {
 				f.forgetBlock(hash)
 				continue
 			}
@@ -329,13 +332,13 @@ func (f *Fetcher) loop() {
 				break
 			}
 			// If we have a valid block number, check that it's potentially useful
-			if notification.number > 0 {
-				if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
-					log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
-					propAnnounceDropMeter.Mark(1)
-					break
-				}
-			}
+			//if notification.number > 0 {
+			//	if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
+			//		log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
+			//		propAnnounceDropMeter.Mark(1)
+			//		break
+			//	}
+			//}
 			// All is well, schedule the announce if block's not yet downloading
 			if _, ok := f.fetching[notification.hash]; ok {
 				break
@@ -369,13 +372,16 @@ func (f *Fetcher) loop() {
 			for hash, announces := range f.announced {
 				if time.Since(announces[0].time) > arriveTimeout-gatherSlack {
 					// Pick a random peer to retrieve from, reset all others
-					announce := announces[rand.Intn(len(announces))]
-					f.forgetHash(hash)
+					//announce := announces[rand.Intn(len(announces))]
+					for i,announce := range announces{
+						f.forgetHash(hash)
 
-					// If the block still didn't arrive, queue for fetching
-					if f.getBlock(hash) == nil {
-						request[announce.origin] = append(request[announce.origin], hash)
-						f.fetching[hash] = announce
+						// If the block still didn't arrive, queue for fetching
+						if f.getBlock(hash) == nil {
+							request[announce.origin] = append(request[announce.origin], hash)
+							f.fetching[hash] = announce
+							f.broad[announce.origin] = announce
+						}
 					}
 				}
 			}
@@ -384,7 +390,8 @@ func (f *Fetcher) loop() {
 				log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
 
 				// Create a closure of the fetch and schedule in on a new thread
-				fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
+				//fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
+				fetchHeader, hashes := f.broad[peer].fetchHeader, hashes
 				go func() {
 					if f.fetchingHook != nil {
 						f.fetchingHook(hashes)
@@ -404,13 +411,15 @@ func (f *Fetcher) loop() {
 
 			for hash, announces := range f.fetched {
 				// Pick a random peer to retrieve from, reset all others
-				announce := announces[rand.Intn(len(announces))]
-				f.forgetHash(hash)
+				//announce := announces[rand.Intn(len(announces))]
+				for _, announce := range announces {
+					f.forgetHash(hash)
 
-				// If the block still didn't arrive, queue for completion
-				if f.getBlock(hash) == nil {
-					request[announce.origin] = append(request[announce.origin], hash)
-					f.completing[hash] = announce
+					// If the block still didn't arrive, queue for completion
+					if f.getBlock(hash) == nil {
+						request[announce.origin] = append(request[announce.origin], hash)
+						f.completing[hash] = announce
+					}
 				}
 			}
 			// Send out all block body requests
@@ -422,7 +431,8 @@ func (f *Fetcher) loop() {
 					f.completingHook(hashes)
 				}
 				bodyFetchMeter.Mark(int64(len(hashes)))
-				go f.completing[hashes[0]].fetchBodies(hashes)
+				//go f.completing[hashes[0]].fetchBodies(hashes)
+				go f.broad[peer].fetchBodies(hashes)
 			}
 			// Schedule the next fetch if blocks are still pending
 			f.rescheduleComplete(completeTimer)
@@ -441,12 +451,13 @@ func (f *Fetcher) loop() {
 
 			// Split the batch of headers into unknown ones (to return to the caller),
 			// known incomplete ones (requiring body retrievals) and completed blocks.
-			unknown, incomplete, complete := []*types.Header{}, []*announce{}, []*types.Block{}
+			unknown, incomplete, complete := []*types.Header{}, []announce{}, []*types.Block{}
 			for _, header := range task.headers {
 				hash := header.Hash()
 
 				// Filter fetcher-requested headers from other synchronisation algorithms
-				if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
+				//if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
+				if announce := f.fetching[hash]; announce != nil {
 					// If the delivered header does not match the promised number, drop the announcer
 					if header.Number.Uint64() != announce.number {
 						log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number)
@@ -471,7 +482,8 @@ func (f *Fetcher) loop() {
 							continue
 						}
 						// Otherwise add to the list of blocks needing completion
-						incomplete = append(incomplete, announce)
+						announce.origin = task.peer
+						incomplete = append(incomplete, *announce)
 					} else {
 						log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
 						f.forgetHash(hash)
@@ -493,7 +505,7 @@ func (f *Fetcher) loop() {
 				if _, ok := f.completing[hash]; ok {
 					continue
 				}
-				f.fetched[hash] = append(f.fetched[hash], announce)
+				f.fetched[hash] = append(f.fetched[hash], &announce)
 				if len(f.fetched) == 1 {
 					f.rescheduleComplete(completeTimer)
 				}
@@ -610,12 +622,12 @@ func (f *Fetcher) enqueue(peer string, block *types.Block) {
 		return
 	}
 	// Discard any past or too distant blocks
-	if dist := int64(block.NumberU64()) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
-		log.Debug("Discarded propagated block, too far away", "peer", peer, "number", block.Number(), "hash", hash, "distance", dist)
-		propBroadcastDropMeter.Mark(1)
-		f.forgetHash(hash)
-		return
-	}
+	//if dist := int64(block.NumberU64()) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
+	//	log.Debug("Discarded propagated block, too far away", "peer", peer, "number", block.Number(), "hash", hash, "distance", dist)
+	//	propBroadcastDropMeter.Mark(1)
+	//	f.forgetHash(hash)
+	//	return
+	//}
 	// Schedule the block for future importing
 	if _, ok := f.queued[hash]; !ok {
 		op := &inject{

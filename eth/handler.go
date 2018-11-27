@@ -465,6 +465,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		for i, body := range request {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
+			if len(uncles[i]) > 0 {
+				pm.DownloadUncle(uncles[i])
+			}
 		}
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
@@ -596,6 +599,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
+		if(request.Block.UncleHash() != types.EmptyUncleHash){
+			pm.DownloadUncle(request.Block.Uncles())
+		}
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
@@ -637,6 +643,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
+	return nil
+}
+
+func (pm *ProtocolManager) DownloadUncle(Uncles []*types.Header) error {
+	for _, uncle := range Uncles {
+		if !pm.blockchain.HasBlock(uncle.Hash(), uncle.Number.Uint64()) {
+			number := uncle.Number.Uint64()
+			hash := uncle.Hash()
+			for _, peer := range pm.peers.peers {
+				pm.fetcher.Notify(peer.id, hash, number, time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+				fmt.Printf("Notify  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash)
+			}
+		}
+	}
+
 	return nil
 }
 
