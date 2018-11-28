@@ -85,6 +85,10 @@ type Result struct {
 	Block *types.Block
 }
 
+type ChainRefBlocks struct {
+	Uncles []*types.Block
+}
+
 // worker is the main object which takes care of applying messages to the new state
 type worker struct {
 	config *params.ChainConfig
@@ -93,17 +97,20 @@ type worker struct {
 	mu sync.Mutex
 
 	// update loop
-	mux          *event.TypeMux
-	txsCh        chan core.NewTxsEvent
-	txsSub       event.Subscription
+	mux    *event.TypeMux
+	txsCh  chan core.NewTxsEvent
+	txsSub event.Subscription
+
 	chainHeadCh  chan core.ChainHeadEvent
 	chainHeadSub event.Subscription
+
 	chainSideCh  chan core.ChainSideEvent
 	chainSideSub event.Subscription
-	wg           sync.WaitGroup
 
-	agents map[Agent]struct{}
-	recv   chan *Result
+	wg             sync.WaitGroup
+	agents         map[Agent]struct{}
+	recv           chan *Result
+	recvbRefBlocks chan ChainRefBlocks
 
 	eth     Backend
 	chain   *core.DAGManager
@@ -141,6 +148,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		chainSideCh:    make(chan core.ChainSideEvent, chainSideChanSize),
 		chainDb:        eth.ChainDb(),
 		recv:           make(chan *Result, resultQueueSize),
+		recvbRefBlocks: make(chan ChainRefBlocks, resultQueueSize),
 		chain:          eth.DAGManager(),
 		proc:           eth.DAGManager().Validator(),
 		possibleUncles: make(map[common.Hash]*types.Block),
@@ -150,9 +158,11 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 	}
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
+
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.DAGManager().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.DAGManager().SubscribeChainSideEvent(worker.chainSideCh)
+
 	go worker.update()
 
 	go worker.wait()
@@ -314,11 +324,11 @@ func (self *worker) wait() {
 			for _, log := range work.state.Logs() {
 				log.BlockHash = block.Hash()
 			}
-			//
-			refBlocks := make([]*types.Block, 0)
-			txs := make([]*types.Transaction, 0)
 
-			stat, err := self.chain.WriteBlockWithState(block, refBlocks, txs, work.receipts, work.state)
+			//
+			refBlocks := <-self.recvbRefBlocks
+			txs := types.RemoveConflictTxs(self.current.signer, block, refBlocks.Uncles)
+			stat, err := self.chain.WriteBlockWithState(block, refBlocks.Uncles, txs, work.receipts, work.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -458,6 +468,10 @@ func (self *worker) commitNewWork() {
 			unclesWithBody = append(unclesWithBody, uncle)
 		}
 	}
+
+	// sent uncles to channel
+	self.recvbRefBlocks <- ChainRefBlocks{unclesWithBody}
+
 	for _, hash := range badUncles {
 		delete(self.possibleUncles, hash)
 	}
