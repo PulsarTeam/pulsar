@@ -40,11 +40,11 @@ func ReadTxLookupEntry(db DatabaseReader, hash common.Hash) (common.Hash, uint64
 
 // WriteTxLookupEntries stores a positional metadata for every transaction from
 // a epoch, enabling hash based transaction and receipt lookups.
-func WriteTxLookupEntries(db DatabaseWriter, transactions types.Transactions, pivotBlock *types.Block) {
+func WriteTxLookupEntries(db DatabaseWriter, transactions types.Transactions, pivotHeader *types.Header) {
 	for i, tx := range transactions{
 		entry := TxLookupEntry{
-			PivotHash:  pivotBlock.Hash(),
-			EpochIndex: pivotBlock.NumberU64(),
+			PivotHash:  pivotHeader.Hash(),
+			EpochIndex: pivotHeader.Number.Uint64(),
 			Index:      uint64(i),
 		}
 		data, err := rlp.EncodeToBytes(entry)

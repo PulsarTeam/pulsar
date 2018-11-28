@@ -940,7 +940,7 @@ func (dm *DAGManager) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		// Write all the data out into the database
 		rawdb.WriteBody(batch, block.Hash(), block.NumberU64(), block.Body())
 		rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
-		rawdb.WriteTxLookupEntries(batch, block.Transactions(), block) //\\fast mode need modify
+		rawdb.WriteTxLookupEntries(batch, block.Transactions(), block.Header()) //\\fast mode need modify
 
 		stats.processed++
 
@@ -1164,10 +1164,15 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		}
 
 		//write transactions on the new pivot chain
-		for _, h := range newPivotChain {
-			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
-			rawdb.WriteTxLookupEntries(batch, epoc.Transactions, pivotBlock)
+		if len(newPivotChain) > 1{
+			newPivotChain = newPivotChain[:len(newPivotChain)-2]
+			for _, h := range newPivotChain {
+				epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
+				rawdb.WriteTxLookupEntries(batch, epoc.Transactions, h)
+			}
+
 		}
+		rawdb.WriteTxLookupEntries(batch, epochData.Transactions, pivotBlock.Header())
 
 		// Write the positional metadata for preimages
 		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())
@@ -1569,7 +1574,7 @@ func (dm *DAGManager) reorg(oldBlock, newBlock *types.Block) error {
 		dm.insert(newChain[i])
 		// write lookup entries for hash based transaction/receipt searches
 		//rawdb.WriteTxLookupEntries(dm.db, newChain[i])
-		rawdb.WriteTxLookupEntries(dm.db, newChain[i].Transactions(), newChain[i])
+		rawdb.WriteTxLookupEntries(dm.db, newChain[i].Transactions(), newChain[i].Header())
 		addedTxs = append(addedTxs, newChain[i].Transactions()...)
 	}
 	// calculate the difference between deleted and added transactions
