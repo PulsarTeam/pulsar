@@ -487,7 +487,11 @@ func (self *worker) commitNewWork() {
 		for _, tx := range unclesWithBody[i].Transactions() {
 			acc, _ := types.Sender(self.current.signer, tx)
 			// if the tx is existed and its gasPrice bigger than the old tx, update it.
-			if t, ok := txWithAccTmp[acc][tx.Nonce()]; ok && tx.GasPrice().Cmp(t.GasPrice()) > 0 {
+			if t, ok := txWithAccTmp[acc][tx.Nonce()]; ok {
+				if tx.GasPrice().Cmp(t.GasPrice()) > 0 {
+					txWithAccTmp[acc][tx.Nonce()] = tx
+				}
+			} else {
 				txWithAccTmp[acc][tx.Nonce()] = tx
 			}
 		}
