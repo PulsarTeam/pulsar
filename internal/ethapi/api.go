@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"bytes"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -42,7 +43,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"bytes"
 )
 
 const (
@@ -72,7 +72,7 @@ func (s *PublicEthereumAPI) ProtocolVersion() hexutil.Uint {
 }
 
 //For Ds-pow: GetAllDelegateMiners return a list of all delegate miners
-func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error){
+func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 	fields := map[common.Address]interface{}{}
 	minerList := state.GetAllDelegateMiners()
 
-	for addr, miner := range minerList{
+	for addr, miner := range minerList {
 		fields[addr] = miner
 	}
 
@@ -89,20 +89,20 @@ func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rp
 }
 
 //For Ds-pow: GetPowTotalSupply return the total supply of pow
-func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
-	 header, err := s.b.HeaderByNumber(ctx, blockNr)
-	if header==nil || err != nil {
-		return nil,  err
+func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error) {
+	header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header == nil || err != nil {
+		return nil, err
 	}
 	headerNumber := header.Number.Uint64()
 	sumPow := big.NewInt(0)
 	for i := uint64(0); i <= headerNumber; i++ {
-		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
-		if h==nil || InternalErr != nil {
+		h, InternalErr := s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h == nil || InternalErr != nil {
 			return nil, InternalErr
 		}
 		if h != nil {
-			fmt.Println("block[", h.Number , "],sumPow:", sumPow.String(), " + ", h.PowProduction.String())
+			fmt.Println("block[", h.Number, "],sumPow:", sumPow.String(), " + ", h.PowProduction.String())
 			sumPow.Add(sumPow, h.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -112,20 +112,20 @@ func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.B
 }
 
 //For Ds-pow: GetPosTotalSupply return the total supply of pos
-func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error){
+func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error) {
 	header, err := s.b.HeaderByNumber(ctx, blockNr)
-	if header==nil || err != nil {
+	if header == nil || err != nil {
 		return nil, err
 	}
 	headerNumber := header.Number.Uint64()
 	sumPos := big.NewInt(0)
 	for i := uint64(0); i <= headerNumber; i++ {
-		h, InternalErr:=s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
-		if h==nil || InternalErr != nil {
+		h, InternalErr := s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if h == nil || InternalErr != nil {
 			return nil, InternalErr
 		}
 		if h != nil {
-			fmt.Println("block[", h.Number , "],sumPos:", sumPos.String(), " + ", h.PosProduction.String())
+			fmt.Println("block[", h.Number, "],sumPos:", sumPos.String(), " + ", h.PosProduction.String())
 			sumPos.Add(sumPos, h.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -135,7 +135,7 @@ func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.B
 }
 
 //For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
-func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error){
+func (s *PublicEthereumAPI) GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
@@ -154,8 +154,8 @@ func (s *PublicEthereumAPI)GetAllStakeHolders(ctx context.Context, addr common.A
 	return fields, state.Error()
 }
 
-	//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
-func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber)(map[common.Address]interface{}, error) {
+//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
+func (s *PublicEthereumAPI) GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
@@ -174,7 +174,6 @@ func (s *PublicEthereumAPI)GetAllDepositMiners(ctx context.Context, addr common.
 
 	return fields, state.Error()
 }
-
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:
@@ -714,8 +713,8 @@ type CallArgs struct {
 	Value    hexutil.Big     `json:"value"`
 	Data     hexutil.Bytes   `json:"data"`
 	//for Ds-Pow
-	TxType 	 byte  		     `json:"txType"`
-	Fee      hexutil.Uint 	 `json:"delegateFee"`
+	TxType byte         `json:"txType"`
+	Fee    hexutil.Uint `json:"delegateFee"`
 }
 
 func (s *PublicBlockChainAPI) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
@@ -919,6 +918,7 @@ func RPCMarshalBlock(b *types.Block, inclTx bool, fullTx bool) (map[string]inter
 		"extraData":        hexutil.Bytes(head.Extra),
 		"size":             hexutil.Uint64(b.Size()),
 		"gasLimit":         hexutil.Uint64(head.GasLimit),
+		"gasLimitpivot":    hexutil.Uint64(head.GasLimitPivot),
 		"gasUsed":          hexutil.Uint64(head.GasUsed),
 		"timestamp":        (*hexutil.Big)(head.Time),
 		"transactionsRoot": head.TxHash,
@@ -983,8 +983,8 @@ type RPCTransaction struct {
 	R                *hexutil.Big    `json:"r"`
 	S                *hexutil.Big    `json:"s"`
 	//for Ds-Pow
-	TxType 		 hexutil.Uint  	     `json:"txType"`
-	Fee          hexutil.Uint 	     `json:"delegateFee"`
+	TxType hexutil.Uint `json:"txType"`
+	Fee    hexutil.Uint `json:"delegateFee"`
 }
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
@@ -998,9 +998,9 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 	v, r, s := tx.RawSignatureValues()
 
 	var fee uint32
-	if tx.TxType() == params.DelegateMinerRegisterTx{
+	if tx.TxType() == params.DelegateMinerRegisterTx {
 		fee, _ = tx.Fee()
-	}else{
+	} else {
 		fee = 0
 	}
 	result := &RPCTransaction{
@@ -1015,9 +1015,9 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		V:        (*hexutil.Big)(v),
 		R:        (*hexutil.Big)(r),
 		S:        (*hexutil.Big)(s),
-			//for ds-pow
-		TxType:   (hexutil.Uint)(tx.TxType()),
-		Fee:      (hexutil.Uint)(fee),
+		//for ds-pow
+		TxType: (hexutil.Uint)(tx.TxType()),
+		Fee:    (hexutil.Uint)(fee),
 	}
 	if blockHash != (common.Hash{}) {
 		result.BlockHash = blockHash
@@ -1243,8 +1243,8 @@ type SendTxArgs struct {
 	Input *hexutil.Bytes `json:"input"`
 
 	//add options for Ds-Pow
-	TxType  uint8     `json:"txType"`
-	Fee     uint32   `json:"delegateFee"`
+	TxType uint8  `json:"txType"`
+	Fee    uint32 `json:"delegateFee"`
 }
 
 // setDefaults is a helper function that fills in default values for unspecified tx fields.
@@ -1275,7 +1275,7 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 	}
 	if args.To == nil {
 		//for delegate miner register
-		if args.TxType == params.DelegateMinerRegisterTx{
+		if args.TxType == params.DelegateMinerRegisterTx {
 			return nil
 		}
 
