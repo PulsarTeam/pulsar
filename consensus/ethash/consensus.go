@@ -32,25 +32,25 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"gopkg.in/fatih/set.v0"
 	"github.com/ethereum/go-ethereum/rlp"
+	"gopkg.in/fatih/set.v0"
 )
 
 // Ethash proof-of-work protocol constants.
 var (
-	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128),big.NewInt(1e18)) // Block reward in wei for successfully mining a block
-	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
-	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
-	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
+	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128), big.NewInt(1e18)) // Block reward in wei for successfully mining a block
+	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18)                                   // Block reward in wei for successfully mining a block upward from Byzantium
+	maxUncles                       = 2                                                   // Maximum number of uncles allowed in a single block
+	allowedFutureBlockTime          = 15 * time.Second                                    // Max time from current time allowed for blocks, before they're considered future blocks
 	//InterestRate           *big.Int = big.NewInt(100)
 	//InterestRatePrecision  *big.Int = big.NewInt(10000000000)
-	FeeRatioPrecision      *big.Int = big.NewInt(1000000)
-	halveIntervalGoal		uint64	= 128 // (60*60*24*365/PowTargetSpacing)*2 // every two years
+	FeeRatioPrecision *big.Int = big.NewInt(1000000)
+	halveIntervalGoal uint64   = 128 // (60*60*24*365/PowTargetSpacing)*2 // every two years
 
-	PosSupplyLimit         *big.Int = new(big.Int).Mul( new(big.Int).SetUint64(128*core.FixedHalveInterval(halveIntervalGoal)*2),big.NewInt(1e18)) // The PosSupplyLimit is equal to PowSupplyLimit
-	PosSupplyN			   *big.Int = new(big.Int).SetUint64(core.FixedHalveInterval(halveIntervalGoal)*10) // doubled after about 20 years, so 5% every year
-	PowRewardRatioUncles   *big.Int = big.NewInt(3000)
-	PowRewardRatioPrecision*big.Int = big.NewInt(10000)
+	PosSupplyLimit          *big.Int = new(big.Int).Mul(new(big.Int).SetUint64(128*core.FixedHalveInterval(halveIntervalGoal)*2), big.NewInt(1e18)) // The PosSupplyLimit is equal to PowSupplyLimit
+	PosSupplyN              *big.Int = new(big.Int).SetUint64(core.FixedHalveInterval(halveIntervalGoal) * 10)                                      // doubled after about 20 years, so 5% every year
+	PowRewardRatioUncles    *big.Int = big.NewInt(3000)
+	PowRewardRatioPrecision *big.Int = big.NewInt(10000)
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -285,15 +285,21 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
 
+	//recalculate patent gaslimit
+	uncles := chain.GetBlock(header.Hash(), header.Number.Uint64()).Uncles()
+	unIncludeUnclesGaslimit := header.GasLimit
+	for i := 0; i < len(uncles); i++ {
+		unIncludeUnclesGaslimit -= uncles[i].GasLimit
+	}
 	// Verify that the gas limit remains within allowed bounds
-	diff := int64(parent.GasLimit) - int64(header.GasLimit)
+	diff := int64(parent.GasLimit) - int64(unIncludeUnclesGaslimit)
 	if diff < 0 {
 		diff *= -1
 	}
 	limit := parent.GasLimit / params.GasLimitBoundDivisor
 
-	if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
-		return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+	if uint64(diff) >= limit || unIncludeUnclesGaslimit < params.MinGasLimit {
+		return fmt.Errorf("invalid gas limit: have %d, want %d += %d", unIncludeUnclesGaslimit, parent.GasLimit, limit)
 	}
 	// Verify that the block number is parent's +1
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
@@ -311,8 +317,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	return nil
 }
 
-
-func (ethash *Ethash)FindInHeadersByNum(blockNum uint64, buf []*types.Header) *types.Header {
+func (ethash *Ethash) FindInHeadersByNum(blockNum uint64, buf []*types.Header) *types.Header {
 	for _, v := range buf {
 		if v.Number.Uint64() == blockNum {
 			return v
@@ -349,9 +354,9 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 	start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
 
 	h := chain.GetHeaderByNumber(start)
-	if h == nil{
+	if h == nil {
 		h = ethash.FindInHeadersByNum(start, headers)
-		if h == nil{
+		if h == nil {
 			log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
 			panic("Logical error.\n")
 		}
@@ -415,7 +420,7 @@ func (ethash *Ethash) VerifySeal(chain consensus.BlockReader, header *types.Head
 	}
 
 	code, error := rlp.EncodeToBytes(header)
-	if error != nil{
+	if error != nil {
 		return errRlpEncodeErr
 	}
 
@@ -475,16 +480,15 @@ func (ethash *Ethash) Finalize(chain consensus.BlockReader, header *types.Header
 var (
 	big8  = big.NewInt(8)
 	big32 = big.NewInt(32)
-	big0 = big.NewInt(0)
+	big0  = big.NewInt(0)
 )
 
-
 func CurPowReward(baseReward *big.Int, blockNumber uint64) *big.Int {
-	if blockNumber==0 {
+	if blockNumber == 0 {
 		return big0
 	}
 	halveInterval := core.FixedHalveInterval(halveIntervalGoal)
-	var n uint = uint((blockNumber-1) / halveInterval)
+	var n uint = uint((blockNumber - 1) / halveInterval)
 	curBlockPowReward := new(big.Int).Rsh(baseReward, n)
 	return curBlockPowReward
 }
@@ -499,21 +503,21 @@ func (ethash *Ethash) accumulatePowRewards(config *params.ChainConfig, state *st
 		blockReward = ByzantiumBlockReward
 	}
 	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
-	log.Info("accumulatePowRewards","no:",  header.Number.String() ,"reward", curPowReward.String(), "Coinbase", header.Coinbase.String())
-	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
+	log.Info("accumulatePowRewards", "no:", header.Number.String(), "reward", curPowReward.String(), "Coinbase", header.Coinbase.String())
+	uncleCnt := new(big.Int).SetUint64(uint64(len(uncles)))
 	total := new(big.Int)
-	if uncleCnt.Sign()>0 {
-		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
-		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
-		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+	if uncleCnt.Sign() > 0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward, PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward, PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward, powRewardUncles)
 		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
-		if powRewardPerUncle.Sign()>0 {
+		if powRewardPerUncle.Sign() > 0 {
 			for _, uncle := range uncles {
 				state.AddBalance(uncle.Coinbase, powRewardPerUncle)
 				total.Add(total, powRewardPerUncle)
 			}
 		}
-		if powRewardSelf.Sign()>0 {
+		if powRewardSelf.Sign() > 0 {
 			state.AddBalance(header.Coinbase, powRewardSelf)
 			total.Add(total, powRewardSelf)
 		}
@@ -535,20 +539,20 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 	}
 
 	curPowReward := CurPowReward(blockReward, header.Number.Uint64())
-	uncleCnt := new(big.Int).SetUint64( uint64(len(uncles)))
+	uncleCnt := new(big.Int).SetUint64(uint64(len(uncles)))
 	total := new(big.Int)
-	if uncleCnt.Sign()>0 {
-		powRewardUncles := new(big.Int).Mul(curPowReward,PowRewardRatioUncles)
-		powRewardUncles.Div(curPowReward,PowRewardRatioPrecision)
-		powRewardSelf := new(big.Int).Sub(curPowReward,powRewardUncles)
+	if uncleCnt.Sign() > 0 {
+		powRewardUncles := new(big.Int).Mul(curPowReward, PowRewardRatioUncles)
+		powRewardUncles.Div(curPowReward, PowRewardRatioPrecision)
+		powRewardSelf := new(big.Int).Sub(curPowReward, powRewardUncles)
 		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
-		if powRewardPerUncle.Sign()>0 {
+		if powRewardPerUncle.Sign() > 0 {
 			for _, uncle := range uncles {
 				uncle.Coinbase.String()
 				total.Add(total, powRewardPerUncle)
 			}
 		}
-		if powRewardSelf.Sign()>0 {
+		if powRewardSelf.Sign() > 0 {
 			total.Add(total, powRewardSelf)
 		}
 	} else {
@@ -561,7 +565,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func (ethash *Ethash) accumulatePosRewards(chain consensus.BlockReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)//\\
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil) //\\
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
@@ -572,7 +576,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.BlockReader, config *
 
 	posSupply := ethash.GetPosMatureTotalSupply(chain, header, nil)
 	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
-	if remainingPosSupply.Sign()<=0 {
+	if remainingPosSupply.Sign() <= 0 {
 		return new(big.Int)
 	}
 
@@ -591,7 +595,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.BlockReader, config *
 
 		//rewardStake = rewardStakeRaw - delegateFee
 		rewardStake := new(big.Int).Sub(rewardStakeRaw, delegateFee)
-		log.Info("accumulatePosRewards","no", header.Number.String(),"rewardRaw", rewardStakeRaw.String(), "rewardStake", rewardStake.String(),"userAddr", userAddr.String(), "delegateFee", delegateFee.String(),"delegateAddr",header.Coinbase.String())
+		log.Info("accumulatePosRewards", "no", header.Number.String(), "rewardRaw", rewardStakeRaw.String(), "rewardStake", rewardStake.String(), "userAddr", userAddr.String(), "delegateFee", delegateFee.String(), "delegateAddr", header.Coinbase.String())
 		feeTotal.Add(feeTotal, delegateFee)
 		total.Add(total, rewardStakeRaw)
 		state.AddBalance(userAddr, rewardStake)
@@ -605,7 +609,7 @@ func (ethash *Ethash) accumulatePosRewards(chain consensus.BlockReader, config *
 // The total reward consists of the stake rewards paid to the stake holders and
 // the delegate fee paid to delegate miners.
 func (ethash *Ethash) calculatePosRewards(chain consensus.BlockReader, config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) *big.Int {
-	matureState := core.GetMatureState(chain, header.Number.Uint64(),nil)
+	matureState := core.GetMatureState(chain, header.Number.Uint64(), nil)
 	if matureState == nil || matureState.DelegateMinersCount() == 0 {
 		return new(big.Int)
 	}
@@ -616,7 +620,7 @@ func (ethash *Ethash) calculatePosRewards(chain consensus.BlockReader, config *p
 
 	posSupply := ethash.GetPosMatureTotalSupply(chain, header, nil)
 	remainingPosSupply := new(big.Int).Sub(PosSupplyLimit, posSupply)
-	if remainingPosSupply.Sign()<=0 {
+	if remainingPosSupply.Sign() <= 0 {
 		return new(big.Int)
 	}
 	total := new(big.Int)
