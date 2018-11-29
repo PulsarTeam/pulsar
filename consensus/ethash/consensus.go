@@ -285,21 +285,15 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
 
-	//recalculate patent gaslimit
-	uncles := chain.GetBlock(header.Hash(), header.Number.Uint64()).Uncles()
-	unIncludeUnclesGaslimit := header.GasLimit
-	for i := 0; i < len(uncles); i++ {
-		unIncludeUnclesGaslimit -= uncles[i].GasLimit
-	}
 	// Verify that the gas limit remains within allowed bounds
-	diff := int64(parent.GasLimit) - int64(unIncludeUnclesGaslimit)
+	diff := int64(parent.GasLimitPivot) - int64(header.GasLimitPivot)
 	if diff < 0 {
 		diff *= -1
 	}
-	limit := parent.GasLimit / params.GasLimitBoundDivisor
+	limit := parent.GasLimitPivot / params.GasLimitBoundDivisor
 
-	if uint64(diff) >= limit || unIncludeUnclesGaslimit < params.MinGasLimit {
-		return fmt.Errorf("invalid gas limit: have %d, want %d += %d", unIncludeUnclesGaslimit, parent.GasLimit, limit)
+	if uint64(diff) >= limit || header.GasLimitPivot < params.MinGasLimit {
+		return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimitPivot, parent.GasLimitPivot, limit)
 	}
 	// Verify that the block number is parent's +1
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {

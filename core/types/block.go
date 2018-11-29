@@ -78,6 +78,7 @@ type Header struct {
 	Difficulty    *big.Int       `json:"difficulty"       gencodec:"required"`
 	Number        *big.Int       `json:"number"           gencodec:"required"`
 	GasLimit      uint64         `json:"gasLimit"         gencodec:"required"`
+	GasLimitPivot uint64         `json:"gasLimitpivort"   gencodec:"required"`
 	GasUsed       uint64         `json:"gasUsed"          gencodec:"required"`
 	Time          *big.Int       `json:"timestamp"        gencodec:"required"`
 	Extra         []byte         `json:"extraData"        gencodec:"required"`
@@ -120,6 +121,7 @@ func (h *Header) HashNoNonce() common.Hash {
 		h.Difficulty,
 		h.Number,
 		h.GasLimit,
+		h.GasLimitPivot,
 		h.GasUsed,
 		h.Time,
 		h.Extra,
@@ -365,6 +367,7 @@ func (b *Block) Transaction(hash common.Hash) *Transaction {
 
 func (b *Block) Number() *big.Int        { return new(big.Int).Set(b.header.Number) }
 func (b *Block) GasLimit() uint64        { return b.header.GasLimit }
+func (b *Block) GasLimitPivot() uint64   { return b.header.GasLimitPivot }
 func (b *Block) GasUsed() uint64         { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int    { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) PosWeight() uint32       { return b.header.PosWeight }
