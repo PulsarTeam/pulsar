@@ -1099,6 +1099,9 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	//write epoch data
 	rawdb.WriteEpochData(batch, epochData.PivotBlockHeader.Hash(), epochData.PivotBlockHeader.Number.Uint64(), epochData)
+	if err := batch.Write(); err != nil {
+		return NonStatTy, err
+	}
 
 	//get pivotBlock and commit db
 	block := pivotBlock
@@ -1168,6 +1171,10 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 			newPivotChain = newPivotChain[:len(newPivotChain)-2]
 			for _, h := range newPivotChain {
 				epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
+				if epoc == nil{
+					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
+					panic("can not get epoc error.\n")
+				}
 				rawdb.WriteTxLookupEntries(batch, epoc.Transactions, h)
 			}
 
