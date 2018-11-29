@@ -94,6 +94,7 @@ type headerMarshaling struct {
 	Difficulty    *hexutil.Big
 	Number        *hexutil.Big
 	GasLimit      hexutil.Uint64
+	GasLimitPivot hexutil.Uint64
 	GasUsed       hexutil.Uint64
 	Time          *hexutil.Big
 	Extra         hexutil.Bytes
