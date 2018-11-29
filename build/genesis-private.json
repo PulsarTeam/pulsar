@@ -8,6 +8,6 @@
   "alloc"      : {},
   "coinbase"   : "0x00000000000000000000000000000000000000FF",
   "difficulty" : "131072",
-  "gasLimit"   : "21000000"
+  "gasLimit"   : "21000000",
   "gaslimitpivot" :"21000000"
 }
