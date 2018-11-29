@@ -143,10 +143,14 @@ func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.State
 func CalcGasLimit(parent *types.Block) uint64 {
 	// contrib = (parentGasUsed * 3 / 2) / 1024
 	contrib := (parent.GasUsed() + parent.GasUsed()/2) / params.GasLimitBoundDivisor
-
+	//recalculate patent gaslimit
+	uncles := parent.Uncles()
+	unIncludeUnclesGaslimit := parent.GasLimit()
+	for i := 0; i < len(uncles); i++ {
+		unIncludeUnclesGaslimit -= uncles[i].GasLimit
+	}
 	// decay = parentGasLimit / 1024 -1
-	decay := parent.GasLimit()/params.GasLimitBoundDivisor - 1
-
+	decay := unIncludeUnclesGaslimit/params.GasLimitBoundDivisor - 1
 	/*
 		strategy: gasLimit of block-to-mine is set based on parent's
 		gasUsed value.  if parentGasUsed > parentGasLimit * (2/3) then we
@@ -154,14 +158,14 @@ func CalcGasLimit(parent *types.Block) uint64 {
 		at that usage) the amount increased/decreased depends on how far away
 		from parentGasLimit * (2/3) parentGasUsed is.
 	*/
-	limit := parent.GasLimit() - decay + contrib
+	limit := unIncludeUnclesGaslimit - decay + contrib
 	if limit < params.MinGasLimit {
 		limit = params.MinGasLimit
 	}
 	// however, if we're now below the target (TargetGasLimit) we increase the
 	// limit as much as we can (parentGasLimit / 1024 -1)
 	if limit < params.TargetGasLimit {
-		limit = parent.GasLimit() + decay
+		limit = unIncludeUnclesGaslimit + decay
 		if limit > params.TargetGasLimit {
 			limit = params.TargetGasLimit
 		}
