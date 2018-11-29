@@ -9,5 +9,5 @@
   "coinbase"   : "0x00000000000000000000000000000000000000FF",
   "difficulty" : "131072",
   "gasLimit"   : "21000000",
-  "gasLimitpivot" :"21000000"
+  "gasLimitPivot" : "21000000"
 }

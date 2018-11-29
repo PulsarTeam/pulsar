@@ -918,7 +918,7 @@ func RPCMarshalBlock(b *types.Block, inclTx bool, fullTx bool) (map[string]inter
 		"extraData":        hexutil.Bytes(head.Extra),
 		"size":             hexutil.Uint64(b.Size()),
 		"gasLimit":         hexutil.Uint64(head.GasLimit),
-		"gasLimitpivot":    hexutil.Uint64(head.GasLimitPivot),
+		"gasLimitPivot":    hexutil.Uint64(head.GasLimitPivot),
 		"gasUsed":          hexutil.Uint64(head.GasUsed),
 		"timestamp":        (*hexutil.Big)(head.Time),
 		"transactionsRoot": head.TxHash,

@@ -50,7 +50,7 @@ type Genesis struct {
 	Timestamp     uint64              `json:"timestamp"`
 	ExtraData     []byte              `json:"extraData"`
 	GasLimit      uint64              `json:"gasLimit"   gencodec:"required"`
-	GasLimitPivot uint64              `json:"gasLimitpivort"   gencodec:"required"`
+	GasLimitPivot uint64              `json:"gasLimitPivot"   gencodec:"required"`
 	Difficulty    *big.Int            `json:"difficulty" gencodec:"required"`
 	Mixhash       common.Hash         `json:"mixHash"`
 	Coinbase      common.Address      `json:"coinbase"`

@@ -78,7 +78,7 @@ type Header struct {
 	Difficulty    *big.Int       `json:"difficulty"       gencodec:"required"`
 	Number        *big.Int       `json:"number"           gencodec:"required"`
 	GasLimit      uint64         `json:"gasLimit"         gencodec:"required"`
-	GasLimitPivot uint64         `json:"gasLimitpivort"   gencodec:"required"`
+	GasLimitPivot uint64         `json:"gasLimitPivot"   gencodec:"required"`
 	GasUsed       uint64         `json:"gasUsed"          gencodec:"required"`
 	Time          *big.Int       `json:"timestamp"        gencodec:"required"`
 	Extra         []byte         `json:"extraData"        gencodec:"required"`
