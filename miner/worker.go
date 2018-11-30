@@ -70,8 +70,8 @@ type Work struct {
 	uncles    *set.Set       // uncle set
 	tcount    int            // tx count in cycle
 	gasPool   *core.GasPool  // available gas used to pack transactions
-
-	Block *types.Block // the new block
+	RefBlocks []*types.Block
+	Block     *types.Block // the new block
 
 	header   *types.Header
 	txs      []*types.Transaction
@@ -83,10 +83,6 @@ type Work struct {
 type Result struct {
 	Work  *Work
 	Block *types.Block
-}
-
-type ChainRefBlocks struct {
-	Uncles []*types.Block
 }
 
 // worker is the main object which takes care of applying messages to the new state
@@ -107,10 +103,9 @@ type worker struct {
 	chainSideCh  chan core.ChainSideEvent
 	chainSideSub event.Subscription
 
-	wg             sync.WaitGroup
-	agents         map[Agent]struct{}
-	recv           chan *Result
-	recvbRefBlocks chan ChainRefBlocks
+	wg     sync.WaitGroup
+	agents map[Agent]struct{}
+	recv   chan *Result
 
 	eth     Backend
 	chain   *core.DAGManager
@@ -148,7 +143,6 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		chainSideCh:    make(chan core.ChainSideEvent, chainSideChanSize),
 		chainDb:        eth.ChainDb(),
 		recv:           make(chan *Result, resultQueueSize),
-		recvbRefBlocks: make(chan ChainRefBlocks, resultQueueSize),
 		chain:          eth.DAGManager(),
 		proc:           eth.DAGManager().Validator(),
 		possibleUncles: make(map[common.Hash]*types.Block),
@@ -325,10 +319,8 @@ func (self *worker) wait() {
 				log.BlockHash = block.Hash()
 			}
 
-			//
-			refBlocks := <-self.recvbRefBlocks
-			txs := types.RemoveConflictTxs(self.current.signer, block, refBlocks.Uncles)
-			stat, err := self.chain.WriteBlockWithState(block, refBlocks.Uncles, txs, work.receipts, work.state)
+			txs := types.RemoveConflictTxs(self.current.signer, block, result.Work.RefBlocks)
+			stat, err := self.chain.WriteBlockWithState(block, result.Work.RefBlocks, txs, work.receipts, work.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -420,12 +412,12 @@ func (self *worker) commitNewWork() {
 
 	num := parent.Number()
 	header := &types.Header{
-		ParentHash: parent.Hash(),
-		Number:     num.Add(num, common.Big1),
-		GasLimitPivot:   core.CalcGasLimit(parent),
-		GasLimit:   core.CalcGasLimit(parent),
-		Extra:      self.extra,
-		Time:       big.NewInt(tstamp),
+		ParentHash:    parent.Hash(),
+		Number:        num.Add(num, common.Big1),
+		GasLimitPivot: core.CalcGasLimit(parent),
+		GasLimit:      core.CalcGasLimit(parent),
+		Extra:         self.extra,
+		Time:          big.NewInt(tstamp),
 	}
 	// Only set the coinbase if we are mining (avoid spurious block rewards)
 	if atomic.LoadInt32(&self.mining) == 1 {
@@ -450,9 +442,9 @@ func (self *worker) commitNewWork() {
 	}
 	// compute uncles for the new block.
 	var (
-		uncles         []*types.Header
-		badUncles      []common.Hash
-		unclesWithBody []*types.Block
+		uncles    []*types.Header
+		badUncles []common.Hash
+		refBlocks []*types.Block
 	)
 	for hash, uncle := range self.possibleUncles {
 		if len(uncles) == 2 {
@@ -466,12 +458,9 @@ func (self *worker) commitNewWork() {
 		} else {
 			log.Debug("Committing new uncle to block", "hash", hash)
 			uncles = append(uncles, uncle.Header())
-			unclesWithBody = append(unclesWithBody, uncle)
+			refBlocks = append(refBlocks, uncle)
 		}
 	}
-
-	// sent uncles to channel
-	self.recvbRefBlocks <- ChainRefBlocks{unclesWithBody}
 
 	for _, hash := range badUncles {
 		delete(self.possibleUncles, hash)
@@ -485,8 +474,8 @@ func (self *worker) commitNewWork() {
 	// the map for temporary txs
 	txWithAccTmp := make(map[common.Address]map[uint64]*types.Transaction)
 	// build txWithAccTmp with uncle block's txs
-	for i := 0; i < len(unclesWithBody); i++ {
-		for _, tx := range unclesWithBody[i].Transactions() {
+	for i := 0; i < len(refBlocks); i++ {
+		for _, tx := range refBlocks[i].Transactions() {
 			acc, _ := types.Sender(self.current.signer, tx)
 			// if the tx is existed and its gasPrice bigger than the old tx, update it.
 			if t, ok := txWithAccTmp[acc][tx.Nonce()]; ok {
@@ -508,7 +497,7 @@ func (self *worker) commitNewWork() {
 	tmpTxs := self.removeConflictTxs(txWithAcc, pending)
 	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, tmpTxs)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
-
+	work.RefBlocks = refBlocks
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
