@@ -447,18 +447,23 @@ func (self *worker) commitNewWork() {
 		refBlocks []*types.Block
 	)
 	for hash, uncle := range self.possibleUncles {
+		/*
 		if len(uncles) == 2 {
 			break
 		}
+		*/
+
 		if err := self.commitUncle(work, uncle.Header()); err != nil {
 			log.Trace("Bad uncle found and will be removed", "hash", hash)
 			log.Trace(fmt.Sprint(uncle))
 
 			badUncles = append(badUncles, hash)
 		} else {
-			log.Debug("Committing new uncle to block", "hash", hash)
-			uncles = append(uncles, uncle.Header())
-			refBlocks = append(refBlocks, uncle)
+			if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1{
+				log.Debug("Committing new uncle to block", "hash", hash)
+				uncles = append(uncles, uncle.Header())
+				refBlocks = append(refBlocks, uncle)
+			}
 		}
 	}
 
