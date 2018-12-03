@@ -473,7 +473,7 @@ func (self *worker) commitNewWork() {
 		header.GasLimit += uncles[i].GasLimit
 	}
 
-	// parent and pending transactions
+	// parent transactions
 	var parentTxs []*types.Transaction
 	parentTxs = append(parentTxs, parent.Transactions()...)
 
@@ -499,7 +499,7 @@ func (self *worker) commitNewWork() {
 			}
 		}
 	}
-	// pending
+	// pending transactions
 	pendingTxs := make([]*types.Transaction, 0)
 	for _, txs := range pending {
 		pendingTxs = append(pendingTxs, txs...)
