@@ -52,7 +52,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *DAGManager, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, txs types.Transactions, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, types.Transactions, error) {
+func (p *StateProcessor) Process(block *types.Block, txs types.TransactionRefs, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, types.Transactions, error) {
 	var (
 		receipts  types.Receipts
 		usedGas   = new(uint64)
@@ -64,16 +64,16 @@ func (p *StateProcessor) Process(block *types.Block, txs types.Transactions, sta
 	)
 	// Iterate over and process the individual transactions
 	for i, tx := range txs {
-		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
-		if err != nil && tx.GetIsRef() == true {
+		statedb.Prepare(tx.Tx.Hash(), block.Hash(), i)
+		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx.Tx, usedGas, cfg)
+		if err != nil && tx.IsRef == true {
 			return nil, nil, 0, nil, err
 		} else if err != nil {
 			continue
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
-		execTxs = append(execTxs, tx)
+		execTxs = append(execTxs, tx.Tx)
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)

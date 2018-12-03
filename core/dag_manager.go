@@ -1217,9 +1217,9 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 }
 
 //Based pivot block fetch uncles transactions
-func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Transactions {
+func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.TransactionRefs {
 	var (
-		//refers types.Blocks
+		txRefs      types.TransactionRefs
 		refTxsTmp   types.Transactions                    = make([]*types.Transaction, 0)
 		refTxs      types.Transactions                    = make([]*types.Transaction, 0)
 		refAccTxsMp map[common.Address]types.Transactions = make(map[common.Address]types.Transactions, 0)
@@ -1249,9 +1249,9 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 	txsRef := types.NewTransactionsByPriceAndNonce(signer, refAccTxsMp, true)
 	resultTxs := txsRef.GetTxs()
 	for _, tx := range resultTxs {
-		tx.SetIsRef(true)
+		txRefs = append(txRefs, &types.TransactionRef{Tx: tx, IsRef: true})
 	}
-	return resultTxs
+	return txRefs
 }
 
 //Based pivot block fetch uncles
@@ -1413,10 +1413,12 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
-		referenceBlocksTxs := dm.getPivotBlockReferencesTxs(block)
+		execTxs := dm.getPivotBlockReferencesTxs(block)
 		referenceBlocks := dm.getPivotBlockReferences(block)
-		execTxs := append(referenceBlocksTxs, block.Transactions()...)
-		receipts, logs, usedGas, execTxs, err := dm.processor.Process(block, execTxs, state, dm.vmConfig)
+		for _, tx := range block.Transactions() {
+			execTxs = append(execTxs, &types.TransactionRef{Tx: tx, IsRef: false})
+		}
+		receipts, logs, usedGas, txs, err := dm.processor.Process(block, execTxs, state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
@@ -1432,7 +1434,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		}
 		proctime := time.Since(bstart)
 		// Write the block to the chain and get the status.
-		status, err := dm.WriteBlockWithState(block, referenceBlocks, execTxs, receipts, state)
+		status, err := dm.WriteBlockWithState(block, referenceBlocks, txs, receipts, state)
 		blockList := dm.pbm.processBlock(block)
 		if err != nil {
 			return i, events, coalescedLogs, err
