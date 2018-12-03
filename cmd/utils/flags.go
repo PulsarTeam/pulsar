@@ -539,6 +539,17 @@ var (
 		Usage: "InfluxDB `host` tag attached to all measurements",
 		Value: "localhost",
 	}
+
+	// Add CPU and block profiling
+	CPUProfilingFlag = cli.StringFlag{
+		Name:  "cpu.profiling",
+		Usage: "Write cpu profile to file",
+	}
+
+	BlockProfilingFlag = cli.StringFlag{
+		Name:  "block.profiling",
+		Usage: "Write block profile to file",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
