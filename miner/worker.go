@@ -486,7 +486,7 @@ func (self *worker) commitNewWork() {
 			// remove the same tx as parent block in ref block
 			for _, parentTx := range parentTxs {
 				for _, tx := range tmpTxs {
-					if !isSameTx(self.current.signer, parentTx, tx) {
+					if !isSameTx(parentTx, tx) {
 						acc, _ := types.Sender(self.current.signer, tx)
 						accTxsMp[acc] = append(accTxsMp[acc], tx)
 					}
@@ -516,7 +516,7 @@ func (self *worker) commitNewWork() {
 	self.updateSnapshot()
 }
 
-func isSameTx(s types.Signer, tx1, tx2 *types.Transaction) bool {
+func isSameTx(tx1, tx2 *types.Transaction) bool {
 	if tx1.Hash() == tx2.Hash() {
 		return true
 	}
