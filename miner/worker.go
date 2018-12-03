@@ -504,9 +504,8 @@ func (self *worker) commitNewWork() {
 	}
 	pendingAccTxsMp := make(map[common.Address]types.Transactions)
 	for _, tx := range pendingTxs {
-		for _, parentTx := range tmpTxs {
-			if tx.Hash() != parentTx.Hash() {
-				tmpTxs = append(tmpTxs, tx)
+		for _, tmpTx := range tmpTxs {
+			if tx.Hash() != tmpTx.Hash() {
 				acc, _ := types.Sender(self.current.signer, tx)
 				pendingAccTxsMp[acc] = append(pendingAccTxsMp[acc], tx)
 			}
