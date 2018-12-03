@@ -476,7 +476,7 @@ func (self *worker) commitNewWork() {
 	parentTxs = append(parentTxs, parent.Transactions()...)
 
 	// map of ref block's acc and txs
-	accTxsMp := make(map[common.Address]types.Transactions)
+	refAccTxsMp := make(map[common.Address]types.Transactions)
 	// ref block's txs
 	refTxs := make([]*types.Transaction, 0)
 	//
@@ -492,7 +492,7 @@ func (self *worker) commitNewWork() {
 				if tx.Hash() != parentTx.Hash() {
 					tmpTxs = append(tmpTxs, tx)
 					acc, _ := types.Sender(self.current.signer, tx)
-					accTxsMp[acc] = append(accTxsMp[acc], tx)
+					refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
 				}
 			}
 		}
@@ -512,7 +512,7 @@ func (self *worker) commitNewWork() {
 		}
 	}
 
-	txsRef := types.NewTransactionsByPriceAndNonce(self.current.signer, accTxsMp, true)
+	txsRef := types.NewTransactionsByPriceAndNonce(self.current.signer, refAccTxsMp, true)
 	txsPeding := types.NewTransactionsByPriceAndNonce(self.current.signer, pendingAccTxsMp, false)
 
 	executedTxs := work.commitTransactions(self.mux, txsRef, self.chain, self.coinbase)
