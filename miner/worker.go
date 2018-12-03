@@ -64,14 +64,15 @@ type Work struct {
 	config *params.ChainConfig
 	signer types.Signer
 
-	state     *state.StateDB // apply state changes here
-	ancestors *set.Set       // ancestor set (used for checking uncle parent validity)
-	family    *set.Set       // family set (used for checking uncle invalidity)
-	uncles    *set.Set       // uncle set
-	tcount    int            // tx count in cycle
-	gasPool   *core.GasPool  // available gas used to pack transactions
-	RefBlocks []*types.Block
-	Block     *types.Block // the new block
+	state       *state.StateDB // apply state changes here
+	ancestors   *set.Set       // ancestor set (used for checking uncle parent validity)
+	family      *set.Set       // family set (used for checking uncle invalidity)
+	uncles      *set.Set       // uncle set
+	tcount      int            // tx count in cycle
+	gasPool     *core.GasPool  // available gas used to pack transactions
+	RefBlocks   []*types.Block
+	ExecutedTxs []*types.Transaction
+	Block       *types.Block // the new block
 
 	header   *types.Header
 	txs      []*types.Transaction
@@ -275,7 +276,7 @@ func (self *worker) update() {
 					acc, _ := types.Sender(self.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
 				}
-				txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs)
+				txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs, false)
 				self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
 				self.updateSnapshot()
 				self.currentMu.Unlock()
@@ -319,8 +320,7 @@ func (self *worker) wait() {
 				log.BlockHash = block.Hash()
 			}
 
-			txs := types.RemoveConflictTxs(self.current.signer, block, result.Work.RefBlocks)
-			stat, err := self.chain.WriteBlockWithState(block, result.Work.RefBlocks, txs, work.receipts, work.state)
+			stat, err := self.chain.WriteBlockWithState(block, result.Work.RefBlocks, result.Work.ExecutedTxs, work.receipts, work.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -471,36 +471,56 @@ func (self *worker) commitNewWork() {
 		header.GasLimit += uncles[i].GasLimit
 	}
 
-	// parent's transactions
+	// parent and pending transactions
 	var parentTxs []*types.Transaction
 	parentTxs = append(parentTxs, parent.Transactions()...)
 
+	// map of ref block's acc and txs
+	accTxsMp := make(map[common.Address]types.Transactions)
+	// ref block's txs
+	refTxs := make([]*types.Transaction, 0)
+	//
+	tmpTxs := make([]*types.Transaction, 0)
 	n := len(refBlocks)
 	if n > 0 {
 		for _, rb := range refBlocks {
-			// ref block's txs
-			var tmpTxs []*types.Transaction
-			tmpTxs = append(tmpTxs, rb.Transactions()...)
-			// map of ref block's acc and txs
-			accTxsMp := make(map[common.Address]types.Transactions)
-			// remove the same tx as parent block in ref block
+			refTxs = append(refTxs, rb.Transactions()...)
+		}
+
+		for _, tx := range refTxs {
 			for _, parentTx := range parentTxs {
-				for _, tx := range tmpTxs {
-					if !isSameTx(parentTx, tx) {
-						acc, _ := types.Sender(self.current.signer, tx)
-						accTxsMp[acc] = append(accTxsMp[acc], tx)
-					}
+				if tx.Hash() != parentTx.Hash() {
+					tmpTxs = append(tmpTxs, tx)
+					acc, _ := types.Sender(self.current.signer, tx)
+					accTxsMp[acc] = append(accTxsMp[acc], tx)
 				}
 			}
-			txs := types.NewTransactionsByPriceAndNonce(self.current.signer, accTxsMp)
-			work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+		}
+	}
+	// pending
+	pendingTxs := make([]*types.Transaction, 0)
+	for _, txs := range pending {
+		pendingTxs = append(pendingTxs, txs...)
+	}
+	pendingAccTxsMp := make(map[common.Address]types.Transactions)
+	for _, tx := range pendingTxs {
+		for _, parentTx := range tmpTxs {
+			if tx.Hash() != parentTx.Hash() {
+				tmpTxs = append(tmpTxs, tx)
+				acc, _ := types.Sender(self.current.signer, tx)
+				pendingAccTxsMp[acc] = append(pendingAccTxsMp[acc], tx)
+			}
 		}
 	}
 
-	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
-	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+	txsRef := types.NewTransactionsByPriceAndNonce(self.current.signer, accTxsMp, true)
+	txsPeding := types.NewTransactionsByPriceAndNonce(self.current.signer, pendingAccTxsMp, false)
+
+	executedTxs := work.commitTransactions(self.mux, txsRef, self.chain, self.coinbase)
+	executedTxs = append(executedTxs, work.commitTransactions(self.mux, txsPeding, self.chain, self.coinbase)...)
 
 	work.RefBlocks = refBlocks
+	work.ExecutedTxs = executedTxs
 
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
@@ -514,35 +534,6 @@ func (self *worker) commitNewWork() {
 	}
 	self.push(work)
 	self.updateSnapshot()
-}
-
-func isSameTx(tx1, tx2 *types.Transaction) bool {
-	if tx1.Hash() == tx2.Hash() {
-		return true
-	}
-	return false
-}
-
-// removeConflictTxs removes the conflict txs two txs set.
-func (w *worker) removeConflictTxs(txMp1, txMp2 *types.TransactionsByPriceAndNonce) *types.TransactionsByPriceAndNonce {
-	//var resMp = make(map[common.Address]types.Transactions)
-	//for acc, txList := range txMp1 {
-	//	resMp[acc] = txList
-	//}
-	//
-	//for acc, txList := range txMp2 {
-	//	if _, ok := resMp[acc]; ok {
-	//		for i, tx := range txList {
-	//			if resMp[acc][i].Nonce() == tx.Nonce() && tx.GasPrice().Cmp(resMp[acc][i].GasPrice()) > 0 {
-	//				resMp[acc][i] = tx
-	//			}
-	//		}
-	//	} else {
-	//		resMp[acc] = txList
-	//	}
-	//}
-	//return resMp
-	return nil
 }
 
 func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
@@ -573,13 +564,13 @@ func (self *worker) updateSnapshot() {
 	self.snapshotState = self.current.state.Copy()
 }
 
-func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsByPriceAndNonce, bc *core.DAGManager, coinbase common.Address) {
+func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsByPriceAndNonce, bc *core.DAGManager, coinbase common.Address) []*types.Transaction {
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
 	}
 
 	var coalescedLogs []*types.Log
-
+	executedTxs := make([]*types.Transaction, 0)
 	for {
 		// If we don't have enough gas for any further transactions then we're done
 		if env.gasPool.Gas() < params.TxGas {
@@ -607,7 +598,8 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 		// Start executing the transaction
 		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
 
-		err, logs := env.commitTransaction(tx, bc, coinbase, env.gasPool)
+		err, logs := env.commitTransaction(tx, bc, coinbase, env.gasPool, txs.IsRef())
+
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
@@ -628,6 +620,7 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
+			executedTxs = append(executedTxs, tx)
 			txs.Shift()
 
 		default:
@@ -656,9 +649,10 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 			}
 		}(cpy, env.tcount)
 	}
+	return executedTxs
 }
 
-func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, coinbase common.Address, gp *core.GasPool) (error, []*types.Log) {
+func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, coinbase common.Address, gp *core.GasPool, isRef bool) (error, []*types.Log) {
 	snap := env.state.Snapshot()
 
 	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, &env.header.GasUsed, vm.Config{})
@@ -666,7 +660,9 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, c
 		env.state.RevertToSnapshot(snap)
 		return err, nil
 	}
-	env.txs = append(env.txs, tx)
+	if !isRef {
+		env.txs = append(env.txs, tx)
+	}
 	env.receipts = append(env.receipts, receipt)
 
 	return nil, receipt.Logs
