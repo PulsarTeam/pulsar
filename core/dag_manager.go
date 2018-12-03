@@ -1233,9 +1233,12 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 	}
 	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
 	for _, rtx := range refTxsTmp {
-		for _, ptx := range parentTxs {
-			if rtx.Hash() != ptx.Hash() {
-				refTxs = append(refTxs, ptx)
+		for i := len(parentTxs) - 1; i >= 0; i-- {
+			if rtx.Hash() == parentTxs[i].Hash() {
+				break
+			}
+			if i == 0 && rtx.Hash() != parentTxs[i].Hash() {
+				refTxs = append(refTxs, rtx)
 			}
 		}
 	}
