@@ -470,39 +470,43 @@ func (self *worker) commitNewWork() {
 	for _, hash := range badUncles {
 		delete(self.possibleUncles, hash)
 	}
+
 	for i := 0; i < len(uncles); i++ {
 		work.header.GasLimit += uncles[i].GasLimit
 		header.GasLimit += uncles[i].GasLimit
 	}
-	// the result tx with account
-	txWithAcc := make(map[common.Address]types.Transactions)
-	// the map for temporary txs
-	txWithAccTmp := make(map[common.Address]map[uint64]*types.Transaction)
-	// build txWithAccTmp with uncle block's txs
-	for i := 0; i < len(refBlocks); i++ {
-		for _, tx := range refBlocks[i].Transactions() {
-			acc, _ := types.Sender(self.current.signer, tx)
-			// if the tx is existed and its gasPrice bigger than the old tx, update it.
-			if t, ok := txWithAccTmp[acc][tx.Nonce()]; ok {
-				if tx.GasPrice().Cmp(t.GasPrice()) > 0 {
-					txWithAccTmp[acc][tx.Nonce()] = tx
+
+	// parent's transactions
+	var parentTxs []*types.Transaction
+	parentTxs = append(parentTxs, parent.Transactions()...)
+
+	n := len(refBlocks)
+	if n > 0 {
+		for _, rb := range refBlocks {
+			// ref block's txs
+			var tmpTxs []*types.Transaction
+			tmpTxs = append(tmpTxs, rb.Transactions()...)
+			// map of ref block's acc and txs
+			accTxsMp := make(map[common.Address]types.Transactions)
+			// remove the same tx as parent block in ref block
+			for _, parentTx := range parentTxs {
+				for _, tx := range tmpTxs {
+					if !isSameTx(self.current.signer, parentTx, tx) {
+						acc, _ := types.Sender(self.current.signer, tx)
+						accTxsMp[acc] = append(accTxsMp[acc], tx)
+					}
 				}
-			} else {
-				txWithAccTmp[acc][tx.Nonce()] = tx
 			}
-		}
-	}
-	// get the every account's txs
-	for acc, mp := range txWithAccTmp {
-		for _, tx := range mp {
-			txWithAcc[acc] = append(txWithAcc[acc], tx)
+			txs := types.NewTransactionsByPriceAndNonce(self.current.signer, accTxsMp)
+			work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 		}
 	}
 
-	tmpTxs := self.removeConflictTxs(txWithAcc, pending)
-	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, tmpTxs)
+	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+
 	work.RefBlocks = refBlocks
+
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
@@ -517,25 +521,34 @@ func (self *worker) commitNewWork() {
 	self.updateSnapshot()
 }
 
-// removeConflictTxs removes the conflict txs two txs set.
-func (w *worker) removeConflictTxs(txMp1, txMp2 map[common.Address]types.Transactions) map[common.Address]types.Transactions {
-	var resMp = make(map[common.Address]types.Transactions)
-	for acc, txList := range txMp1 {
-		resMp[acc] = txList
+func isSameTx(s types.Signer, tx1, tx2 *types.Transaction) bool {
+	acc1, _ := types.Sender(s, tx1)
+	acc2, _ := types.Sender(s, tx2)
+	if acc1 == acc2 && tx1.To() == tx2.To() && tx1.Value() == tx2.Value() {
+		return true
 	}
+	return false
+}
 
-	for acc, txList := range txMp2 {
-		if _, ok := resMp[acc]; ok {
-			for i, tx := range txList {
-				if resMp[acc][i].Nonce() == tx.Nonce() && tx.GasPrice().Cmp(resMp[acc][i].GasPrice()) > 0 {
-					resMp[acc][i] = tx
-				}
-			}
-		} else {
-			resMp[acc] = txList
-		}
-	}
-	return resMp
+// removeConflictTxs removes the conflict txs two txs set.
+func (w *worker) removeConflictTxs(txMp1, txMp2 *types.TransactionsByPriceAndNonce) *types.TransactionsByPriceAndNonce {
+	//var resMp = make(map[common.Address]types.Transactions)
+	//for acc, txList := range txMp1 {
+	//	resMp[acc] = txList
+	//}
+	//
+	//for acc, txList := range txMp2 {
+	//	if _, ok := resMp[acc]; ok {
+	//		for i, tx := range txList {
+	//			if resMp[acc][i].Nonce() == tx.Nonce() && tx.GasPrice().Cmp(resMp[acc][i].GasPrice()) > 0 {
+	//				resMp[acc][i] = tx
+	//			}
+	//		}
+	//	} else {
+	//		resMp[acc] = txList
+	//	}
+	//}
+	//return resMp
 }
 
 func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
