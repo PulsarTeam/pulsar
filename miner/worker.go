@@ -542,6 +542,7 @@ func (w *worker) removeConflictTxs(txMp1, txMp2 *types.TransactionsByPriceAndNon
 	//	}
 	//}
 	//return resMp
+	return nil
 }
 
 func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
