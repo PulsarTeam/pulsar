@@ -461,9 +461,6 @@ func (self *worker) commitNewWork() {
 				uncles = append(uncles, uncle.Header())
 				refBlocks = append(refBlocks, uncle)
 			}
-			log.Debug("Committing new uncle to block", "hash", hash)
-			uncles = append(uncles, uncle.Header())
-			refBlocks = append(refBlocks, uncle)
 		}
 	}
 
