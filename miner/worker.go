@@ -447,23 +447,18 @@ func (self *worker) commitNewWork() {
 		refBlocks []*types.Block
 	)
 	for hash, uncle := range self.possibleUncles {
-		/*
 		if len(uncles) == 2 {
 			break
 		}
-		*/
-
 		if err := self.commitUncle(work, uncle.Header()); err != nil {
 			log.Trace("Bad uncle found and will be removed", "hash", hash)
 			log.Trace(fmt.Sprint(uncle))
 
 			badUncles = append(badUncles, hash)
 		} else {
-			if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1{
-				log.Debug("Committing new uncle to block", "hash", hash)
-				uncles = append(uncles, uncle.Header())
-				refBlocks = append(refBlocks, uncle)
-			}
+			log.Debug("Committing new uncle to block", "hash", hash)
+			uncles = append(uncles, uncle.Header())
+			refBlocks = append(refBlocks, uncle)
 		}
 	}
 
@@ -522,9 +517,7 @@ func (self *worker) commitNewWork() {
 }
 
 func isSameTx(s types.Signer, tx1, tx2 *types.Transaction) bool {
-	acc1, _ := types.Sender(s, tx1)
-	acc2, _ := types.Sender(s, tx2)
-	if acc1 == acc2 && tx1.To() == tx2.To() && tx1.Value() == tx2.Value() {
+	if tx1.Hash() == tx2.Hash() {
 		return true
 	}
 	return false
