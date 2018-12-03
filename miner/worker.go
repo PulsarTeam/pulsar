@@ -456,6 +456,11 @@ func (self *worker) commitNewWork() {
 
 			badUncles = append(badUncles, hash)
 		} else {
+			if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1 {
+				log.Debug("Committing new uncle to block", "hash", hash)
+				uncles = append(uncles, uncle.Header())
+				refBlocks = append(refBlocks, uncle)
+			}
 			log.Debug("Committing new uncle to block", "hash", hash)
 			uncles = append(uncles, uncle.Header())
 			refBlocks = append(refBlocks, uncle)
