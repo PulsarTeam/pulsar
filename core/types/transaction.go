@@ -39,9 +39,10 @@ var (
 type Transaction struct {
 	data txdata
 	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
+	hash  atomic.Value
+	size  atomic.Value
+	from  atomic.Value
+	isRef bool
 }
 
 type txdata struct {
@@ -273,6 +274,13 @@ func (tx *Transaction) Cost() *big.Int {
 
 func (tx *Transaction) RawSignatureValues() (*big.Int, *big.Int, *big.Int) {
 	return tx.data.V, tx.data.R, tx.data.S
+}
+
+func (tx Transaction) SetIsRef(flag bool) {
+	tx.isRef = flag
+}
+func (tx Transaction) GetIsRef() bool {
+	return tx.isRef
 }
 
 // Transactions is a Transaction slice type for basic sorting.

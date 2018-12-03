@@ -1220,10 +1220,10 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Transactions {
 	var (
 		//refers types.Blocks
-		refTxsTmp   types.Transactions = make([]*types.Transaction, 0)
-		refTxs      types.Transactions = make([]*types.Transaction, 0)
-		refAccTxsMp map[common.Address]types.Transactions
-		signer      types.Signer = types.MakeSigner(dm.chainConfig, block.Number())
+		refTxsTmp   types.Transactions                    = make([]*types.Transaction, 0)
+		refTxs      types.Transactions                    = make([]*types.Transaction, 0)
+		refAccTxsMp map[common.Address]types.Transactions = make(map[common.Address]types.Transactions, 0)
+		signer      types.Signer                          = types.MakeSigner(dm.chainConfig, block.Number())
 	)
 	for i := 0; i < len(block.Uncles()); i++ {
 		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
@@ -1247,7 +1247,11 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 		refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
 	}
 	txsRef := types.NewTransactionsByPriceAndNonce(signer, refAccTxsMp, true)
-	return txsRef.GetTxs()
+	resultTxs := txsRef.GetTxs()
+	for _, tx := range resultTxs {
+		tx.SetIsRef(true)
+	}
+	return resultTxs
 }
 
 //Based pivot block fetch uncles
@@ -1411,16 +1415,12 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		// Process block using the parent state as reference point.
 		referenceBlocksTxs := dm.getPivotBlockReferencesTxs(block)
 		referenceBlocks := dm.getPivotBlockReferences(block)
-		receiptsRef, logsRef, usedGasRef, execTxs, _ := dm.processor.Process(block, referenceBlocksTxs, state, dm.vmConfig)
-		receipts, logs, usedGas, _, err := dm.processor.Process(block, block.Transactions(), state, dm.vmConfig)
+		execTxs := append(referenceBlocksTxs, block.Transactions()...)
+		receipts, logs, usedGas, execTxs, err := dm.processor.Process(block, execTxs, state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
-		receipts = append(receipts, receiptsRef...)
-		logs = append(logs, logsRef...)
-		usedGas = usedGas + usedGasRef
-		execTxs = append(execTxs, block.Transactions()...)
 		// Validate the state using the default validator
 		err = dm.Validator().ValidateState(block, parent, state, receipts, usedGas)
 		//\err2 := dm.Validator().ValidateHeader(block, state)

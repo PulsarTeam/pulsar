@@ -66,9 +66,9 @@ func (p *StateProcessor) Process(block *types.Block, txs types.Transactions, sta
 	for i, tx := range txs {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
 		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
-
-		if err != nil {
-			errResult = err
+		if err != nil && tx.GetIsRef() == true {
+			return nil, nil, 0, nil, err
+		} else if err != nil {
 			continue
 		}
 		receipts = append(receipts, receipt)
