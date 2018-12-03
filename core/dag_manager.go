@@ -136,19 +136,19 @@ type DAGManager struct {
 }
 
 type pendingData struct {
-	block *types.Block
+	block      *types.Block
 	waitedHash map[common.Hash]struct{}
 }
 
 type pendingBlocksManager struct {
 	pendingBlocks map[common.Hash]pendingData
-	waitedBlocks map[common.Hash]map[common.Hash]struct{}
+	waitedBlocks  map[common.Hash]map[common.Hash]struct{}
 }
 
 func newPendingBlocksManager() *pendingBlocksManager {
 	return &pendingBlocksManager{
 		pendingBlocks: make(map[common.Hash]pendingData),
-		waitedBlocks: make(map[common.Hash]map[common.Hash]struct{}),
+		waitedBlocks:  make(map[common.Hash]map[common.Hash]struct{}),
 	}
 }
 
@@ -161,8 +161,8 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 	if len(refs) == 0 {
 		panic("block has no reference block, should not be added")
 	}
-	data := pendingData {
-		block: block,
+	data := pendingData{
+		block:      block,
 		waitedHash: make(map[common.Hash]struct{}, len(refs)),
 	}
 	for _, ref := range refs {
@@ -206,7 +206,6 @@ func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
 	return blocks
 }
 
-
 // NewDAGManager returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
@@ -239,7 +238,7 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:       engine,
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
-		pbm:           newPendingBlocksManager(),
+		pbm:          newPendingBlocksManager(),
 	}
 	dm.SetValidator(NewBlockValidator(chainConfig, dm, engine))
 	dm.SetProcessor(NewStateProcessor(chainConfig, dm, engine))
@@ -1167,11 +1166,11 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		}
 
 		//write transactions on the new pivot chain
-		if len(newPivotChain) > 1{
+		if len(newPivotChain) > 1 {
 			newPivotChain = newPivotChain[:len(newPivotChain)-2]
 			for _, h := range newPivotChain {
 				epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
-				if epoc == nil{
+				if epoc == nil {
 					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
 					panic("can not get epoc error.\n")
 				}
@@ -1215,6 +1214,37 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
 	n, events, logs, err := dm.insertBlocks(blocks)
 	dm.PostChainEvents(events, logs)
 	return n, err
+}
+
+//Based pivot block fetch uncles transactions
+func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Transactions {
+	var (
+		//refers types.Blocks
+		refTxsTmp   types.Transactions = make([]*types.Transaction, 0)
+		refTxs      types.Transactions = make([]*types.Transaction, 0)
+		refAccTxsMp map[common.Address]types.Transactions
+		signer      types.Signer = types.MakeSigner(dm.chainConfig, block.Number())
+	)
+	for i := 0; i < len(block.Uncles()); i++ {
+		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
+			//refers = append(refers, dm.GetBlockByHash(block.Uncles()[i].Hash()))
+			refTxsTmp = append(refTxsTmp, dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions()...)
+		}
+	}
+	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
+	for _, rtx := range refTxsTmp {
+		for _, ptx := range parentTxs {
+			if rtx.Hash() != ptx.Hash() {
+				refTxs = append(refTxs, ptx)
+			}
+		}
+	}
+	for _, tx := range refTxs {
+		acc, _ := types.Sender(signer, tx)
+		refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
+	}
+	txsRef := types.NewTransactionsByPriceAndNonce(signer, refAccTxsMp, true)
+	return txsRef.GetTxs()
 }
 
 //Based pivot block fetch uncles
@@ -1376,13 +1406,18 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
+		referenceBlocksTxs := dm.getPivotBlockReferencesTxs(block)
 		referenceBlocks := dm.getPivotBlockReferences(block)
-		orderedTransactions := types.RemoveConflictTxs(types.MakeSigner(dm.chainConfig, block.Number()), block, referenceBlocks)
-		receipts, logs, usedGas, err := dm.processor.Process(block, orderedTransactions, state, dm.vmConfig)
+		receiptsRef, logsRef, usedGasRef, execTxs, _ := dm.processor.Process(block, referenceBlocksTxs, state, dm.vmConfig)
+		receipts, logs, usedGas, _, err := dm.processor.Process(block, block.Transactions(), state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
+		receipts = append(receipts, receiptsRef...)
+		logs = append(logs, logsRef...)
+		usedGas = usedGas + usedGasRef
+		execTxs = append(execTxs, block.Transactions()...)
 		// Validate the state using the default validator
 		err = dm.Validator().ValidateState(block, parent, state, receipts, usedGas)
 		//\err2 := dm.Validator().ValidateHeader(block, state)
@@ -1393,9 +1428,8 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return i, events, coalescedLogs, err
 		}
 		proctime := time.Since(bstart)
-
 		// Write the block to the chain and get the status.
-		status, err := dm.WriteBlockWithState(block, referenceBlocks, orderedTransactions, receipts, state)
+		status, err := dm.WriteBlockWithState(block, referenceBlocks, execTxs, receipts, state)
 		blockList := dm.pbm.processBlock(block)
 		if err != nil {
 			return i, events, coalescedLogs, err

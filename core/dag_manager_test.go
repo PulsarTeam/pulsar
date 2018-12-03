@@ -152,7 +152,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *DAGManager) error {
 		if err != nil {
 			return err
 		}
-		receipts, _, usedGas, err := blockchain.Processor().Process(block, statedb, vm.Config{}, nil)
+		receipts, _, usedGas, _, err := blockchain.Processor().Process(block, statedb, vm.Config{}, nil)
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err
