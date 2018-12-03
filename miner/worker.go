@@ -481,8 +481,9 @@ func (self *worker) commitNewWork() {
 	refAccTxsMp := make(map[common.Address]types.Transactions)
 	// ref block's txs
 	refTxs := make([]*types.Transaction, 0)
-	//
+	// temporary array for transactions
 	tmpTxs := make([]*types.Transaction, 0)
+
 	n := len(refBlocks)
 	if n > 0 {
 		for _, rb := range refBlocks {
@@ -490,12 +491,10 @@ func (self *worker) commitNewWork() {
 		}
 
 		for _, tx := range refTxs {
-			for _, parentTx := range parentTxs {
-				if tx.Hash() != parentTx.Hash() {
-					tmpTxs = append(tmpTxs, tx)
-					acc, _ := types.Sender(self.current.signer, tx)
-					refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
-				}
+			if !isContained(tx, parentTxs) {
+				tmpTxs = append(tmpTxs, tx)
+				acc, _ := types.Sender(self.current.signer, tx)
+				refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
 			}
 		}
 	}
@@ -506,19 +505,17 @@ func (self *worker) commitNewWork() {
 	}
 	pendingAccTxsMp := make(map[common.Address]types.Transactions)
 	for _, tx := range pendingTxs {
-		for _, tmpTx := range tmpTxs {
-			if tx.Hash() != tmpTx.Hash() {
-				acc, _ := types.Sender(self.current.signer, tx)
-				pendingAccTxsMp[acc] = append(pendingAccTxsMp[acc], tx)
-			}
+		if !isContained(tx, tmpTxs) {
+			acc, _ := types.Sender(self.current.signer, tx)
+			pendingAccTxsMp[acc] = append(pendingAccTxsMp[acc], tx)
 		}
 	}
 
 	txsRef := types.NewTransactionsByPriceAndNonce(self.current.signer, refAccTxsMp, true)
-	txsPeding := types.NewTransactionsByPriceAndNonce(self.current.signer, pendingAccTxsMp, false)
+	txsPending := types.NewTransactionsByPriceAndNonce(self.current.signer, pendingAccTxsMp, false)
 
 	executedTxs := work.commitTransactions(self.mux, txsRef, self.chain, self.coinbase)
-	executedTxs = append(executedTxs, work.commitTransactions(self.mux, txsPeding, self.chain, self.coinbase)...)
+	executedTxs = append(executedTxs, work.commitTransactions(self.mux, txsPending, self.chain, self.coinbase)...)
 
 	work.RefBlocks = refBlocks
 	work.ExecutedTxs = executedTxs
@@ -535,6 +532,16 @@ func (self *worker) commitNewWork() {
 	}
 	self.push(work)
 	self.updateSnapshot()
+}
+
+//
+func isContained(tx *types.Transaction, txs []*types.Transaction) bool {
+	for _, t := range txs {
+		if t.Hash() == tx.Hash() {
+			return true
+		}
+	}
+	return false
 }
 
 func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
