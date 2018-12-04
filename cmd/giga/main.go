@@ -147,11 +147,6 @@ var (
 		utils.MetricsInfluxDBPasswordFlag,
 		utils.MetricsInfluxDBHostTagFlag,
 	}
-
-	profFlags = []cli.Flag{
-		utils.CPUProfilingFlag,
-		utils.BlockProfilingFlag,
-	}
 )
 
 func init() {
@@ -193,7 +188,6 @@ func init() {
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, whisperFlags...)
 	app.Flags = append(app.Flags, metricsFlags...)
-	app.Flags = append(app.Flags, profFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())

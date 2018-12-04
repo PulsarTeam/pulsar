@@ -34,8 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	whisper "github.com/ethereum/go-ethereum/whisper/whisperv6"
 	"github.com/naoina/toml"
-	"runtime/pprof"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 var (
@@ -153,26 +151,6 @@ func enableWhisper(ctx *cli.Context) bool {
 }
 
 func makeFullNode(ctx *cli.Context) *node.Node {
-	if cpuProfile := ctx.GlobalString(utils.CPUProfilingFlag.Name); cpuProfile != "" {
-		// start CPU profiling
-		log.Info("start CPU profiling")
-		if f, err := os.Create(cpuProfile); err == nil {
-			defer pprof.StopCPUProfile()
-			pprof.StartCPUProfile(f)
-		}
-	} else if blockProfile := ctx.GlobalString(utils.BlockProfilingFlag.Name); blockProfile != "" {
-		// start block profiling
-		log.Info("start Block profiling")
-		if f, err := os.Create(blockProfile); err != nil {
-			if err = pprof.Lookup("block").WriteTo(f, 0); err != nil {
-				log.Warn("start block profiling", "error", err)
-				f.Close()
-			} else {
-				defer f.Close()
-			}
-		}
-	}
-
 	stack, cfg := makeConfigNode(ctx)
 
 	utils.RegisterEthService(stack, &cfg.Eth)
