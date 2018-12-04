@@ -653,7 +653,7 @@ func (pm *ProtocolManager) DownloadUncle(Uncles []*types.Header) error {
 			hash := uncle.Hash()
 			for _, peer := range pm.peers.peers {
 				pm.fetcher.Notify(peer.id, hash, number, time.Now(), peer.RequestOneHeader, peer.RequestBodies)
-				fmt.Printf("Notify  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash)
+				//fmt.Printf("Notify  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash)
 			}
 		}
 	}
