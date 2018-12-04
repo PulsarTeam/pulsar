@@ -4,7 +4,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/consensus"
 	"math/big"
-	mrand1 "math/rand"
 	"errors"
 	"fmt"
 )
@@ -81,7 +80,8 @@ func (dag *DAG)IsReorg(epochHeaders []*types.Header)(isReorg bool, oldPivotChain
 	currentBlock = dag.dm.CurrentBlock()
 	if !reorg && externTd.Cmp(localTd) == 0 {
 		// Split same-difficulty blocks by number, then at random
-		reorg = header.Number.Uint64() < currentBlock.NumberU64() || (header.Number.Uint64() == currentBlock.NumberU64() && mrand1.Float64() < 0.5)
+		reorg = header.Number.Uint64() < currentBlock.NumberU64()
+		reorg = reorg || ((header.Number.Uint64() == currentBlock.NumberU64() && (header.Hash().Big().Cmp(currentBlock.Header().Hash().Big()) == -1)))
 	}
 
 	if reorg && header.ParentHash != currentBlock.Hash() {
