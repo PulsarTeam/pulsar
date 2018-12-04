@@ -555,7 +555,11 @@ func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
 	if work.family.Has(hash) {
 		return fmt.Errorf("uncle already in family (%x)", hash)
 	}
-	work.uncles.Add(uncle.Hash())
+
+	if uncle.Number.Uint64() == self.current.header.Number.Uint64()-1{
+		work.uncles.Add(uncle.Hash())
+	}
+
 	return nil
 }
 
