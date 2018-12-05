@@ -255,7 +255,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, headers)
 
 	if expected.Cmp(header.Difficulty) != 0 {
-		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
+		return fmt.Errorf("invalid difficulty: have %v, want %v, number %v, parent num %v", header.Difficulty, expected, header.Number, parent.Number)
 	}
 
 	// Verify the pos weight
