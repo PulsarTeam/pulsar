@@ -43,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"runtime/debug"
 )
 
 var (
@@ -1706,6 +1707,8 @@ func (dm *DAGManager) addBadBlock(block *types.Block) {
 
 // reportBlock logs a bad block error.
 func (dm *DAGManager) reportBlock(block *types.Block, receipts types.Receipts, err error) {
+	debug.PrintStack()
+
 	dm.addBadBlock(block)
 
 	var receiptString string
