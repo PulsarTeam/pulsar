@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"runtime/debug"
 )
 
 var (
@@ -714,6 +715,7 @@ func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh 
 				break
 			}
 			if headers[i].Hash() != header.ParentHash {
+				debug.PrintStack()
 				log.Warn("Header broke chain ancestry", "peer", id, "number", header.Number, "hash", hash)
 				accepted = false
 				break
