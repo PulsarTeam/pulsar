@@ -1273,6 +1273,10 @@ func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
 func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*types.Log, error) {
+	for _, block := range blocks {
+		fmt.Printf("insertBlocks block number : %v , block hash: %v\n", block.Number().String(), block.Hash().String())
+	}
+
 	if len(blocks) == 0 {
 		return 0, nil, nil, nil
 	}
