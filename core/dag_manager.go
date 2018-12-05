@@ -136,6 +136,12 @@ type DAGManager struct {
 	pbm *pendingBlocksManager
 }
 
+
+type BlockAndWait struct {
+	Block common.Hash `json:"block" gencodec:"required"`
+	WaitedBlock []common.Hash `json:"waitedBlocks" gencodec:"required"`
+}
+
 type pendingData struct {
 	block      *types.Block
 	waitedHash map[common.Hash]struct{}
@@ -154,6 +160,8 @@ func newPendingBlocksManager() *pendingBlocksManager {
 }
 
 func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
+	log.Info("Add block to pending list", "block Hash", block.Hash())
+
 	if _, exist := pbm.pendingBlocks[block.Hash()]; exist {
 		return
 	}
@@ -181,6 +189,8 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 }
 
 func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
+	log.Info("Process pending block", "block Hash", block.Hash())
+
 	var blocks types.Blocks
 	waitedSet, exist := pbm.waitedBlocks[block.Hash()]
 	if exist {
@@ -1867,4 +1877,17 @@ func (dm *DAGManager) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (dm *DAGManager) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return dm.scope.Track(dm.logsFeed.Subscribe(ch))
+}
+
+func (dm *DAGManager) GetPendingBlocks() []interface{} {
+	var result []interface{}
+	for k1, v1 := range dm.pbm.pendingBlocks {
+		var waited []common.Hash
+		for k2, _ := range v1.waitedHash {
+			waited = append(waited, k2)
+		}
+		data := &BlockAndWait{k1, waited}
+		result = append(result, data)
+	}
+	return result
 }

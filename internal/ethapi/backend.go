@@ -44,6 +44,7 @@ type Backend interface {
 	ChainDb() ethdb.Database
 	EventMux() *event.TypeMux
 	AccountManager() *accounts.Manager
+	DAGManager() *core.DAGManager
 
 	// DAG Manager API
 	SetHead(number uint64)

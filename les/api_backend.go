@@ -184,6 +184,11 @@ func (b *LesApiBackend) AccountManager() *accounts.Manager {
 	return b.eth.accountManager
 }
 
+func (b *LesApiBackend) DAGManager() *core.DAGManager {
+	// TODO: impl
+	return nil
+}
+
 func (b *LesApiBackend) BloomStatus() (uint64, uint64) {
 	if b.eth.bloomIndexer == nil {
 		return 0, 0
