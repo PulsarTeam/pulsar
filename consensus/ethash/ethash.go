@@ -97,7 +97,7 @@ const(
 	TesterThreads = 1
 	//\\PowTargetTimespan = 14 * 24 * 60 * 60
 	//\\PowTargetTimespan = 75
-	PowTargetSpacing = 1
+	PowTargetSpacing = 3
 	MinDifficulty = 131072
 )
 
