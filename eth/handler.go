@@ -466,7 +466,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
 			if len(uncles[i]) > 0 {
-				log.Info("BlockBodiesMsg DownloadUncle------------")
+				fmt.Println("BlockBodiesMsg DownloadUncle------------")
 				pm.DownloadUncle(uncles[i])
 			}
 		}
@@ -595,7 +595,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		request.Block.ReceivedAt = msg.ReceivedAt
 		request.Block.ReceivedFrom = p
-		log.Info("NewBlockMsg block num %v", request.Block.Number())
+		fmt.Println("NewBlockMsg block num = %v", request.Block.Number())
 		// Mark the peer as owning the block and schedule it for import
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
@@ -654,7 +654,7 @@ func (pm *ProtocolManager) DownloadUncle(Uncles []*types.Header) error {
 			hash := uncle.Hash()
 			for _, peer := range pm.peers.peers {
 				pm.fetcher.Notify(peer.id, hash, number, time.Now(), peer.RequestOneHeader, peer.RequestBodies)
-				log.Info("DownloadUncle  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash)
+				fmt.Println("DownloadUncle  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash)
 			}
 		}
 	}
