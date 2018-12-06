@@ -356,6 +356,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			headers = append(headers, origin)
 			bytes += estHeaderRlpSize
+			if len(origin.UncleHash.String()) > 0{
+				block := pm.blockchain.GetBlock(origin.Hash(), origin.Number.Uint64())
+
+				for _, h := range block.Uncles(){
+					headers = append(headers, h)
+					bytes += estHeaderRlpSize
+				}
+			}
 
 			// Advance to the next header of the query
 			switch {
