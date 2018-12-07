@@ -456,6 +456,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if data := pm.blockchain.GetBodyRLP(hash); len(data) != 0 {
 				bodies = append(bodies, data)
 				bytes += len(data)
+
+				block := pm.blockchain.GetBlockByHash(hash)
+				for _, uncle := range block.Uncles(){
+					if body := pm.blockchain.GetBodyRLP(uncle.Hash()); len(body) != 0{
+						bodies = append(bodies, body)
+						bytes += len(data)
+					}
+				}
 			}
 		}
 		return p.SendBlockBodiesRLP(bodies)
