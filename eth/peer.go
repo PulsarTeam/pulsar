@@ -247,6 +247,13 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	return p2p.Send(p.rw, NewBlockMsg, []interface{}{block, td})
 }
 
+// SendReferenceBlock propagates an entire block to a remote peer.
+func (p *peer) SendReferenceBlock(block *types.Block, td *big.Int) error {
+	p.knownBlocks.Add(block.Hash())
+	return p2p.Send(p.rw, ReferenceBlockMsg, []interface{}{block, td})
+}
+
+
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
 func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {

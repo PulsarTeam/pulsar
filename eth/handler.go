@@ -331,9 +331,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// Gather headers until the fetch or network limits is reached
 		var (
-			bytes   common.StorageSize
-			headers []*types.Header
-			unknown bool
+			bytes      common.StorageSize
+			headers    []*types.Header
+			unknown    bool
 		)
 		for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit && len(headers) < downloader.MaxHeaderFetch {
 			// Retrieve the next header satisfying the query
@@ -356,14 +356,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			headers = append(headers, origin)
 			bytes += estHeaderRlpSize
-			if len(origin.UncleHash.String()) > 0{
-				block := pm.blockchain.GetBlock(origin.Hash(), origin.Number.Uint64())
-
-				for _, h := range block.Uncles(){
-					headers = append(headers, h)
-					bytes += estHeaderRlpSize
-				}
-			}
 
 			// Advance to the next header of the query
 			switch {
@@ -412,6 +404,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				query.Origin.Number += query.Skip + 1
 			}
 		}
+
 		return p.SendBlockHeaders(headers)
 
 	case msg.Code == BlockHeadersMsg:
@@ -441,9 +434,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Gather blocks until the fetch or network limits is reached
 		var (
-			hash   common.Hash
-			bytes  int
-			bodies []rlp.RawValue
+			hash   		common.Hash
+			bytes  		int
+			bodies  	[]rlp.RawValue
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -457,15 +450,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				bodies = append(bodies, data)
 				bytes += len(data)
 
+				//send reference blocks
 				block := pm.blockchain.GetBlockByHash(hash)
 				for _, uncle := range block.Uncles(){
-					if body := pm.blockchain.GetBodyRLP(uncle.Hash()); len(body) != 0{
-						bodies = append(bodies, body)
-						bytes += len(data)
-					}
+					b := pm.blockchain.GetBlock(uncle.Hash(), uncle.Number.Uint64())
+					td := new(big.Int).Add(b.Difficulty(), pm.blockchain.GetTd(b.ParentHash(), b.NumberU64()-1))
+					p.SendReferenceBlock(b, td)
 				}
 			}
 		}
+
 		return p.SendBlockBodiesRLP(bodies)
 
 	case msg.Code == BlockBodiesMsg:
@@ -638,6 +632,19 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
+	case msg.Code == ReferenceBlockMsg:
+		// Retrieve and decode the propagated block
+		var request newBlockData
+		if err := msg.Decode(&request); err != nil {
+			return errResp(ErrDecode, "%v: %v", msg, err)
+		}
+		request.Block.ReceivedAt = msg.ReceivedAt
+		request.Block.ReceivedFrom = p
+		fmt.Printf("ReferenceBlockMsg block num = %v, hash = %v\n", request.Block.Number(), request.Block.Hash().String())
+		// Mark the peer as owning the block and schedule it for import
+		p.MarkBlock(request.Block.Hash())
+		pm.fetcher.Enqueue(p.id, request.Block)
+		
 	case msg.Code == TxMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
