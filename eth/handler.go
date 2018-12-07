@@ -437,6 +437,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			hash   		common.Hash
 			bytes  		int
 			bodies  	[]rlp.RawValue
+			blocks      types.Blocks
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -450,17 +451,28 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				bodies = append(bodies, data)
 				bytes += len(data)
 
-				//send reference blocks
+				//get reference blocks
 				block := pm.blockchain.GetBlockByHash(hash)
 				for _, uncle := range block.Uncles(){
 					b := pm.blockchain.GetBlock(uncle.Hash(), uncle.Number.Uint64())
-					td := new(big.Int).Add(b.Difficulty(), pm.blockchain.GetTd(b.ParentHash(), b.NumberU64()-1))
-					p.SendReferenceBlock(b, td)
+					blocks = append(blocks, b)
 				}
 			}
 		}
 
-		return p.SendBlockBodiesRLP(bodies)
+		if err := p.SendBlockBodiesRLP(bodies); err != nil{
+			return err
+		}
+
+		//send reference blocks
+		for _, b:= range blocks{
+			td := new(big.Int).Add(b.Difficulty(), pm.blockchain.GetTd(b.ParentHash(), b.NumberU64()-1))
+			if err := p.SendReferenceBlock(b, td); err != nil{
+				return err
+			}
+		}
+
+		return nil
 
 	case msg.Code == BlockBodiesMsg:
 		// A batch of block bodies arrived to one of our previous requests
