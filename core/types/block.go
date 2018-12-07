@@ -411,6 +411,13 @@ func (b *Block) Hash() common.Hash {
 
 type Blocks []*Block
 
+type ReferenceBlock struct {
+	Block 		*Block
+	Td    		*big.Int
+}
+
+type ReferenceBlocks [] *ReferenceBlock
+
 type BlockBy func(b1, b2 *Block) bool
 
 func (self BlockBy) Sort(blocks Blocks) {

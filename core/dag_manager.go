@@ -1294,6 +1294,18 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		return 0, nil, nil, nil
 	}
 
+	// Do a sanity check that the provided chain is actually ordered and linked
+	for i := 1; i < len(blocks); i++ {
+		if blocks[i].NumberU64() != blocks[i-1].NumberU64()+1 || blocks[i].ParentHash() != blocks[i-1].Hash() {
+			// Chain broke ancestry, log a messge (programming error) and skip insertion
+			log.Error("Non contiguous block insert", "number", blocks[i].Number(), "hash", blocks[i].Hash(),
+				"parent", blocks[i].ParentHash(), "prevnumber", blocks[i-1].Number(), "prevhash", blocks[i-1].Hash())
+
+			return 0, nil, nil, fmt.Errorf("non contiguous insert: item %d is #%d [%x…], item %d is #%d [%x…] (parent [%x…])", i-1, blocks[i-1].NumberU64(),
+				blocks[i-1].Hash().Bytes()[:4], i, blocks[i].NumberU64(), blocks[i].Hash().Bytes()[:4], blocks[i].ParentHash().Bytes()[:4])
+		}
+	}
+
 	dm.wg.Add(1)
 	defer dm.wg.Done()
 

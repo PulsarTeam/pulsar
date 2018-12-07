@@ -68,8 +68,9 @@ type PeerInfo struct {
 
 // propEvent is a block propagation, waiting for its turn in the broadcast queue.
 type propEvent struct {
-	block *types.Block
-	td    *big.Int
+	block 		*types.Block
+	td    		*big.Int
+	references   types.ReferenceBlocks
 }
 
 type peer struct {
@@ -124,6 +125,15 @@ func (p *peer) broadcast() {
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
 			}
+
+			for _, reference := range prop.references{
+				rb := reference.Block
+				td := reference.Td
+				if err := p.SendReferenceBlock(rb, td); err != nil{
+					return
+				}
+			}
+
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
 		case block := <-p.queuedAnns:
@@ -256,10 +266,14 @@ func (p *peer) SendReferenceBlock(block *types.Block, td *big.Int) error {
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
+func (p *peer) AsyncSendNewBlock(block *types.Block, references types.ReferenceBlocks, td *big.Int) {
 	select {
-	case p.queuedProps <- &propEvent{block: block, td: td}:
+	case p.queuedProps <- &propEvent{block: block, td: td, references:references}:
 		p.knownBlocks.Add(block.Hash())
+		for _, reference := range references{
+			p.knownBlocks.Add(reference.Block.Hash())
+		}
+
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}
