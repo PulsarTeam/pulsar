@@ -136,9 +136,8 @@ type DAGManager struct {
 	pbm *pendingBlocksManager
 }
 
-
 type BlockAndWait struct {
-	Block common.Hash `json:"block" gencodec:"required"`
+	Block       common.Hash   `json:"block" gencodec:"required"`
 	WaitedBlock []common.Hash `json:"waitedBlocks" gencodec:"required"`
 }
 
@@ -160,6 +159,8 @@ func newPendingBlocksManager() *pendingBlocksManager {
 }
 
 func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
+	log.Info("Add block to pending list", "block Hash", block.Hash())
+
 	if _, exist := pbm.pendingBlocks[block.Hash()]; exist {
 		return
 	}
@@ -189,6 +190,8 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 }
 
 func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
+	log.Info("Process pending block", "block Hash", block.Hash())
+
 	var blocks types.Blocks
 	waitedSet, exist := pbm.waitedBlocks[block.Hash()]
 	if exist {
@@ -1204,7 +1207,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	// Set new head.
 	if status == CanonStatTy {
-		for _, h := range newPivotChain{
+		for _, h := range newPivotChain {
 			b := dm.GetBlock(h.Hash(), h.Number.Uint64())
 			dm.insert(b)
 		}
@@ -1378,37 +1381,37 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 
 		case err == consensus.ErrPrunedAncestor:
 			/*
-			// Block competing with the canonical chain, store in the db, but don't process
-			// until the competitor TD goes above the canonical TD
-			currentBlock := dm.CurrentBlock()
-			localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-			externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
-			if localTd.Cmp(externTd) > 0 {
-				if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
+				// Block competing with the canonical chain, store in the db, but don't process
+				// until the competitor TD goes above the canonical TD
+				currentBlock := dm.CurrentBlock()
+				localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+				externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
+				if localTd.Cmp(externTd) > 0 {
+					if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
+						return i, events, coalescedLogs, err
+					}
+					continue
+				}
+				// Competitor chain beat canonical, gather all blocks from the common ancestor
+				var winner []*types.Block
+
+				parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
+				for !dm.HasState(parent.Root()) {
+					winner = append(winner, parent)
+					parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
+				}
+				for j := 0; j < len(winner)/2; j++ {
+					winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
+				}
+				// Import all the pruned blocks to make the state available
+				dm.chainmu.Unlock()
+				_, evs, logs, err := dm.insertBlocks(winner)
+				dm.chainmu.Lock()
+				events, coalescedLogs = evs, logs
+
+				if err != nil {
 					return i, events, coalescedLogs, err
 				}
-				continue
-			}
-			// Competitor chain beat canonical, gather all blocks from the common ancestor
-			var winner []*types.Block
-
-			parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
-			for !dm.HasState(parent.Root()) {
-				winner = append(winner, parent)
-				parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
-			}
-			for j := 0; j < len(winner)/2; j++ {
-				winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
-			}
-			// Import all the pruned blocks to make the state available
-			dm.chainmu.Unlock()
-			_, evs, logs, err := dm.insertBlocks(winner)
-			dm.chainmu.Lock()
-			events, coalescedLogs = evs, logs
-
-			if err != nil {
-				return i, events, coalescedLogs, err
-			}
 			*/
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 		case err == ErrUnclesNotCompletely:
