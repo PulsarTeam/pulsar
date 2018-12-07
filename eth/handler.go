@@ -665,12 +665,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 func (pm *ProtocolManager) DownloadUncle(Uncles []*types.Header) error {
 	for _, uncle := range Uncles {
+		fmt.Printf("uncle Number=%v,  hash = %v\n", uncle.Number.Uint64(), uncle.Hash().String())
 		if !pm.blockchain.HasBlock(uncle.Hash(), uncle.Number.Uint64()) {
 			number := uncle.Number.Uint64()
 			hash := uncle.Hash()
 			for _, peer := range pm.peers.peers {
 				pm.fetcher.Notify(peer.id, hash, number, time.Now(), peer.RequestOneHeader, peer.RequestBodies)
-				fmt.Printf("DownloadUncle  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash.String())
+				//fmt.Printf("DownloadUncle  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash.String())
 			}
 		}
 	}
