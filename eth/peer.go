@@ -122,16 +122,16 @@ func (p *peer) broadcast() {
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 		case prop := <-p.queuedProps:
-			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
-				return
-			}
-
 			for _, reference := range prop.references{
-				rb := reference.Block
-				td := reference.Td
-				if err := p.SendReferenceBlock(rb, td); err != nil{
+				if err := p.SendReferenceBlock(reference.Block, reference.Td); err != nil{
 					return
 				}
+
+				p.Log().Trace("Propagated reference block", "number", reference.Block.Number(), "hash", reference.Block.Hash(), "td", reference.Td)
+			}
+
+			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
+				return
 			}
 
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
