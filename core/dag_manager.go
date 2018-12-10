@@ -149,12 +149,14 @@ type pendingData struct {
 type pendingBlocksManager struct {
 	pendingBlocks map[common.Hash]pendingData
 	waitedBlocks  map[common.Hash]map[common.Hash]struct{}
+	todoList types.Blocks
 }
 
 func newPendingBlocksManager() *pendingBlocksManager {
 	return &pendingBlocksManager{
 		pendingBlocks: make(map[common.Hash]pendingData),
 		waitedBlocks:  make(map[common.Hash]map[common.Hash]struct{}),
+		todoList: nil,
 	}
 }
 
@@ -187,6 +189,43 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 		}
 	}
 	pbm.pendingBlocks[block.Hash()] = data
+}
+
+func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
+	if len(blocks) <= 0 {
+		return
+	}
+	if pbm.todoList == nil {
+		pbm.todoList = blocks
+		return
+	}
+	firstNum := pbm.todoList[0].NumberU64()
+	lastNum := pbm.todoList[len(pbm.todoList) - 1].NumberU64()
+	start := blocks[0].NumberU64()
+	end := blocks[len(blocks) - 1].NumberU64()
+
+	if start > lastNum || end < firstNum {
+		panic("blocks are not continuous")
+	}
+
+	if start <= firstNum {
+		if end >= lastNum {
+			pbm.todoList = blocks
+		} else { // end < lastNum
+			tail := pbm.todoList[uint64(len(pbm.todoList)) - (lastNum - end):]
+			pbm.todoList = blocks
+			for _, value := range tail {
+				pbm.todoList = append(pbm.todoList, value)
+			}
+		}
+	} else { // start > firstNum
+		if end > lastNum {
+			tail := blocks[uint64(len(blocks)) - (end - lastNum):]
+			for _, value := range tail {
+				pbm.todoList = append(pbm.todoList, value)
+			}
+		}
+	}
 }
 
 func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
@@ -1286,16 +1325,12 @@ func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
 func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*types.Log, error) {
-	for _, block := range blocks {
-		fmt.Printf("insertBlocks block number : %v , block hash: %v\n", block.Number().String(), block.Hash().String())
-	}
-
 	if len(blocks) == 0 {
 		return 0, nil, nil, nil
 	}
 
-	// Do a sanity check that the provided chain is actually ordered and linked
 	for i := 1; i < len(blocks); i++ {
+		// Do a sanity check that the provided chain is actually ordered and linked
 		if blocks[i].NumberU64() != blocks[i-1].NumberU64()+1 || blocks[i].ParentHash() != blocks[i-1].Hash() {
 			// Chain broke ancestry, log a messge (programming error) and skip insertion
 			log.Error("Non contiguous block insert", "number", blocks[i].Number(), "hash", blocks[i].Hash(),
@@ -1304,6 +1339,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			return 0, nil, nil, fmt.Errorf("non contiguous insert: item %d is #%d [%x…], item %d is #%d [%x…] (parent [%x…])", i-1, blocks[i-1].NumberU64(),
 				blocks[i-1].Hash().Bytes()[:4], i, blocks[i].NumberU64(), blocks[i].Hash().Bytes()[:4], blocks[i].ParentHash().Bytes()[:4])
 		}
+		fmt.Printf("insertBlocks block number : %v , block hash: %v\n", blocks[i].Number().String(), blocks[i].Hash().String())
 	}
 
 	dm.wg.Add(1)
@@ -1428,7 +1464,8 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 		case err == ErrUnclesNotCompletely:
 			dm.pbm.addBlock(block)
-			continue
+			dm.pbm.addTodoList(blocks[i + 1:])
+			return i, events, coalescedLogs, nil
 
 		case err != nil:
 			dm.reportBlock(block, nil, err)
@@ -1501,11 +1538,22 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		stats.report(blocks, i, cache)
 
 		if len(blockList) > 0 {
-			_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(blockList)
-			events = append(events, pendingEvs)
-			coalescedLogs = append(coalescedLogs, pendingLogs...)
-			if pendingErr != nil {
-				return 0, events, coalescedLogs, pendingErr
+			for i, _ := range blockList {
+				tmp := blockList[i : i + 1]
+				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
+				events = append(events, pendingEvs)
+				coalescedLogs = append(coalescedLogs, pendingLogs...)
+				if pendingErr != nil {
+					return 0, events, coalescedLogs, pendingErr
+				}
+			}
+			if len(dm.pbm.todoList) > 0 {
+				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(dm.pbm.todoList)
+				events = append(events, pendingEvs)
+				coalescedLogs = append(coalescedLogs, pendingLogs...)
+				if pendingErr != nil {
+					return 0, events, coalescedLogs, pendingErr
+				}
 			}
 		}
 	}
