@@ -199,6 +199,8 @@ func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
 		pbm.todoList = blocks
 		return
 	}
+
+	log.Info(">>>>>>>>>> Add Todo (pending) list block")
 	firstNum := pbm.todoList[0].NumberU64()
 	lastNum := pbm.todoList[len(pbm.todoList) - 1].NumberU64()
 	start := blocks[0].NumberU64()
@@ -1538,7 +1540,8 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		stats.report(blocks, i, cache)
 
 		if len(blockList) > 0 {
-			for i, _ := range blockList {
+			for i, blk := range blockList {
+				log.Info(">>>>>>>>>> insert a pending block", "number", blk.NumberU64(), "hash", blk.Hash())
 				tmp := blockList[i : i + 1]
 				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
 				events = append(events, pendingEvs)
@@ -1548,6 +1551,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 				}
 			}
 			if len(dm.pbm.todoList) > 0 {
+				log.Info(">>>>>>>>>> insert the pending list")
 				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(dm.pbm.todoList)
 				events = append(events, pendingEvs)
 				coalescedLogs = append(coalescedLogs, pendingLogs...)
