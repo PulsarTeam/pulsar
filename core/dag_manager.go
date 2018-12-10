@@ -1553,7 +1553,9 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			}
 			if len(dm.pbm.todoList) > 0 {
 				log.Info(">>>>>>>>>> insert the pending list")
-				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(dm.pbm.todoList)
+				tmp := dm.pbm.todoList
+				dm.pbm.todoList = nil
+				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
 				events = append(events, pendingEvs)
 				coalescedLogs = append(coalescedLogs, pendingLogs...)
 				if pendingErr != nil {
