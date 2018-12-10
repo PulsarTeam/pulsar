@@ -437,7 +437,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			hash   		common.Hash
 			bytes  		int
 			bodies  	[]rlp.RawValue
-			blocks      types.Blocks
+			blocks		types.Blocks
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -484,6 +484,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		transactions := make([][]*types.Transaction, len(request))
 		uncles := make([][]*types.Header, len(request))
 
+		/*
 		for i, body := range request {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
@@ -491,7 +492,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				fmt.Println("BlockBodiesMsg DownloadUncle------------")
 				pm.DownloadUncle(uncles[i])
 			}
-		}
+		}*/
+
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
@@ -622,9 +624,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
+		/*
 		if request.Block.UncleHash() != types.EmptyUncleHash {
 			pm.DownloadUncle(request.Block.Uncles())
 		}
+		*/
+
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
