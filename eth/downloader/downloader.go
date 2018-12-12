@@ -85,6 +85,7 @@ var (
 	errCancelHeaderFetch       = errors.New("block header download canceled (requested)")
 	errCancelBodyFetch         = errors.New("block body download canceled (requested)")
 	errCancelReceiptFetch      = errors.New("receipt download canceled (requested)")
+	errCancelReferenceFetch    = errors.New("refrence block body download canceled (requested)")
 	errCancelStateFetch        = errors.New("state data download canceled (requested)")
 	errCancelHeaderProcessing  = errors.New("header processing canceled (requested)")
 	errCancelContentProcessing = errors.New("content processing canceled (requested)")
@@ -150,6 +151,7 @@ type Downloader struct {
 	bodyFetchHook    func([]*types.Header) // Method to call upon starting a block body fetch
 	receiptFetchHook func([]*types.Header) // Method to call upon starting a receipt fetch
 	chainInsertHook  func([]*fetchResult)  // Method to call upon inserting a chain of blocks (possibly in multiple invocations)
+	referenceFetchHook func([]*types.Header) // Method to call upon starting a reference block body fetch
 }
 
 // LightChain encapsulates functions required to synchronise a light chain.
@@ -362,7 +364,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	d.queue.Reset()
 	d.peers.Reset()
 
-	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
+	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
 		select {
 		case <-ch:
 		default:
@@ -970,6 +972,31 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 		d.receiptFetchHook, fetch, d.queue.CancelReceipts, capacity, d.peers.ReceiptIdlePeers, setIdle, "receipts")
 
 	log.Debug("Transaction receipt download terminated", "err", err)
+	return err
+}
+
+
+// fetchBodies iteratively downloads the scheduled block bodies, taking any
+// available peers, reserving a chunk of blocks for each, waiting for delivery
+// and also periodically checking for timeouts.
+func (d *Downloader) fetchReferenceBodies(from uint64) error {
+	log.Debug("Downloading block bodies", "origin", from)
+
+	var (
+		deliver = func(packet dataPack) (int, error) {
+			pack := packet.(*bodyPack)
+			return d.queue.DeliverReferenceBodies(pack.peerID, pack.transactions, pack.uncles)
+		}
+		expire   = func() map[string]int { return d.queue.ExpireReferenceBodies(d.requestTTL()) }
+		fetch    = func(p *peerConnection, req *fetchRequest) error { return p.FetchReferenceBodies(req) }
+		capacity = func(p *peerConnection) int { return p.ReceiptCapacity(d.requestRTT()) }
+		setIdle  = func(p *peerConnection, accepted int) { p.SetReferenceIdle(accepted) }
+	)
+	err := d.fetchParts(errCancelReferenceFetch, d.referencesCh, deliver, d.referenceWakeCh, expire,
+		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
+		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
+
+	log.Debug("Reference block body download terminated", "err", err)
 	return err
 }
 
