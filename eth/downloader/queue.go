@@ -62,6 +62,9 @@ type fetchResult struct {
 	Uncles       []*types.Header
 	Transactions types.Transactions
 	Receipts     types.Receipts
+
+	//refUncles    	map[common.Hash][]*types.Header
+	//refTransactions map[common.Hash]types.Transactions
 }
 
 
@@ -79,6 +82,10 @@ type queue struct {
 	headerProced    int                            // [eth/62] Number of headers already processed from the results
 	headerOffset    uint64                         // [eth/62] Number of the first header in the result cache
 	headerContCh    chan bool                      // [eth/62] Channel to notify when header download finishes
+
+
+	referenceHeaders []*types.Header                // [conflux] Result cache accumulating the completed headers
+	refHeaderProced  int							// [conflux] Number of reference headers already  start to download
 
 	// All data retrievals below are based on an already assembles header chain
 	blockTaskPool  map[common.Hash]*types.Header // [eth/62] Pending block (body) retrieval tasks, mapping hashes to headers
@@ -342,6 +349,18 @@ func (q *queue) RetrieveHeaders() ([]*types.Header, int) {
 
 	headers, proced := q.headerResults, q.headerProced
 	q.headerResults, q.headerProced = nil, 0
+
+	return headers, proced
+}
+
+// RetrieveReferenceHeaders retrieves the reference header chain assemble based on the scheduled
+// skeleton.
+func (q *queue) RetrieveReferenceHeaders() ([]*types.Header, int) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	headers, proced := q.referenceHeaders, q.refHeaderProced
+	q.referenceHeaders, q.refHeaderProced = nil, 0
 
 	return headers, proced
 }
@@ -881,6 +900,10 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, uncleLi
 		}
 		result.Transactions = txLists[index]
 		result.Uncles = uncleLists[index]
+
+		q.referenceHeaders = result.Uncles
+		q.refHeaderProced = len(result.Uncles)
+
 		return nil
 	}
 	return q.deliver(id, q.blockTaskPool, q.blockTaskQueue, q.blockPendPool, q.blockDonePool, bodyReqTimer, len(txLists), reconstruct)
