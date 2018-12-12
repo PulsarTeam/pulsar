@@ -122,12 +122,14 @@ type Downloader struct {
 	committed       int32
 
 	// Channels
-	headerCh      chan dataPack        // [eth/62] Channel receiving inbound block headers
-	bodyCh        chan dataPack        // [eth/62] Channel receiving inbound block bodies
-	receiptCh     chan dataPack        // [eth/63] Channel receiving inbound receipts
-	bodyWakeCh    chan bool            // [eth/62] Channel to signal the block body fetcher of new tasks
-	receiptWakeCh chan bool            // [eth/63] Channel to signal the receipt fetcher of new tasks
-	headerProcCh  chan []*types.Header // [eth/62] Channel to feed the header processor new tasks
+	headerCh      	chan dataPack        // [eth/62]  Channel receiving inbound block headers
+	bodyCh        	chan dataPack        // [eth/62]  Channel receiving inbound block bodies
+	receiptCh     	chan dataPack        // [eth/63]  Channel receiving inbound receipts
+	referencesCh  	chan dataPack		 // [conflux] Channel receiving reference blocks
+	bodyWakeCh    	chan bool            // [eth/62]  Channel to signal the block body fetcher of new tasks
+	receiptWakeCh 	chan bool            // [eth/63]  Channel to signal the receipt fetcher of new tasks
+	referenceWakeCh chan bool            // [conflux] Channel to signal the reference blocks fetcher of new tasks
+	headerProcCh  	chan []*types.Header // [eth/62]  Channel to feed the header processor new tasks
 
 	// for stateFetcher
 	stateSyncStart chan *stateSync
@@ -217,8 +219,10 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 		headerCh:       make(chan dataPack, 1),
 		bodyCh:         make(chan dataPack, 1),
 		receiptCh:      make(chan dataPack, 1),
+		referencesCh:   make(chan dataPack, 1),
 		bodyWakeCh:     make(chan bool, 1),
 		receiptWakeCh:  make(chan bool, 1),
+		referenceWakeCh:make(chan bool, 1),
 		headerProcCh:   make(chan []*types.Header, 1),
 		quitCh:         make(chan struct{}),
 		stateCh:        make(chan dataPack),
@@ -1537,6 +1541,10 @@ func (d *Downloader) DeliverReceipts(id string, receipts [][]*types.Receipt) (er
 	return d.deliver(id, d.receiptCh, &receiptPack{id, receipts}, receiptInMeter, receiptDropMeter)
 }
 
+func (d *Downloader) DeliverReferenceBodies(id string, transactions [][]*types.Transaction, uncles [][]*types.Header) (err error) {
+
+	return d.deliver(id, d.referencesCh, &bodyPack{id, transactions, uncles}, referenceBodyInMeter, referenceBodyDropMeter)
+}
 // DeliverNodeData injects a new batch of node state data received from a remote node.
 func (d *Downloader) DeliverNodeData(id string, data [][]byte) (err error) {
 	return d.deliver(id, d.stateCh, &statePack{id, data}, stateInMeter, stateDropMeter)

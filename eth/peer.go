@@ -295,6 +295,12 @@ func (p *peer) SendBlockBodiesRLP(bodies []rlp.RawValue) error {
 	return p2p.Send(p.rw, BlockBodiesMsg, bodies)
 }
 
+// SendReferenceBodiesRLP sends a batch of reference blocks to the remote peer from
+// an already RLP encoded format.
+func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
+	return p2p.Send(p.rw, ReferenceBodiessMsg, blocks)
+}
+
 // SendNodeDataRLP sends a batch of arbitrary internal data, corresponding to the
 // hashes requested.
 func (p *peer) SendNodeData(data [][]byte) error {
@@ -333,6 +339,13 @@ func (p *peer) RequestHeadersByNumber(origin uint64, amount int, skip int, rever
 func (p *peer) RequestBodies(hashes []common.Hash) error {
 	p.Log().Debug("Fetching batch of block bodies", "count", len(hashes))
 	return p2p.Send(p.rw, GetBlockBodiesMsg, hashes)
+}
+
+// RequestReferenceBodies fetches a batch of reference blocks' bodies corresponding to the hashes
+// specified.
+func (p *peer) RequestReferenceBodies(hashes []common.Hash) error {
+	p.Log().Debug("Fetching batch of reference block bodies", "count", len(hashes))
+	return p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
 }
 
 // RequestNodeData fetches a batch of arbitrary data from a node's known state

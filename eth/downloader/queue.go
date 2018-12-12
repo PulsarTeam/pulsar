@@ -64,6 +64,7 @@ type fetchResult struct {
 	Receipts     types.Receipts
 }
 
+
 // queue represents hashes that are either need fetching or are being fetched
 type queue struct {
 	mode SyncMode // Synchronisation mode to decide on the block parts to schedule for fetching
@@ -90,6 +91,11 @@ type queue struct {
 	receiptPendPool  map[string]*fetchRequest      // [eth/63] Currently pending receipt retrieval operations
 	receiptDonePool  map[common.Hash]struct{}      // [eth/63] Set of the completed receipt fetches
 
+	referenceTaskPool  map[common.Hash]*types.Header // [conflux] Pending reference block retrieval tasks, mapping hashes to reference headers
+	referenceTaskQueue *prque.Prque				 // [conflux] Priority queue of the headers to fetch the reference blocks for
+	referencePendPool  map[string]*fetchRequest      // [conflux] Currently pending reference blocks retrieval operations
+	referenceDonePool  map[common.Hash]struct{}      // [conflux] Set of the completed reference block fetches
+
 	resultCache  []*fetchResult     // Downloaded but not yet delivered fetch results
 	resultOffset uint64             // Offset of the first cached fetch result in the block chain
 	resultSize   common.StorageSize // Approximate size of a block (exponential moving average)
@@ -103,19 +109,23 @@ type queue struct {
 func newQueue() *queue {
 	lock := new(sync.Mutex)
 	return &queue{
-		headerPendPool:   make(map[string]*fetchRequest),
-		headerContCh:     make(chan bool),
-		blockTaskPool:    make(map[common.Hash]*types.Header),
-		blockTaskQueue:   prque.New(),
-		blockPendPool:    make(map[string]*fetchRequest),
-		blockDonePool:    make(map[common.Hash]struct{}),
-		receiptTaskPool:  make(map[common.Hash]*types.Header),
-		receiptTaskQueue: prque.New(),
-		receiptPendPool:  make(map[string]*fetchRequest),
-		receiptDonePool:  make(map[common.Hash]struct{}),
-		resultCache:      make([]*fetchResult, blockCacheItems),
-		active:           sync.NewCond(lock),
-		lock:             lock,
+		headerPendPool:   	make(map[string]*fetchRequest),
+		headerContCh:     	make(chan bool),
+		blockTaskPool:    	make(map[common.Hash]*types.Header),
+		blockTaskQueue:   	prque.New(),
+		blockPendPool:    	make(map[string]*fetchRequest),
+		blockDonePool:    	make(map[common.Hash]struct{}),
+		receiptTaskPool:  	make(map[common.Hash]*types.Header),
+		receiptTaskQueue: 	prque.New(),
+		receiptPendPool:  	make(map[string]*fetchRequest),
+		receiptDonePool:  	make(map[common.Hash]struct{}),
+		referenceTaskPool:	make(map[common.Hash]*types.Header),
+		referenceTaskQueue: prque.New(),
+		referencePendPool:	make(map[string]*fetchRequest),
+		referenceDonePool:  make(map[common.Hash]struct{}),
+		resultCache:      	make([]*fetchResult, blockCacheItems),
+		active:           	sync.NewCond(lock),
+		lock:             	lock,
 	}
 }
 
@@ -139,6 +149,11 @@ func (q *queue) Reset() {
 	q.receiptTaskQueue.Reset()
 	q.receiptPendPool = make(map[string]*fetchRequest)
 	q.receiptDonePool = make(map[common.Hash]struct{})
+
+	q.referenceTaskPool = make(map[common.Hash]*types.Header)
+	q.referenceTaskQueue.Reset()
+	q.referencePendPool = make(map[string]*fetchRequest)
+	q.referenceDonePool = make(map[common.Hash]struct{})
 
 	q.resultCache = make([]*fetchResult, blockCacheItems)
 	q.resultOffset = 0
@@ -177,6 +192,14 @@ func (q *queue) PendingReceipts() int {
 	return q.receiptTaskQueue.Size()
 }
 
+// PendingReferenceBlocks retrieves the number of reference blocks pending for retrieval.
+func (q *queue) PendingReferenceBlocks() int {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return q.referenceTaskQueue.Size()
+}
+
 // InFlightHeaders retrieves whether there are header fetch requests currently
 // in flight.
 func (q *queue) InFlightHeaders() bool {
@@ -204,14 +227,23 @@ func (q *queue) InFlightReceipts() bool {
 	return len(q.receiptPendPool) > 0
 }
 
+// InFlightReferenceBlocks retrieves whether there are reference blocks fetch requests currently
+// in flight.
+func (q *queue) InFlightReferenceBlocks() bool {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return len(q.referencePendPool) > 0
+}
+
 // Idle returns if the queue is fully idle or has some data still inside.
 func (q *queue) Idle() bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	queued := q.blockTaskQueue.Size() + q.receiptTaskQueue.Size()
-	pending := len(q.blockPendPool) + len(q.receiptPendPool)
-	cached := len(q.blockDonePool) + len(q.receiptDonePool)
+	queued := q.blockTaskQueue.Size() + q.receiptTaskQueue.Size() + q.referenceTaskQueue.Size()
+	pending := len(q.blockPendPool) + len(q.receiptPendPool) + len(q.referencePendPool)
+	cached := len(q.blockDonePool) + len(q.receiptDonePool) + len(q.referenceDonePool)
 
 	return (queued + pending + cached) == 0
 }
@@ -232,6 +264,15 @@ func (q *queue) ShouldThrottleReceipts() bool {
 	defer q.lock.Unlock()
 
 	return q.resultSlots(q.receiptPendPool, q.receiptDonePool) <= 0
+}
+
+// ShouldThrottleReferenceBlocks checks if the download should be throttled (active reference
+// blocks fetches exceed block cache).
+func (q *queue) ShouldThrottleReferenceBlocks() bool {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return q.resultSlots(q.referencePendPool, q.referenceDonePool) <= 0
 }
 
 // resultSlots calculates the number of results slots available for requests
@@ -345,6 +386,35 @@ func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
 		q.headerHead = hash
 		from++
 	}
+	return inserts
+}
+
+func (q *queue) ScheduleForReference(headers []*types.Header) []*types.Header {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	inserts := make([]*types.Header, 0, len(headers))
+	for _, header := range headers {
+		// Queue the header for content retrieval
+		hash := header.Hash()
+		if header.Number == nil {
+			log.Warn("Header broke chain ordering, number is nil")
+			break
+		}
+
+		// Make sure no duplicate requests are executed
+		if _, ok := q.referenceTaskPool[hash]; ok {
+			log.Warn("Header  already scheduled for reference block fetch", "number", header.Number, "hash", hash)
+			continue
+		}
+
+		q.referenceTaskPool[hash] = header
+		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
+
+		inserts = append(inserts, header)
+		q.headerHead = hash
+	}
+
 	return inserts
 }
 
@@ -478,6 +548,20 @@ func (q *queue) ReserveReceipts(p *peerConnection, count int) (*fetchRequest, bo
 	return q.reserveHeaders(p, count, q.receiptTaskPool, q.receiptTaskQueue, q.receiptPendPool, q.receiptDonePool, isNoop)
 }
 
+
+// ReserveReferenceBodies reserves a set of reference blocks fetches for the given peer, skipping
+// any previously failed downloads.
+func (q *queue) ReserveReferenceBodies(p *peerConnection, count int) (*fetchRequest, bool, error) {
+	isNoop := func(header *types.Header) bool {
+		return header.TxHash == types.EmptyRootHash && header.UncleHash == types.EmptyUncleHash
+	}
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return q.reserveHeaders(p, count, q.referenceTaskPool, q.referenceTaskQueue, q.referencePendPool, q.referenceDonePool, isNoop)
+}
+
+
 // reserveHeaders reserves a set of data download operations for a given peer,
 // skipping any previously failed ones. This method is a generic version used
 // by the individual special reservation functions.
@@ -580,6 +664,12 @@ func (q *queue) CancelReceipts(request *fetchRequest) {
 	q.cancel(request, q.receiptTaskQueue, q.receiptPendPool)
 }
 
+// CancelReferenceBodies aborts a reference body fetch request, returning all pending headers to
+// the task queue.
+func (q *queue) CancelReferenceBodies(request *fetchRequest) {
+	q.cancel(request, q.referenceTaskQueue, q.referencePendPool)
+}
+
 // Cancel aborts a fetch request, returning all pending hashes to the task queue.
 func (q *queue) cancel(request *fetchRequest, taskQueue *prque.Prque, pendPool map[string]*fetchRequest) {
 	q.lock.Lock()
@@ -613,6 +703,12 @@ func (q *queue) Revoke(peerID string) {
 		}
 		delete(q.receiptPendPool, peerID)
 	}
+	if request, ok := q.referencePendPool[peerID]; ok{
+		for _, header := range request.Headers {
+			q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
+		}
+		delete(q.referencePendPool, peerID)
+	}
 }
 
 // ExpireHeaders checks for in flight requests that exceeded a timeout allowance,
@@ -640,6 +736,15 @@ func (q *queue) ExpireReceipts(timeout time.Duration) map[string]int {
 	defer q.lock.Unlock()
 
 	return q.expire(timeout, q.receiptPendPool, q.receiptTaskQueue, receiptTimeoutMeter)
+}
+
+// ExpireReferenceBlocks checks for in flight reference body requests that exceeded a timeout
+// allowance, canceling them and returning the responsible peers for penalisation.
+func (q *queue) ExpireReferenceBodies(timeout time.Duration) map[string]int {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return q.expire(timeout, q.referencePendPool, q.referenceTaskQueue, referenceBodyTimeoutMeter)
 }
 
 // expire is the generic check that move expired tasks from a pending pool back
@@ -796,6 +901,24 @@ func (q *queue) DeliverReceipts(id string, receiptList [][]*types.Receipt) (int,
 		return nil
 	}
 	return q.deliver(id, q.receiptTaskPool, q.receiptTaskQueue, q.receiptPendPool, q.receiptDonePool, receiptReqTimer, len(receiptList), reconstruct)
+}
+
+// DeliverReferenceBodies injects a refenece block body retrieval response into the results queue.
+// The method returns the number of blocks bodies accepted from the delivery and
+// also wakes any threads waiting for data delivery.
+func (q *queue) DeliverReferenceBodies(id string, txLists [][]*types.Transaction, uncleLists [][]*types.Header) (int, error) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	reconstruct := func(header *types.Header, index int, result *fetchResult) error {
+		if types.DeriveSha(types.Transactions(txLists[index])) != header.TxHash || types.CalcUncleHash(uncleLists[index]) != header.UncleHash {
+			return errInvalidBody
+		}
+		result.Transactions = txLists[index]
+		result.Uncles = uncleLists[index]
+		return nil
+	}
+	return q.deliver(id, q.referenceTaskPool, q.referenceTaskQueue, q.referencePendPool, q.referenceDonePool, referenceBodyReqTimer, len(txLists), reconstruct)
 }
 
 // deliver injects a data retrieval response into the results queue.

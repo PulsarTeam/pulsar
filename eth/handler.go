@@ -437,7 +437,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			hash   		common.Hash
 			bytes  		int
 			bodies  	[]rlp.RawValue
-			blocks		types.Blocks
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -450,29 +449,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if data := pm.blockchain.GetBodyRLP(hash); len(data) != 0 {
 				bodies = append(bodies, data)
 				bytes += len(data)
-
-				//get reference blocks
-				block := pm.blockchain.GetBlockByHash(hash)
-				for _, uncle := range block.Uncles(){
-					b := pm.blockchain.GetBlock(uncle.Hash(), uncle.Number.Uint64())
-					blocks = append(blocks, b)
-				}
 			}
 		}
 
-		if err := p.SendBlockBodiesRLP(bodies); err != nil{
-			return err
-		}
-
-		//send reference blocks
-		for _, b:= range blocks{
-			td := new(big.Int).Add(b.Difficulty(), pm.blockchain.GetTd(b.ParentHash(), b.NumberU64()-1))
-			if err := p.SendReferenceBlock(b, td); err != nil{
-				return err
-			}
-		}
-
-		return nil
+		return p.SendBlockBodiesRLP(bodies)
 
 	case msg.Code == BlockBodiesMsg:
 		// A batch of block bodies arrived to one of our previous requests
@@ -483,16 +463,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// Deliver them all to the downloader for queuing
 		transactions := make([][]*types.Transaction, len(request))
 		uncles := make([][]*types.Header, len(request))
-
-		/*
-		for i, body := range request {
-			transactions[i] = body.Transactions
-			uncles[i] = body.Uncles
-			if len(uncles[i]) > 0 {
-				fmt.Println("BlockBodiesMsg DownloadUncle------------")
-				pm.DownloadUncle(uncles[i])
-			}
-		}*/
 
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
@@ -624,12 +594,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
-		/*
-		if request.Block.UncleHash() != types.EmptyUncleHash {
-			pm.DownloadUncle(request.Block.Uncles())
-		}
-		*/
-
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
@@ -649,18 +613,55 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
-	case msg.Code == ReferenceBlockMsg:
-		// Retrieve and decode the propagated block
-		var request newBlockData
-		if err := msg.Decode(&request); err != nil {
-			return errResp(ErrDecode, "%v: %v", msg, err)
+	case msg.Code == GetReferenceBodiesMsg:
+		// Decode the retrieval message
+		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
+		if _, err := msgStream.List(); err != nil {
+			return err
 		}
-		request.Block.ReceivedAt = msg.ReceivedAt
-		request.Block.ReceivedFrom = p
-		fmt.Printf("ReferenceBlockMsg block num = %v, hash = %v\n", request.Block.Number(), request.Block.Hash().String())
-		// Mark the peer as owning the block and schedule it for import
-		p.MarkBlock(request.Block.Hash())
-		pm.fetcher.Enqueue(p.id, request.Block)
+		// Gather blocks until the fetch or network limits is reached
+		var (
+			hash   		common.Hash
+			bytes  		int
+			bodies  	[]rlp.RawValue
+		)
+		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
+			// Retrieve the hash of the next block
+			if err := msgStream.Decode(&hash); err == rlp.EOL {
+				break
+			} else if err != nil {
+				return errResp(ErrDecode, "msg %v: %v", msg, err)
+			}
+			// Retrieve the requested block body, stopping if enough was found
+			if data := pm.blockchain.GetBodyRLP(hash); len(data) != 0 {
+				bodies = append(bodies, data)
+				bytes += len(data)
+			}
+		}
+
+		return p.SendReferenceBodiesRLP(bodies)
+
+	case msg.Code == ReferenceBodiessMsg:
+		// A batch of reference block bodies arrived to one of our previous requests
+		var request blockBodiesData
+		if err := msg.Decode(&request); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		// Deliver them all to the downloader for queuing
+		transactions := make([][]*types.Transaction, len(request))
+		uncles := make([][]*types.Header, len(request))
+
+		// Filter out any explicitly requested bodies, deliver the rest to the downloader
+		filter := len(transactions) > 0 || len(uncles) > 0
+		if filter {
+			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
+		}
+		if len(transactions) > 0 || len(uncles) > 0 || !filter {
+			err := pm.downloader.DeliverReferenceBodies(p.id, transactions, uncles)
+			if err != nil {
+				log.Debug("Failed to deliver reference bodies", "err", err)
+			}
+		}
 		
 	case msg.Code == TxMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
