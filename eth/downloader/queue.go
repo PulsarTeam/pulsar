@@ -63,6 +63,8 @@ type fetchResult struct {
 	Transactions types.Transactions
 	Receipts     types.Receipts
 
+	IsReference  bool
+
 	//refUncles    	map[common.Hash][]*types.Header
 	//refTransactions map[common.Hash]types.Transactions
 }
@@ -901,6 +903,7 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, uncleLi
 		}
 		result.Transactions = txLists[index]
 		result.Uncles = uncleLists[index]
+		result.IsReference = false
 
 		//q.referenceHeaders = result.Uncles
 		//q.refHeaderProced = len(result.Uncles)
@@ -922,6 +925,7 @@ func (q *queue) DeliverReceipts(id string, receiptList [][]*types.Receipt) (int,
 			return errInvalidReceipt
 		}
 		result.Receipts = receiptList[index]
+		result.IsReference = false
 		return nil
 	}
 	return q.deliver(id, q.receiptTaskPool, q.receiptTaskQueue, q.receiptPendPool, q.receiptDonePool, receiptReqTimer, len(receiptList), reconstruct)
@@ -940,6 +944,7 @@ func (q *queue) DeliverReferenceBodies(id string, txLists [][]*types.Transaction
 		}
 		result.Transactions = txLists[index]
 		result.Uncles = uncleLists[index]
+		result.IsReference = true
 		return nil
 	}
 	return q.deliver(id, q.referenceTaskPool, q.referenceTaskQueue, q.referencePendPool, q.referenceDonePool, referenceBodyReqTimer, len(txLists), reconstruct)
