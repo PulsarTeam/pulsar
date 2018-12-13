@@ -872,7 +872,7 @@ func (dm *DAGManager) procFutureBlocks() {
 
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
 		for i := range blocks {
-			dm.InsertBlocks(blocks[i : i+1])
+			dm.InsertBlocks(blocks[i : i+1], nil)
 		}
 	}
 }
@@ -1269,8 +1269,8 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 // wrong.
 //
 // After insertion is done, all accumulated events will be fired.
-func (dm *DAGManager) InsertBlocks(blocks types.Blocks) (int, error) {
-	n, events, logs, err := dm.insertBlocks(blocks)
+func (dm *DAGManager) InsertBlocks(blocks types.Blocks, refBlocks types.Blocks) (int, error) {
+	n, events, logs, err := dm.insertBlocks(blocks, refBlocks)
 	dm.PostChainEvents(events, logs)
 	return n, err
 }
@@ -1327,7 +1327,7 @@ func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
 // insertBlocks will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
-func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*types.Log, error) {
+func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) (int, []interface{}, []*types.Log, error) {
 	if len(blocks) == 0 {
 		return 0, nil, nil, nil
 	}
@@ -1543,7 +1543,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			for i, blk := range blockList {
 				log.Info(">>>>>>>>>> insert a pending block", "number", blk.NumberU64(), "hash", blk.Hash())
 				tmp := blockList[i : i + 1]
-				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
+				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, nil)
 				events = append(events, pendingEvs)
 				coalescedLogs = append(coalescedLogs, pendingLogs...)
 				if pendingErr != nil {
@@ -1554,7 +1554,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 				log.Info(">>>>>>>>>> insert the pending list")
 				tmp := dm.pbm.todoList
 				dm.pbm.todoList = nil
-				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
+				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, nil)
 				events = append(events, pendingEvs)
 				coalescedLogs = append(coalescedLogs, pendingLogs...)
 				if pendingErr != nil {

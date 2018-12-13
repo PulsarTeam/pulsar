@@ -126,7 +126,7 @@ type Downloader struct {
 	headerCh      	chan dataPack        // [eth/62]  Channel receiving inbound block headers
 	bodyCh        	chan dataPack        // [eth/62]  Channel receiving inbound block bodies
 	receiptCh     	chan dataPack        // [eth/63]  Channel receiving inbound receipts
-	referencesCh  	chan dataPack		 // [conflux] Channel receiving reference blocks
+	referenceCh  	chan dataPack		 // [conflux] Channel receiving reference blocks
 	bodyWakeCh    	chan bool            // [eth/62]  Channel to signal the block body fetcher of new tasks
 	receiptWakeCh 	chan bool            // [eth/63]  Channel to signal the receipt fetcher of new tasks
 	referenceWakeCh chan bool            // [conflux] Channel to signal the reference blocks fetcher of new tasks
@@ -195,7 +195,7 @@ type DAGManager interface {
 	FastSyncCommitHead(common.Hash) error
 
 	// InsertChain inserts a batch of blocks into the local chain.
-	InsertBlocks(types.Blocks) (int, error)
+	InsertBlocks(types.Blocks, types.Blocks) (int, error)
 
 	// InsertReceiptChain inserts a batch of receipts into the local chain.
 	InsertReceiptChain(types.Blocks, []types.Receipts) (int, error)
@@ -221,7 +221,7 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 		headerCh:       make(chan dataPack, 1),
 		bodyCh:         make(chan dataPack, 1),
 		receiptCh:      make(chan dataPack, 1),
-		referencesCh:   make(chan dataPack, 1),
+		referenceCh:   make(chan dataPack, 1),
 		bodyWakeCh:     make(chan bool, 1),
 		receiptWakeCh:  make(chan bool, 1),
 		referenceWakeCh:make(chan bool, 1),
@@ -979,8 +979,8 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 // fetchBodies iteratively downloads the scheduled block bodies, taking any
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
-func (d *Downloader) fetchReferenceBodies(from uint64) error {
-	log.Debug("Downloading block bodies", "origin", from)
+func (d *Downloader) fetchReferenceBodies() error {
+	log.Debug("Downloading reference block bodies")
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -992,7 +992,7 @@ func (d *Downloader) fetchReferenceBodies(from uint64) error {
 		capacity = func(p *peerConnection) int { return p.ReceiptCapacity(d.requestRTT()) }
 		setIdle  = func(p *peerConnection, accepted int) { p.SetReferenceIdle(accepted) }
 	)
-	err := d.fetchParts(errCancelReferenceFetch, d.referencesCh, deliver, d.referenceWakeCh, expire,
+	err := d.fetchParts(errCancelReferenceFetch, d.referenceCh, deliver, d.referenceWakeCh, expire,
 		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
 		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
 
@@ -1385,15 +1385,59 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 		"firstnum", first.Number, "firsthash", first.Hash(),
 		"lastnum", last.Number, "lasthash", last.Hash(),
 	)
+	var refHeaders []*types.Header
 	blocks := make([]*types.Block, len(results))
 	for i, result := range results {
 		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
+		for _, refHdr := range result.Uncles {
+			refHeaders = append(refHeaders, refHdr)
+		}
 	}
-	if index, err := d.blockchain.InsertBlocks(blocks); err != nil {
+	refBlocks, err := d.fetchReferenceBlocks(refHeaders)
+	if err != nil {
+		return err
+	}
+
+	if index, err := d.blockchain.InsertBlocks(blocks, refBlocks); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 		return errInvalidChain
 	}
 	return nil
+}
+
+func (d *Downloader) fetchReferenceBlocks(headers []*types.Header) (types.Blocks, error) {
+	var refBlocks types.Blocks
+	var err error
+
+	for {
+		schedCnt := d.queue.ScheduleForReference(headers)
+		err = d.fetchReferenceBodies()
+		if err != nil {
+			return nil, err
+		}
+		results := d.queue.Results(true)
+		if len(results) > 0 {
+			select {
+			case <-d.quitCh:
+				return nil, errCancelContentProcessing
+			default:
+			}
+			for _, result := range results {
+				blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
+				refBlocks = append(refBlocks, blk)
+				for _, refHdr := range result.Uncles {
+					headers = append(headers, refHdr)
+				}
+			}
+		}
+
+		if schedCnt == len(headers) {
+			// all reference blocks received
+			break
+		}
+		headers = headers[schedCnt:]
+	}
+	return refBlocks, nil
 }
 
 // processFastSyncContent takes fetch results from the queue and writes them to the
@@ -1569,9 +1613,9 @@ func (d *Downloader) DeliverReceipts(id string, receipts [][]*types.Receipt) (er
 }
 
 func (d *Downloader) DeliverReferenceBodies(id string, transactions [][]*types.Transaction, uncles [][]*types.Header) (err error) {
-
-	return d.deliver(id, d.referencesCh, &bodyPack{id, transactions, uncles}, referenceBodyInMeter, referenceBodyDropMeter)
+	return d.deliver(id, d.referenceCh, &bodyPack{id, transactions, uncles}, referenceBodyInMeter, referenceBodyDropMeter)
 }
+
 // DeliverNodeData injects a new batch of node state data received from a remote node.
 func (d *Downloader) DeliverNodeData(id string, data [][]byte) (err error) {
 	return d.deliver(id, d.stateCh, &statePack{id, data}, stateInMeter, stateDropMeter)

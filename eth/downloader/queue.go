@@ -410,11 +410,11 @@ func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
 	return inserts
 }
 
-func (q *queue) ScheduleForReference(headers []*types.Header) []*types.Header {
+func (q *queue) ScheduleForReference(headers []*types.Header) int {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	inserts := make([]*types.Header, 0, len(headers))
+	scheduled := 0
 	for _, header := range headers {
 		// Queue the header for content retrieval
 		hash := header.Hash()
@@ -423,6 +423,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) []*types.Header {
 			break
 		}
 
+		scheduled++
 		// Make sure no duplicate requests are executed
 		if _, ok := q.referenceTaskPool[hash]; ok {
 			log.Warn("Header  already scheduled for reference block fetch", "number", header.Number, "hash", hash)
@@ -431,12 +432,10 @@ func (q *queue) ScheduleForReference(headers []*types.Header) []*types.Header {
 
 		q.referenceTaskPool[hash] = header
 		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
-
-		inserts = append(inserts, header)
 		q.headerHead = hash
 	}
 
-	return inserts
+	return scheduled
 }
 
 // Results retrieves and permanently removes a batch of fetch results from

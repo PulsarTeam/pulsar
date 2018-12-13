@@ -179,7 +179,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			return 0, nil
 		}
 		atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import
-		return manager.blockchain.InsertBlocks(blocks)
+		return manager.blockchain.InsertBlocks(blocks, nil)
 	}
 	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 
@@ -641,7 +641,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		return p.SendReferenceBodiesRLP(bodies)
 
-	case msg.Code == ReferenceBodiessMsg:
+	case msg.Code == ReferenceBodiesMsg:
 		// A batch of reference block bodies arrived to one of our previous requests
 		var request blockBodiesData
 		if err := msg.Decode(&request); err != nil {
