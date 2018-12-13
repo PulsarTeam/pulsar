@@ -1242,9 +1242,15 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	} else {
 		status = SideStatTy
 	}
+
+	fmt.Println(fmt.Sprintf("\x1b[%dm%s%d\x1b[0m", 34, "before Wirte, status: ", int(status)))
+
 	if err := batch.Write(); err != nil {
+		fmt.Println(fmt.Sprintf("\x1b[%dm%s\x1b[0m", 33, "batch write error."))
 		return NonStatTy, err
 	}
+
+	fmt.Println(fmt.Sprintf("\x1b[%dm%s%d\x1b[0m", 34, "newPivotChain length = ", len(newPivotChain)))
 
 	// Set new head.
 	if status == CanonStatTy {
