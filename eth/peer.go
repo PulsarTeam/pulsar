@@ -26,8 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/rlp"
 	"gopkg.in/fatih/set.v0"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (
@@ -122,6 +122,7 @@ func (p *peer) broadcast() {
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 		case prop := <-p.queuedProps:
+			/*
 			for _, reference := range prop.references{
 				if err := p.SendReferenceBlock(reference.Block, reference.Td); err != nil{
 					return
@@ -129,6 +130,7 @@ func (p *peer) broadcast() {
 
 				p.Log().Trace("Propagated reference block", "number", reference.Block.Number(), "hash", reference.Block.Hash(), "td", reference.Td)
 			}
+			*/
 
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
@@ -257,12 +259,13 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	return p2p.Send(p.rw, NewBlockMsg, []interface{}{block, td})
 }
 
+/*
 // SendReferenceBlock propagates an entire block to a remote peer.
 func (p *peer) SendReferenceBlock(block *types.Block, td *big.Int) error {
 	p.knownBlocks.Add(block.Hash())
 	return p2p.Send(p.rw, ReferenceBlockMsg, []interface{}{block, td})
 }
-
+*/
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.

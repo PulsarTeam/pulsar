@@ -723,6 +723,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		// Send the block to a subset of our peers
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
+			/*
 			var references types.ReferenceBlocks
 			for _, rh := range block.Uncles(){
 				rb := pm.blockchain.GetBlock(rh.Hash(), rh.Number.Uint64())
@@ -732,8 +733,9 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 					td1,
 				}
 				references = append(references, reference)
-			}
-			peer.AsyncSendNewBlock(block, references, td)
+			}*/
+			//peer.AsyncSendNewBlock(block, references, td)
+			peer.AsyncSendNewBlock(block, nil, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
