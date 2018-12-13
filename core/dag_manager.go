@@ -1431,7 +1431,6 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
-			/*
 				// Block competing with the canonical chain, store in the db, but don't process
 				// until the competitor TD goes above the canonical TD
 				currentBlock := dm.CurrentBlock()
@@ -1463,7 +1462,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 				if err != nil {
 					return i, events, coalescedLogs, err
 				}
-			*/
+
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 		case err == ErrUnclesNotCompletely:
 			dm.pbm.addBlock(block)

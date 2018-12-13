@@ -21,16 +21,16 @@ package downloader
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/core/types"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"github.com/ethereum/go-ethereum/metrics"
 	"runtime/debug"
+	"fmt"
 )
 
 var (
@@ -84,8 +84,8 @@ type queue struct {
 	headerContCh    chan bool                      // [eth/62] Channel to notify when header download finishes
 
 
-	referenceHeaders []*types.Header                // [conflux] Result cache accumulating the completed headers
-	refHeaderProced  int							// [conflux] Number of reference headers already  start to download
+	//referenceHeaders []*types.Header                // [conflux] Result cache accumulating the completed headers
+	//refHeaderProced  int							// [conflux] Number of reference headers already  start to download
 
 	// All data retrievals below are based on an already assembles header chain
 	blockTaskPool  map[common.Hash]*types.Header // [eth/62] Pending block (body) retrieval tasks, mapping hashes to headers
@@ -353,6 +353,7 @@ func (q *queue) RetrieveHeaders() ([]*types.Header, int) {
 	return headers, proced
 }
 
+/*
 // RetrieveReferenceHeaders retrieves the reference header chain assemble based on the scheduled
 // skeleton.
 func (q *queue) RetrieveReferenceHeaders() ([]*types.Header, int) {
@@ -364,6 +365,7 @@ func (q *queue) RetrieveReferenceHeaders() ([]*types.Header, int) {
 
 	return headers, proced
 }
+*/
 
 // Schedule adds a set of headers for the download queue for scheduling, returning
 // the new headers encountered.
@@ -901,8 +903,8 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, uncleLi
 		result.Transactions = txLists[index]
 		result.Uncles = uncleLists[index]
 
-		q.referenceHeaders = result.Uncles
-		q.refHeaderProced = len(result.Uncles)
+		//q.referenceHeaders = result.Uncles
+		//q.refHeaderProced = len(result.Uncles)
 
 		return nil
 	}
