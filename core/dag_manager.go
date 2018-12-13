@@ -149,14 +149,14 @@ type pendingData struct {
 type pendingBlocksManager struct {
 	pendingBlocks map[common.Hash]pendingData
 	waitedBlocks  map[common.Hash]map[common.Hash]struct{}
-	todoList types.Blocks
+	todoList      types.Blocks
 }
 
 func newPendingBlocksManager() *pendingBlocksManager {
 	return &pendingBlocksManager{
 		pendingBlocks: make(map[common.Hash]pendingData),
 		waitedBlocks:  make(map[common.Hash]map[common.Hash]struct{}),
-		todoList: nil,
+		todoList:      nil,
 	}
 }
 
@@ -202,9 +202,9 @@ func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
 
 	log.Info(">>>>>>>>>> Add Todo (pending) list block")
 	firstNum := pbm.todoList[0].NumberU64()
-	lastNum := pbm.todoList[len(pbm.todoList) - 1].NumberU64()
+	lastNum := pbm.todoList[len(pbm.todoList)-1].NumberU64()
 	start := blocks[0].NumberU64()
-	end := blocks[len(blocks) - 1].NumberU64()
+	end := blocks[len(blocks)-1].NumberU64()
 
 	if start > lastNum || end < firstNum {
 		panic("blocks are not continuous")
@@ -214,7 +214,7 @@ func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
 		if end >= lastNum {
 			pbm.todoList = blocks
 		} else { // end < lastNum
-			tail := pbm.todoList[uint64(len(pbm.todoList)) - (lastNum - end):]
+			tail := pbm.todoList[uint64(len(pbm.todoList))-(lastNum-end):]
 			pbm.todoList = blocks
 			for _, value := range tail {
 				pbm.todoList = append(pbm.todoList, value)
@@ -222,7 +222,7 @@ func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
 		}
 	} else { // start > firstNum
 		if end > lastNum {
-			tail := blocks[uint64(len(blocks)) - (end - lastNum):]
+			tail := blocks[uint64(len(blocks))-(end-lastNum):]
 			for _, value := range tail {
 				pbm.todoList = append(pbm.todoList, value)
 			}
@@ -1431,43 +1431,41 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
-			/*
-				// Block competing with the canonical chain, store in the db, but don't process
-				// until the competitor TD goes above the canonical TD
-				currentBlock := dm.CurrentBlock()
-				localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-				externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
-				if localTd.Cmp(externTd) > 0 {
-					if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
-						return i, events, coalescedLogs, err
-					}
-					continue
-				}
-				// Competitor chain beat canonical, gather all blocks from the common ancestor
-				var winner []*types.Block
-
-				parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
-				for !dm.HasState(parent.Root()) {
-					winner = append(winner, parent)
-					parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
-				}
-				for j := 0; j < len(winner)/2; j++ {
-					winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
-				}
-				// Import all the pruned blocks to make the state available
-				dm.chainmu.Unlock()
-				_, evs, logs, err := dm.insertBlocks(winner)
-				dm.chainmu.Lock()
-				events, coalescedLogs = evs, logs
-
-				if err != nil {
+			// Block competing with the canonical chain, store in the db, but don't process
+			// until the competitor TD goes above the canonical TD
+			currentBlock := dm.CurrentBlock()
+			localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+			externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
+			if localTd.Cmp(externTd) > 0 {
+				if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
 					return i, events, coalescedLogs, err
 				}
-			*/
+				continue
+			}
+			// Competitor chain beat canonical, gather all blocks from the common ancestor
+			var winner []*types.Block
+
+			parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
+			for !dm.HasState(parent.Root()) {
+				winner = append(winner, parent)
+				parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
+			}
+			for j := 0; j < len(winner)/2; j++ {
+				winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
+			}
+			// Import all the pruned blocks to make the state available
+			dm.chainmu.Unlock()
+			_, evs, logs, err := dm.insertBlocks(winner)
+			dm.chainmu.Lock()
+			events, coalescedLogs = evs, logs
+
+			if err != nil {
+				return i, events, coalescedLogs, err
+			}
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 		case err == ErrUnclesNotCompletely:
 			dm.pbm.addBlock(block)
-			dm.pbm.addTodoList(blocks[i + 1:])
+			dm.pbm.addTodoList(blocks[i+1:])
 			return i, events, coalescedLogs, nil
 
 		case err != nil:
@@ -1543,7 +1541,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks) (int, []interface{}, []*
 		if len(blockList) > 0 {
 			for i, blk := range blockList {
 				log.Info(">>>>>>>>>> insert a pending block", "number", blk.NumberU64(), "hash", blk.Hash())
-				tmp := blockList[i : i + 1]
+				tmp := blockList[i : i+1]
 				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp)
 				events = append(events, pendingEvs)
 				coalescedLogs = append(coalescedLogs, pendingLogs...)
