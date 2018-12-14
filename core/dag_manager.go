@@ -44,6 +44,7 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"runtime/debug"
+	"container/list"
 )
 
 var (
@@ -132,133 +133,6 @@ type DAGManager struct {
 	vmConfig  vm.Config
 
 	badBlocks *lru.Cache // Bad block cache
-
-	pbm *pendingBlocksManager
-}
-
-type BlockAndWait struct {
-	Block       common.Hash   `json:"block" gencodec:"required"`
-	WaitedBlock []common.Hash `json:"waitedBlocks" gencodec:"required"`
-}
-
-type pendingData struct {
-	block      *types.Block
-	waitedHash map[common.Hash]struct{}
-}
-
-type pendingBlocksManager struct {
-	pendingBlocks map[common.Hash]pendingData
-	waitedBlocks  map[common.Hash]map[common.Hash]struct{}
-	todoList types.Blocks
-}
-
-func newPendingBlocksManager() *pendingBlocksManager {
-	return &pendingBlocksManager{
-		pendingBlocks: make(map[common.Hash]pendingData),
-		waitedBlocks:  make(map[common.Hash]map[common.Hash]struct{}),
-		todoList: nil,
-	}
-}
-
-func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
-	log.Info("Add block to pending list", "block Hash", block.Hash())
-
-	if _, exist := pbm.pendingBlocks[block.Hash()]; exist {
-		return
-	}
-
-	log.Info(">>>>>>>>>> Add block to pending list", "block Hash", block.Hash())
-
-	refs := block.Body().Uncles
-	if len(refs) == 0 {
-		panic("block has no reference block, should not be added")
-	}
-	data := pendingData{
-		block:      block,
-		waitedHash: make(map[common.Hash]struct{}, len(refs)),
-	}
-	for _, ref := range refs {
-		data.waitedHash[ref.Hash()] = struct{}{}
-		waitedBlock, exist := pbm.waitedBlocks[ref.Hash()]
-		if exist {
-			waitedBlock[block.Hash()] = struct{}{}
-		} else {
-			tmp := make(map[common.Hash]struct{})
-			tmp[block.Hash()] = struct{}{}
-			pbm.waitedBlocks[ref.Hash()] = tmp
-		}
-	}
-	pbm.pendingBlocks[block.Hash()] = data
-}
-
-func (pbm *pendingBlocksManager) addTodoList(blocks types.Blocks) {
-	if len(blocks) <= 0 {
-		return
-	}
-	if pbm.todoList == nil {
-		pbm.todoList = blocks
-		return
-	}
-
-	log.Info(">>>>>>>>>> Add Todo (pending) list block")
-	firstNum := pbm.todoList[0].NumberU64()
-	lastNum := pbm.todoList[len(pbm.todoList) - 1].NumberU64()
-	start := blocks[0].NumberU64()
-	end := blocks[len(blocks) - 1].NumberU64()
-
-	if start > lastNum || end < firstNum {
-		panic("blocks are not continuous")
-	}
-
-	if start <= firstNum {
-		if end >= lastNum {
-			pbm.todoList = blocks
-		} else { // end < lastNum
-			tail := pbm.todoList[uint64(len(pbm.todoList)) - (lastNum - end):]
-			pbm.todoList = blocks
-			for _, value := range tail {
-				pbm.todoList = append(pbm.todoList, value)
-			}
-		}
-	} else { // start > firstNum
-		if end > lastNum {
-			tail := blocks[uint64(len(blocks)) - (end - lastNum):]
-			for _, value := range tail {
-				pbm.todoList = append(pbm.todoList, value)
-			}
-		}
-	}
-}
-
-func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
-	log.Info("Process pending block", "block Hash", block.Hash())
-
-	var blocks types.Blocks
-	waitedSet, exist := pbm.waitedBlocks[block.Hash()]
-	if exist {
-		log.Info(">>>>>>>>>> Process pending block", "block Hash", block.Hash())
-
-		for waited := range waitedSet {
-			// Waited is the hash of the block which is on the pending list and waited for us
-			pending, ok := pbm.pendingBlocks[waited]
-			if !ok {
-				panic("logical error: no pending data")
-			}
-			_, ok1 := pending.waitedHash[block.Hash()]
-			if !ok1 {
-				// check if we are on the waited list for the pending block
-				panic("logical error: not waited hash")
-			}
-			delete(pending.waitedHash, block.Hash())
-			if len(pending.waitedHash) == 0 {
-				// the pending block waited list is empty, then it can be processed.
-				blocks = append(blocks, pending.block)
-				delete(pbm.pendingBlocks, pending.block.Hash())
-			}
-		}
-		delete(pbm.waitedBlocks, block.Hash())
-	}
-	return blocks
 }
 
 // NewDAGManager returns a fully initialised block chain using information
@@ -293,7 +167,6 @@ func NewDAGManager(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:       engine,
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
-		pbm:          newPendingBlocksManager(),
 	}
 	dm.SetValidator(NewBlockValidator(chainConfig, dm, engine))
 	dm.SetProcessor(NewStateProcessor(chainConfig, dm, engine))
@@ -1269,7 +1142,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 // wrong.
 //
 // After insertion is done, all accumulated events will be fired.
-func (dm *DAGManager) InsertBlocks(blocks types.Blocks, refBlocks types.Blocks) (int, error) {
+func (dm *DAGManager) InsertBlocks(blocks types.Blocks, refBlocks *list.List) (int, error) {
 	n, events, logs, err := dm.insertBlocks(blocks, refBlocks)
 	dm.PostChainEvents(events, logs)
 	return n, err
@@ -1327,7 +1200,7 @@ func (dm *DAGManager) getPivotBlockReferences(block *types.Block) types.Blocks {
 // insertBlocks will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
-func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) (int, []interface{}, []*types.Log, error) {
+func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (int, []interface{}, []*types.Log, error) {
 	if len(blocks) == 0 {
 		return 0, nil, nil, nil
 	}
@@ -1464,10 +1337,32 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) 
 				}
 
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
+
 		case err == ErrUnclesNotCompletely:
-			dm.pbm.addBlock(block)
-			dm.pbm.addTodoList(blocks[i + 1:])
-			return i, events, coalescedLogs, nil
+			tmp := make(types.Blocks, 1)
+			for _, refHdr := range block.Uncles() {
+				processed := false
+				for elem := refBlocks.Front(); elem != nil; elem = elem.Next() {
+					refBlk := elem.Value.(*types.Block)
+					if refHdr.Hash() == refBlk.Hash() {
+						tmp[0] = refBlk
+						_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, refBlocks)
+						events = append(events, pendingEvs)
+						coalescedLogs = append(coalescedLogs, pendingLogs...)
+						if pendingErr != nil {
+							return 0, events, coalescedLogs, pendingErr
+						}
+						processed = true
+						refBlocks.Remove(elem)
+						break
+					}
+				}
+
+				if !processed && !dm.HasBlock(refHdr.Hash(), refHdr.Number.Uint64()) {
+					panic(fmt.Sprintf("logic error: unknown reference block: %s, %d\n",
+						refHdr.Hash().String(), refHdr.Number.Uint64()))
+				}
+			}
 
 		case err != nil:
 			dm.reportBlock(block, nil, err)
@@ -1509,7 +1404,6 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) 
 		proctime := time.Since(bstart)
 		// Write the block to the chain and get the status.
 		status, err := dm.WriteBlockWithState(block, referenceBlocks, txs, receipts, state)
-		blockList := dm.pbm.processBlock(block)
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
@@ -1539,29 +1433,6 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) 
 		cache, _ := dm.stateCache.TrieDB().Size()
 		stats.report(blocks, i, cache)
 
-		if len(blockList) > 0 {
-			for i, blk := range blockList {
-				log.Info(">>>>>>>>>> insert a pending block", "number", blk.NumberU64(), "hash", blk.Hash())
-				tmp := blockList[i : i + 1]
-				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, nil)
-				events = append(events, pendingEvs)
-				coalescedLogs = append(coalescedLogs, pendingLogs...)
-				if pendingErr != nil {
-					return 0, events, coalescedLogs, pendingErr
-				}
-			}
-			if len(dm.pbm.todoList) > 0 {
-				log.Info(">>>>>>>>>> insert the pending list")
-				tmp := dm.pbm.todoList
-				dm.pbm.todoList = nil
-				_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, nil)
-				events = append(events, pendingEvs)
-				coalescedLogs = append(coalescedLogs, pendingLogs...)
-				if pendingErr != nil {
-					return 0, events, coalescedLogs, pendingErr
-				}
-			}
-		}
 	}
 	// Append a single chain head event if we've progressed the chain
 	if lastCanon != nil && dm.CurrentBlock().Hash() == lastCanon.Hash() {
@@ -1946,17 +1817,4 @@ func (dm *DAGManager) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (dm *DAGManager) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return dm.scope.Track(dm.logsFeed.Subscribe(ch))
-}
-
-func (dm *DAGManager) GetPendingBlocks() []interface{} {
-	var result []interface{}
-	for k1, v1 := range dm.pbm.pendingBlocks {
-		var waited []common.Hash
-		for k2, _ := range v1.waitedHash {
-			waited = append(waited, k2)
-		}
-		data := &BlockAndWait{k1, waited}
-		result = append(result, data)
-	}
-	return result
 }

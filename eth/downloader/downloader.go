@@ -116,24 +116,18 @@ func newBlockSink() *blockSink {
 	}
 }
 
-func (bs *blockSink) getBlocks() (types.Blocks, types.Blocks) {
+func (bs *blockSink) getBlocks() (types.Blocks, *list.List) {
 	if bs.freshBlocks.Len() > 0 || bs.schedHeaders.Len() > 0 || bs.curSched != nil {
 		log.Warn("block download is not complete")
 	}
 
 	pivots := make(types.Blocks, bs.pivotBlocks.Len())
-	refs := make(types.Blocks, bs.refBlocks.Len())
 	idx := 0
 	for pvt := bs.pivotBlocks.Front(); pvt != nil; pvt = pvt.Next() {
 		pivots[idx] = pvt.Value.(*types.Block)
 		idx++
 	}
-	idx = 0
-	for ref := bs.refBlocks.Front(); ref != nil; ref = ref.Next() {
-		refs[idx] = ref.Value.(*types.Block)
-		idx++
-	}
-	return pivots, refs
+	return pivots, bs.refBlocks
 }
 
 func (bs *blockSink) getScheduleHeaders() ([]*types.Header) {
@@ -311,7 +305,7 @@ type DAGManager interface {
 	FastSyncCommitHead(common.Hash) error
 
 	// InsertChain inserts a batch of blocks into the local chain.
-	InsertBlocks(types.Blocks, types.Blocks) (int, error)
+	InsertBlocks(types.Blocks, *list.List) (int, error)
 
 	// InsertReceiptChain inserts a batch of receipts into the local chain.
 	InsertReceiptChain(types.Blocks, []types.Receipts) (int, error)
