@@ -301,7 +301,7 @@ func (p *peer) SendBlockBodiesRLP(bodies []rlp.RawValue) error {
 // SendReferenceBodiesRLP sends a batch of reference blocks to the remote peer from
 // an already RLP encoded format.
 func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
-	return p2p.Send(p.rw, ReferenceBodiessMsg, blocks)
+	return p2p.Send(p.rw, ReferenceBodiesMsg, blocks)
 }
 
 // SendNodeDataRLP sends a batch of arbitrary internal data, corresponding to the

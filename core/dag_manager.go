@@ -44,7 +44,6 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"runtime/debug"
-	"bytes"
 )
 
 var (
@@ -1456,7 +1455,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks types.Blocks) 
 				}
 				// Import all the pruned blocks to make the state available
 				dm.chainmu.Unlock()
-				_, evs, logs, err := dm.insertBlocks(winner)
+				_, evs, logs, err := dm.insertBlocks(winner, nil)
 				dm.chainmu.Lock()
 				events, coalescedLogs = evs, logs
 

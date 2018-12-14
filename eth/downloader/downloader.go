@@ -100,6 +100,8 @@ type blockSink struct {
 	freshBlocks *list.List
 	schedHeaders *list.List
 	curSched *list.Element
+	expectedPivotBlocks int
+	expectedRefBlocks int
 }
 
 func newBlockSink() *blockSink {
@@ -109,6 +111,8 @@ func newBlockSink() *blockSink {
 		freshBlocks: list.New(),
 		schedHeaders: list.New(),
 		curSched: nil,
+		expectedPivotBlocks: 0,
+		expectedRefBlocks: 0,
 	}
 }
 
@@ -139,6 +143,7 @@ func (bs *blockSink) getScheduleHeaders() ([]*types.Header) {
 		hdrs[idx] = elem.Value.(*types.Header)
 		idx++
 	}
+	return hdrs
 }
 
 func (bs *blockSink) resetScheduleHeader(schedCnt int) {
@@ -158,15 +163,17 @@ func (bs *blockSink) resetScheduleHeader(schedCnt int) {
 	}
 }
 
-func (bs *blockSink) reset() {
+func (bs *blockSink) reset(count int) {
 	bs.pivotBlocks.Init()
 	bs.refBlocks.Init()
 	bs.freshBlocks.Init()
 	bs.schedHeaders.Init()
 	bs.curSched = nil
+	bs.expectedPivotBlocks = count
+	bs.expectedRefBlocks = 0
 }
 
-func (bs *blockSink) sinkResult(results []*fetchResult) {
+func (bs *blockSink) sinkResult(results []*fetchResult) bool {
 	for _, result := range results {
 		blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		bs.freshBlocks.PushBack(blk)
@@ -187,6 +194,7 @@ func (bs *blockSink) sinkResult(results []*fetchResult) {
 			blk := bs.curSched.Value.(*types.Block)
 			for _, rh := range blk.Uncles() {
 				bs.schedHeaders.PushBack(rh)
+				bs.expectedRefBlocks++
 			}
 			bs.curSched = bs.curSched.Next()
 			if bs.curSched == nil {
@@ -196,6 +204,7 @@ func (bs *blockSink) sinkResult(results []*fetchResult) {
 			}
 		}
 	}
+	return bs.expectedPivotBlocks == bs.pivotBlocks.Len() && bs.expectedRefBlocks == bs.refBlocks.Len()
 }
 
 type Downloader struct {
@@ -574,6 +583,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
+	d.sink.reset(int(pivot - origin - 1))
 	fetchers := []func() error{
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
@@ -1467,7 +1477,7 @@ func (d *Downloader) processFullSyncContent() error {
 	for {
 		results := d.queue.Results(true)
 		if len(results) == 0 {
-			return nil
+			break
 		}
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
@@ -1482,6 +1492,7 @@ func (d *Downloader) processFullSyncContent() error {
 		log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
 		return errInvalidChain
 	}
+	d.sink.reset(0)
 	return nil
 }
 
@@ -1523,10 +1534,16 @@ func (d *Downloader) sinkBlocks(results []*fetchResult) error {
 	default:
 	}
 
-	d.sink.sinkResult(results)
-	hdrs := d.sink.getScheduleHeaders()
-	cnt := d.queue.ScheduleForReference(hdrs)
-	d.sink.resetScheduleHeader(cnt)
+	finished := d.sink.sinkResult(results)
+	if finished {
+		d.referenceWakeCh <- false
+	} else {
+		hdrs := d.sink.getScheduleHeaders()
+		if len(hdrs) > 0 {
+			cnt := d.queue.ScheduleForReference(hdrs)
+			d.sink.resetScheduleHeader(cnt)
+		}
+	}
 	return nil
 }
 

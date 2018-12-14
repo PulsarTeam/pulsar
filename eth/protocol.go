@@ -65,7 +65,7 @@ const (
 
 	//Protocol messages belonging to conflux
 	GetReferenceBodiesMsg = 0x11
-	ReferenceBodiessMsg = 0x12
+	ReferenceBodiesMsg = 0x12
 )
 
 type errCode int
