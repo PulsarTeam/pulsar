@@ -44,6 +44,7 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"runtime/debug"
+	"bytes"
 )
 
 var (

@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+	"container/list"
 )
 
 var (
@@ -92,6 +93,110 @@ var (
 	errNoSyncActive            = errors.New("no sync active")
 	errTooOld                  = errors.New("peer doesn't speak recent enough protocol version (need version >= 62)")
 )
+
+type blockSink struct {
+	pivotBlocks *list.List
+	refBlocks *list.List
+	freshBlocks *list.List
+	schedHeaders *list.List
+	curSched *list.Element
+}
+
+func newBlockSink() *blockSink {
+	return &blockSink{
+		pivotBlocks: list.New(),
+		refBlocks: list.New(),
+		freshBlocks: list.New(),
+		schedHeaders: list.New(),
+		curSched: nil,
+	}
+}
+
+func (bs *blockSink) getBlocks() (types.Blocks, types.Blocks) {
+	if bs.freshBlocks.Len() > 0 || bs.schedHeaders.Len() > 0 || bs.curSched != nil {
+		log.Warn("block download is not complete")
+	}
+
+	pivots := make(types.Blocks, bs.pivotBlocks.Len())
+	refs := make(types.Blocks, bs.refBlocks.Len())
+	idx := 0
+	for pvt := bs.pivotBlocks.Front(); pvt != nil; pvt = pvt.Next() {
+		pivots[idx] = pvt.Value.(*types.Block)
+		idx++
+	}
+	idx = 0
+	for ref := bs.refBlocks.Front(); ref != nil; ref = ref.Next() {
+		refs[idx] = ref.Value.(*types.Block)
+		idx++
+	}
+	return pivots, refs
+}
+
+func (bs *blockSink) getScheduleHeaders() ([]*types.Header) {
+	idx := 0
+	hdrs := make([]*types.Header, bs.schedHeaders.Len())
+	for elem := bs.schedHeaders.Front(); elem != nil; elem = elem.Next() {
+		hdrs[idx] = elem.Value.(*types.Header)
+		idx++
+	}
+}
+
+func (bs *blockSink) resetScheduleHeader(schedCnt int) {
+	if schedCnt >= bs.schedHeaders.Len() {
+		bs.schedHeaders.Init()
+	} else {
+		idx := 0
+		for elem := bs.schedHeaders.Front(); elem != nil; {
+			idx++
+			if idx > schedCnt {
+				break
+			}
+			tmp := elem.Next()
+			bs.schedHeaders.Remove(elem)
+			elem = tmp
+		}
+	}
+}
+
+func (bs *blockSink) reset() {
+	bs.pivotBlocks.Init()
+	bs.refBlocks.Init()
+	bs.freshBlocks.Init()
+	bs.schedHeaders.Init()
+	bs.curSched = nil
+}
+
+func (bs *blockSink) sinkResult(results []*fetchResult) {
+	for _, result := range results {
+		blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
+		bs.freshBlocks.PushBack(blk)
+		if result.IsReference {
+			bs.refBlocks.PushBack(blk)
+		} else {
+			bs.pivotBlocks.PushBack(blk)
+		}
+	}
+
+	if bs.curSched == nil {
+		if bs.freshBlocks != nil {
+			bs.curSched = bs.freshBlocks.Front()
+		}
+	}
+	if bs.curSched != nil {
+		for {
+			blk := bs.curSched.Value.(*types.Block)
+			for _, rh := range blk.Uncles() {
+				bs.schedHeaders.PushBack(rh)
+			}
+			bs.curSched = bs.curSched.Next()
+			if bs.curSched == nil {
+				// finish the fresh pivots.
+				bs.freshBlocks.Init()
+				break
+			}
+		}
+	}
+}
 
 type Downloader struct {
 	mode SyncMode       // Synchronisation mode defining the strategy used (per sync cycle)
@@ -152,6 +257,8 @@ type Downloader struct {
 	receiptFetchHook func([]*types.Header) // Method to call upon starting a receipt fetch
 	chainInsertHook  func([]*fetchResult)  // Method to call upon inserting a chain of blocks (possibly in multiple invocations)
 	referenceFetchHook func([]*types.Header) // Method to call upon starting a reference block body fetch
+
+	sink *blockSink
 }
 
 // LightChain encapsulates functions required to synchronise a light chain.
@@ -233,6 +340,7 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 			processed: rawdb.ReadFastTrieProgress(stateDb),
 		},
 		trackStateReq: make(chan *stateReq),
+		sink: newBlockSink(),
 	}
 	go dl.qosTuner()
 	go dl.stateFetcher()
@@ -470,6 +578,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
 		func() error { return d.fetchReceipts(origin + 1) },        // Receipts are retrieved during fast sync
+		func() error { return d.fetchReferenceBodies() },
 		func() error { return d.processHeaders(origin+1, pivot, td) },
 	}
 	if d.mode == FastSync {
@@ -1363,10 +1472,17 @@ func (d *Downloader) processFullSyncContent() error {
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
-		if err := d.importBlockResults(results); err != nil {
+		if err := d.sinkBlocks(results); err != nil {
 			return err
 		}
 	}
+
+	pivots, refs := d.sink.getBlocks()
+	if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
+		log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
+		return errInvalidChain
+	}
+	return nil
 }
 
 func (d *Downloader) importBlockResults(results []*fetchResult) error {
@@ -1379,65 +1495,39 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 		return errCancelContentProcessing
 	default:
 	}
+
 	// Retrieve the a batch of results to import
 	first, last := results[0].Header, results[len(results)-1].Header
 	log.Debug("Inserting downloaded chain", "items", len(results),
 		"firstnum", first.Number, "firsthash", first.Hash(),
 		"lastnum", last.Number, "lasthash", last.Hash(),
 	)
-	var refHeaders []*types.Header
 	blocks := make([]*types.Block, len(results))
 	for i, result := range results {
 		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
-		for _, refHdr := range result.Uncles {
-			refHeaders = append(refHeaders, refHdr)
-		}
 	}
-	refBlocks, err := d.fetchReferenceBlocks(refHeaders)
-	if err != nil {
-		return err
-	}
-
-	if index, err := d.blockchain.InsertBlocks(blocks, refBlocks); err != nil {
+	if index, err := d.blockchain.InsertBlocks(blocks, nil); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 		return errInvalidChain
 	}
 	return nil
 }
 
-func (d *Downloader) fetchReferenceBlocks(headers []*types.Header) (types.Blocks, error) {
-	var refBlocks types.Blocks
-	var err error
-
-	for {
-		schedCnt := d.queue.ScheduleForReference(headers)
-		err = d.fetchReferenceBodies()
-		if err != nil {
-			return nil, err
-		}
-		results := d.queue.Results(true)
-		if len(results) > 0 {
-			select {
-			case <-d.quitCh:
-				return nil, errCancelContentProcessing
-			default:
-			}
-			for _, result := range results {
-				blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
-				refBlocks = append(refBlocks, blk)
-				for _, refHdr := range result.Uncles {
-					headers = append(headers, refHdr)
-				}
-			}
-		}
-
-		if schedCnt == len(headers) {
-			// all reference blocks received
-			break
-		}
-		headers = headers[schedCnt:]
+func (d *Downloader) sinkBlocks(results []*fetchResult) error {
+	if len(results) == 0 {
+		return nil
 	}
-	return refBlocks, nil
+	select {
+	case <-d.quitCh:
+		return errCancelContentProcessing
+	default:
+	}
+
+	d.sink.sinkResult(results)
+	hdrs := d.sink.getScheduleHeaders()
+	cnt := d.queue.ScheduleForReference(hdrs)
+	d.sink.resetScheduleHeader(cnt)
+	return nil
 }
 
 // processFastSyncContent takes fetch results from the queue and writes them to the
