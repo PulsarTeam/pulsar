@@ -1124,7 +1124,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		for _, h := range newPivotChain {
 			b := dm.GetBlock(h.Hash(), h.Number.Uint64())
 			dm.insert(b)
-			fmt.Printf("status ========= CanonStatTy, block number = %v, block hash = %v\n", h.Number.Uint64(), h.Hash().String())
 		}
 		dm.Dag().InsertBlocks(referenceHeaders)
 	}
