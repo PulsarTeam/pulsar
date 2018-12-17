@@ -195,20 +195,20 @@ func (bs *blockSink) sinkResult(results []*fetchResult) {
 		blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		if result.IsReference {
 			bs.refBlocks.PushBack(blk)
-			for _, refHdr := range blk.Uncles() {
-				bs.schedHeaders.PushBack(refHdr)
-				bs.expectedRefBlocks++
-			}
 			refCnt++
 		} else {
 			pivot.PushBack(blk)
 		}
+		for _, refHdr := range blk.Uncles() {
+			bs.schedHeaders.PushBack(refHdr)
+			bs.expectedRefBlocks++
+		}
 	}
 
-	if refCnt != bs.pendingRefBlocks {
-		panic("logic error: received reference blocks is not equal to pending scheduled")
+	if refCnt > bs.pendingRefBlocks {
+		panic(fmt.Sprintf("logic error: received reference blocks: %d, pending reference block: %d\n", refCnt, bs.pendingRefBlocks))
 	}
-	bs.pendingRefBlocks = 0
+	bs.pendingRefBlocks -= refCnt
 	if bs.pivotBlocks.Len() == 0 {
 		bs.pivotBlocks = pivot
 	}
@@ -1493,6 +1493,9 @@ func (d *Downloader) processFullSyncContent() error {
 		d.sink.sinkResult(results)
 		d.scheduleReference()
 		pivots, refs := d.sink.getBlocks()
+		if pivots == nil {
+			continue
+		}
 		log.Info("getBlocks result", "pivot blocks", len(pivots), "reference blocks", refs.Len())
 		if len(pivots) > 0 {
 			d.sink.iteratePivot()
