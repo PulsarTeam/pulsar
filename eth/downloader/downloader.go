@@ -1493,7 +1493,7 @@ func (d *Downloader) processFullSyncContent() error {
 		d.sink.sinkResult(results)
 		d.scheduleReference()
 		pivots, refs := d.sink.getBlocks()
-		log.Info("getBlocks pivot blocks count: %d, reference blocks count: %d\n", len(pivots), refs.Len())
+		log.Info("getBlocks result", "pivot blocks", len(pivots), "reference blocks", refs.Len())
 		if len(pivots) > 0 {
 			d.sink.iteratePivot()
 			if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
