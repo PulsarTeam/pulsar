@@ -656,6 +656,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if filter {
 			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 		}
+		fmt.Printf("Receive reference block!\n")
 		if len(transactions) > 0 || len(uncles) > 0 || !filter {
 			err := pm.downloader.DeliverReferenceBodies(p.id, transactions, uncles)
 			if err != nil {
