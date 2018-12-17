@@ -464,6 +464,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		transactions := make([][]*types.Transaction, len(request))
 		uncles := make([][]*types.Header, len(request))
 
+		for i, body := range request {
+			transactions[i] = body.Transactions
+			uncles[i] = body.Uncles
+		}
+
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
