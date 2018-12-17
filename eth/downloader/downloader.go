@@ -204,10 +204,14 @@ func (bs *blockSink) sinkResult(results []*fetchResult) {
 			pivot.PushBack(blk)
 		}
 	}
+
 	if refCnt != bs.pendingRefBlocks {
 		panic("logic error: received reference blocks is not equal to pending scheduled")
 	}
 	bs.pendingRefBlocks = 0
+	if bs.pivotBlocks.Len() == 0 {
+		bs.pivotBlocks = pivot
+	}
 	bs.buffer.PushBack(pivot)
 }
 
@@ -587,7 +591,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
-	fmt.Printf("piviot: %d, origin: %d\n", pivot, origin)
 	d.sink.reset()
 	fetchers := []func() error{
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
@@ -1484,15 +1487,14 @@ func (d *Downloader) processFullSyncContent() error {
 		if len(results) == 0 {
 			break
 		}
-		fmt.Printf("receive result: %d\n", len(results))
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
 		d.sink.sinkResult(results)
 		d.scheduleReference()
 		pivots, refs := d.sink.getBlocks()
-		if pivots != nil {
-			fmt.Printf("To insert %d %d\n", len(pivots), refs.Len())
+		log.Info("getBlocks pivot blocks count: %d, reference blocks count: %d\n", len(pivots), refs.Len())
+		if len(pivots) > 0 {
 			d.sink.iteratePivot()
 			if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
 				log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
