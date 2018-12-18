@@ -1347,7 +1347,9 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 					if refHdr.Hash() == refBlk.Hash() {
 						tmp[0] = refBlk
 						refBlocks.Remove(elem)
+						dm.chainmu.Unlock()
 						_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, refBlocks)
+						dm.chainmu.Lock()
 						events = append(events, pendingEvs)
 						coalescedLogs = append(coalescedLogs, pendingLogs...)
 						if pendingErr != nil {
