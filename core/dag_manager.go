@@ -1006,6 +1006,8 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		Receipts:             receipts,
 	}
 
+	fmt.Printf("WriteBlockWithState, pivot block number: %v, hash: %v\n", pivotBlock.Header().Number.Uint64(), pivotBlock.Hash().String())
+
 	//dag
 	referenceHeaders = append(referenceHeaders, pivotBlock.Header())
 	reorg, oldPivotChain, newPivotChain, err := dm.Dag().IsReorg(referenceHeaders)
@@ -1124,6 +1126,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		for _, h := range newPivotChain {
 			b := dm.GetBlock(h.Hash(), h.Number.Uint64())
 			dm.insert(b)
+			fmt.Printf("CanonStatTy   WriteBlockWithState, pivot block number: %v, hash: %v\n", h.Number.Uint64(), h.Hash().String())
 		}
 		dm.Dag().InsertBlocks(referenceHeaders)
 	}
@@ -1322,6 +1325,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 				for !dm.HasState(parent.Root()) {
 					winner = append(winner, parent)
 					parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
+					fmt.Printf("ErrPrunedAncestor, winner number : %v, hash : %v\n", parent.Number(), parent.Hash().String())
 				}
 				for j := 0; j < len(winner)/2; j++ {
 					winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
