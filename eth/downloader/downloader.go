@@ -1411,6 +1411,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 	for i, result := range results {
 		blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		pivots[i] = blk
+		i++
 		for _, refHdr := range blk.Uncles() {
 			refHdrs.PushBack(refHdr)
 		}

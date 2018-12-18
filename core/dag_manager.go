@@ -1346,6 +1346,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 					refBlk := elem.Value.(*types.Block)
 					if refHdr.Hash() == refBlk.Hash() {
 						tmp[0] = refBlk
+						refBlocks.Remove(elem)
 						_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(tmp, refBlocks)
 						events = append(events, pendingEvs)
 						coalescedLogs = append(coalescedLogs, pendingLogs...)
@@ -1353,7 +1354,6 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 							return 0, events, coalescedLogs, pendingErr
 						}
 						processed = true
-						refBlocks.Remove(elem)
 						break
 					}
 				}
