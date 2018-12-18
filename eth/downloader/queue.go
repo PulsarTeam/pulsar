@@ -463,6 +463,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 	scheduled := 0
 	for _, header := range headers {
+		fmt.Printf("ScheduleForReference, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		// Queue the header for content retrieval
 		hash := header.Hash()
 		if header.Number == nil {
@@ -479,7 +480,8 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 		q.referenceTaskPool[hash] = header
 		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
-		q.headerHead = hash
+
+
 	}
 
 	return scheduled
@@ -546,21 +548,36 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	fmt.Printf("ReferenceResults ===================================== 0 \n")
 	// Count the number of reference items available for processing
 	nproc := q.countProcessableRefItems()
+	fmt.Printf("ReferenceResults ===================================== 1 \n")
 	for nproc == 0 && !q.closed {
+		fmt.Printf("ReferenceResults ===================================== 3 \n")
 		if !block {
+			fmt.Printf("ReferenceResults ===================================== 4 \n")
 			return nil
 		}
+		fmt.Printf("ReferenceResults ===================================== 5 \n")
 		q.activeReference.Wait()
+		fmt.Printf("ReferenceResults ===================================== 6 \n")
 		nproc = q.countProcessableRefItems()
+		fmt.Printf("ReferenceResults ===================================== 7 \n")
 	}
+
+	fmt.Printf("ReferenceResults, nproc: %v \n", nproc)
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	if nproc > maxResultsProcess {
 		nproc = maxResultsProcess
 	}
 	results := make([]*fetchResult, nproc)
 	copy(results, q.resultRefCache[:nproc])
+
+	for _, fr := range results{
+		fmt.Printf("ReferenceResults ok header, header number : %v, header hash : %v\n", fr.Header.Number.Uint64(), fr.Header.Hash().String())
+	}
+
+
 	if len(results) > 0 {
 		// Mark results as done before dropping them from the cache.
 		for _, result := range results {
@@ -590,6 +607,8 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 			q.resultRefSize = common.StorageSize(blockCacheSizeWeight)*size + (1-common.StorageSize(blockCacheSizeWeight))*q.resultRefSize
 		}
 	}
+
+	fmt.Printf("ReferenceResults, len(results) = %v\n", len(results))
 	return results
 }
 
@@ -830,6 +849,8 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			space, proc = space-1, proc-1
 			q.resultRefCache[index].Pending--
 			progress = true
+
+			fmt.Printf("reserveRefHeaders ok header, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 			continue
 		}
 		// Otherwise unless the peer is known not to have the data, add to the retrieve list
@@ -1131,6 +1152,7 @@ func (q *queue) DeliverReferenceBodies(id string, txLists [][]*types.Transaction
 	defer q.lock.Unlock()
 
 	reconstruct := func(header *types.Header, index int, result *fetchResult) error {
+		fmt.Printf("DeliverReferenceBodies ok header, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		if types.DeriveSha(types.Transactions(txLists[index])) != header.TxHash || types.CalcUncleHash(uncleLists[index]) != header.UncleHash {
 			return errInvalidBody
 		}
@@ -1262,6 +1284,7 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		q.resultRefCache[index].Pending--
 		useful = true
 		accepted++
+		fmt.Printf("deliverReference ok header, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 
 		// Clean up a successful fetch
 		request.Headers[i] = nil
