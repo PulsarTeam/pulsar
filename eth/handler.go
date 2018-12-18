@@ -656,13 +656,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		transactions := make([][]*types.Transaction, len(request))
 		uncles := make([][]*types.Header, len(request))
 
-		// Filter out any explicitly requested bodies, deliver the rest to the downloader
-		filter := len(transactions) > 0 || len(uncles) > 0
-		if filter {
-			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
+		for i, body := range request {
+			transactions[i] = body.Transactions
+			uncles[i] = body.Uncles
 		}
+
 		fmt.Printf("Receive reference block!\n")
-		if len(transactions) > 0 || len(uncles) > 0 || !filter {
+		if len(transactions) > 0 || len(uncles) > 0 {
 			err := pm.downloader.DeliverReferenceBodies(p.id, transactions, uncles)
 			if err != nil {
 				log.Debug("Failed to deliver reference bodies", "err", err)
