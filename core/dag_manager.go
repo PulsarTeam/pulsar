@@ -974,6 +974,7 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header) (err e
 			for _, h := range oldPivotChain {
 				b := dm.GetBlock(h.Hash(), h.Number.Uint64())
 				dm.chainSideFeed.Send(ChainSideEvent{Block: b})
+				fmt.Printf("deleteOldTransaction, number : %v, hash: %v\n", b.Number(), b.Hash().String())
 			}
 		}()
 	}
