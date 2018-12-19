@@ -1606,21 +1606,23 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 		}
 		refHdrs.Init()
 		for len(schedRefHdr) > 0 {
-			cnt := d.queue.ScheduleForReference(schedRefHdr)
+			schedCnt := d.queue.ScheduleForReference(schedRefHdr)
 			d.referenceWakeCh <- true
-			schedRefHdr = schedRefHdr[cnt:]
-			refResults := d.queue.ReferenceResults(true)
-			if len(refResults) != cnt {
-				panic(fmt.Sprintf(
-					"logic error: received reference blocks is not equal to schedule: received: %d, scheduled: %d",
-					len(refResults), cnt))
-			}
-			for _, result := range refResults {
-				blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
-				refBlocks.PushBack(blk)
-				for _, refHdr := range blk.Uncles() {
-					refHdrs.PushBack(refHdr)
+			schedRefHdr = schedRefHdr[schedCnt:]
+			recvCnt := 0
+			for recvCnt < schedCnt {
+				refResults := d.queue.ReferenceResults(true)
+				recvCnt += len(refResults)
+				for _, result := range refResults {
+					blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
+					refBlocks.PushBack(blk)
+					for _, refHdr := range blk.Uncles() {
+						refHdrs.PushBack(refHdr)
+					}
 				}
+			}
+			if recvCnt != schedCnt {
+				panic(fmt.Sprintf("received count: %d is not equal to scheduled count: %d\n", recvCnt, schedCnt))
 			}
 		}
 	}
