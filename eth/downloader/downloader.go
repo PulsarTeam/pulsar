@@ -494,10 +494,10 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 	for _, fn := range fetchers {
 		fn := fn
 		go func() {
-			fmt.Printf("Before Enter spawnSync ++++++++++++++\n")
+			fmt.Printf("Before spawnSync ++++++++++++++ address: %v\n", fn)
 			defer d.cancelWg.Done()
 			errc <- fn()
-			fmt.Printf("After Enter spawnSync ++++++++++++++\n")
+			fmt.Printf("After spawnSync ++++++++++++++  address: %v\n", fn)
 			}()
 	}
 	// Wait for the first error, then terminate the others.
