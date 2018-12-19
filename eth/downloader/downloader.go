@@ -1378,6 +1378,7 @@ func (d *Downloader) processFullSyncContent() error {
 			return errInvalidChain
 		}
 		if atomic.LoadInt32(&d.bodiesFinished) == 1 {
+			log.Info("notify the reference fetcher complete")
 			d.referenceWakeCh <- false
 		}
 	}
