@@ -471,13 +471,53 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
+
+	fn1 := func() error {
+		fmt.Printf("syncWithPeer before fetchHeaders\n")
+		err := d.fetchHeaders(p, origin+1, pivot)
+		fmt.Printf("syncWithPeer after fetchHeaders\n")
+		return err
+	}// Headers are always retrieved
+	fn2 := func() error {
+		fmt.Printf("syncWithPeer before fetchBodies\n")
+		err := d.fetchBodies(origin + 1)
+		fmt.Printf("syncWithPeer after fetchBodies\n")
+		return err
+	}         // Bodies are retrieved during normal and fast sync
+	fn3 := func() error {
+		fmt.Printf("syncWithPeer before fetchReceipts\n")
+		err := d.fetchReceipts(origin + 1)
+		fmt.Printf("syncWithPeer after fetchReceipts\n")
+		return err
+		}        // Receipts are retrieved during fast sync
+	fn4 := func() error {
+		fmt.Printf("syncWithPeer before fetchReferenceBodies\n")
+		err := d.fetchReferenceBodies()
+		fmt.Printf("syncWithPeer after fetchReferenceBodies\n")
+		return err
+		}
+	fn5 := func() error {
+		fmt.Printf("syncWithPeer before processHeaders\n")
+		err := d.processHeaders(origin+1, pivot, td)
+		fmt.Printf("syncWithPeer after processHeaders\n")
+		return err
+		}
+
+	fetchers := []func() error{fn1, fn2, fn3, fn4, fn5}
+
+	for  _, fn := range fetchers{
+		fmt.Printf("func address : %v\n", fn)
+	}
+	/*
 	fetchers := []func() error{
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
 		func() error { return d.fetchReceipts(origin + 1) },        // Receipts are retrieved during fast sync
 		func() error { return d.fetchReferenceBodies() },
 		func() error { return d.processHeaders(origin+1, pivot, td) },
-	}
+	}*/
+
+
 	if d.mode == FastSync {
 		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })
 	} else if d.mode == FullSync {
