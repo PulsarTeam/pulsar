@@ -575,11 +575,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		for _, block := range announces {
 			p.MarkBlock(block.Hash)
 		}
+
 		// Schedule all the unknown hashes for retrieval
 		unknown := make(newBlockHashesData, 0, len(announces))
 		for _, block := range announces {
 			if !pm.blockchain.HasBlock(block.Hash, block.Number) {
 				unknown = append(unknown, block)
+				fmt.Printf("NewBlockHashesMsg, number: %v, hash: %v\n", block.Number, block.Hash.String())
 			}
 		}
 		for _, block := range unknown {
@@ -605,6 +607,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			trueHead = request.Block.ParentHash()
 			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
 		)
+
+		_, ttd := p.Head()
+		fmt.Printf("NewBlockMsg td: %v, trueTD: %v\n", ttd.String(), trueTD.String())
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
 			p.SetHead(trueHead, trueTD)
