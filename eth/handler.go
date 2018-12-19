@@ -605,7 +605,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		)
 
 		_, ttd := p.Head()
-		fmt.Printf("NewBlockMsg td: %v, trueTD: %v\n", ttd.String(), trueTD.String())
+		fmt.Printf("NewBlockMsg td: %v, trueTD: %v, request.Block.Difficulty() : %v\n", ttd.String(), trueTD.String(), request.Block.Difficulty().String())
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
 			p.SetHead(trueHead, trueTD)
