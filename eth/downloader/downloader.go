@@ -365,6 +365,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	// Reset the queue, peer set and wake channels to clean any internal leftover state
 	d.queue.Reset()
 	d.peers.Reset()
+	atomic.StoreInt32(&d.bodiesFinished, 0)
 
 	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
 		select {
@@ -480,7 +481,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	} else if d.mode == FullSync {
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
-	fmt.Printf("(d *Downloader) syncWithPeer ================= \n")
 	return d.spawnSync(fetchers)
 }
 
@@ -1360,6 +1360,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
+	log.Info("processFullSyncContent <ENTER>")
 	for {
 		results := d.queue.Results(true)
 		if len(results) == 0 {
@@ -1374,8 +1375,11 @@ func (d *Downloader) processFullSyncContent() error {
 			log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
 			return errInvalidChain
 		}
+		if atomic.LoadInt32(&d.bodiesFinished) == 1 {
+			d.referenceWakeCh <- false
+		}
 	}
-	d.referenceWakeCh <- false
+	log.Info("processFullSyncContent <EXIT>")
 	return nil
 }
 
