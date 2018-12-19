@@ -109,9 +109,10 @@ type queue struct {
 	resultOffset uint64             // Offset of the first cached fetch result in the block chain
 	resultSize   common.StorageSize // Approximate size of a block (exponential moving average)
 
-	resultRefCache  []*fetchResult     // [conflux] Downloaded but not yet delivered fetch results
-	resultRefOffset uint64             // [conflux] Offset of the first cached fetch result in the block chain
-	resultRefSize   common.StorageSize // [conflux] Approximate size of a block (exponential moving average)
+	resultRefCache  	[]*fetchResult     		// [conflux] Downloaded but not yet delivered fetch results
+	//resultRefCacheIndex map[common.Hash]int64	// [conflux] index
+	resultRefOffset 	uint64             		// [conflux] Offset of the first cached fetch result in the block chain
+	resultRefSize   	common.StorageSize 		// [conflux] Approximate size of a block (exponential moving average)
 
 	lock   *sync.Mutex
 	active *sync.Cond
@@ -817,6 +818,14 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 
 	progress := false
 	for proc := 0; proc < space && len(send) < count && !taskQueue.Empty(); proc++ {
+
+		index := int(q.resultRefOffset)+proc
+
+		if index >= len(q.resultRefCache) || index < 0 {
+			common.Report("reserveRefHeaders index allocation went beyond available resultCache space")
+			return nil, false, errInvalidChain
+		}
+
 		header := taskQueue.PopItem().(*types.Header)
 		hash := header.Hash()
 
@@ -828,9 +837,6 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			return nil, false, errInvalidChain
 		}
 		*/
-
-		index := int(q.resultRefOffset)
-		q.resultRefOffset++
 
 		if q.resultRefCache[index] == nil {
 			components := 1
@@ -1273,6 +1279,11 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		// Reconstruct the next result if contents match up
 		index := int(q.resultRefOffset)
 		q.resultRefOffset++
+
+		if index >= len(q.resultRefCache) || index < 0 || q.resultRefCache[index] == nil {
+			failure = errors.New("deliverReference beyond resultRefCache length")
+			break
+		}
 
 		if err := reconstruct(header, i, q.resultRefCache[index]); err != nil {
 			failure = err

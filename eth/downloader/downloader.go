@@ -1001,6 +1001,7 @@ func (d *Downloader) fetchReferenceBodies() error {
 		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
 		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
 
+	fmt.Println("Reference block body download terminated")
 	log.Debug("Reference block body download terminated", "err", err)
 	return err
 }
