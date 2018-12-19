@@ -122,6 +122,7 @@ type Downloader struct {
 	synchronising   int32
 	notified        int32
 	committed       int32
+	bodiesFinished  int32                //[conflux] bodies finished
 
 	// Channels
 	headerCh      	chan dataPack        // [eth/62]  Channel receiving inbound block headers
@@ -950,6 +951,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 		d.queue.PendingBlocks, d.queue.InFlightBlocks, d.queue.ShouldThrottleBlocks, d.queue.ReserveBodies,
 		d.bodyFetchHook, fetch, d.queue.CancelBodies, capacity, d.peers.BodyIdlePeers, setIdle, "bodies")
 
+	atomic.StoreInt32(&d.bodiesFinished, 1)
 	log.Debug("Block body download terminated", "err", err)
 	return err
 }
