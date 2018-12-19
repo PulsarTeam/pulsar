@@ -1526,9 +1526,10 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
-	log.Info("processFullSyncContent <ENTER>")
 	for {
+		log.Info("retrieve queue result <ENTER>")
 		results := d.queue.Results(true)
+		log.Info("processFullSyncContent <EXIT>", "length", len(results))
 		if len(results) == 0 {
 			break
 		}
@@ -1546,7 +1547,6 @@ func (d *Downloader) processFullSyncContent() error {
 			d.referenceWakeCh <- false
 		}
 	}
-	log.Info("processFullSyncContent <EXIT>")
 	return nil
 }
 
