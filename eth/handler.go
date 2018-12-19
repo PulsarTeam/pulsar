@@ -124,7 +124,6 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	if mode == downloader.FastSync {
 		manager.fastSync = uint32(1)
 	}
-
 	// Initiate a sub-protocol for every implemented version we can handle
 	manager.SubProtocols = make([]p2p.Protocol, 0, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
@@ -331,9 +330,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// Gather headers until the fetch or network limits is reached
 		var (
-			bytes      common.StorageSize
-			headers    []*types.Header
-			unknown    bool
+			bytes   common.StorageSize
+			headers []*types.Header
+			unknown bool
 		)
 		for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit && len(headers) < downloader.MaxHeaderFetch {
 			// Retrieve the next header satisfying the query
@@ -404,7 +403,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				query.Origin.Number += query.Skip + 1
 			}
 		}
-
 		return p.SendBlockHeaders(headers)
 
 	case msg.Code == BlockHeadersMsg:
@@ -434,9 +432,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Gather blocks until the fetch or network limits is reached
 		var (
-			hash   		common.Hash
-			bytes  		int
-			bodies  	[]rlp.RawValue
+			hash   common.Hash
+			bytes  int
+			bodies []rlp.RawValue
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -451,7 +449,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				bytes += len(data)
 			}
 		}
-
 		return p.SendBlockBodiesRLP(bodies)
 
 	case msg.Code == BlockBodiesMsg:
@@ -468,7 +465,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
 		}
-
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
@@ -735,19 +731,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		// Send the block to a subset of our peers
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
-			/*
-			var references types.ReferenceBlocks
-			for _, rh := range block.Uncles(){
-				rb := pm.blockchain.GetBlock(rh.Hash(), rh.Number.Uint64())
-				td1 := new(big.Int).Add(rb.Difficulty(), pm.blockchain.GetTd(rb.ParentHash(), rb.NumberU64()-1))
-				reference := &types.ReferenceBlock{
-					rb,
-					td1,
-				}
-				references = append(references, reference)
-			}*/
-			//peer.AsyncSendNewBlock(block, references, td)
-			peer.AsyncSendNewBlock(block, nil, td)
+			peer.AsyncSendNewBlock(block, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return

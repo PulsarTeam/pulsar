@@ -68,9 +68,8 @@ type PeerInfo struct {
 
 // propEvent is a block propagation, waiting for its turn in the broadcast queue.
 type propEvent struct {
-	block 		*types.Block
-	td    		*big.Int
-	references   types.ReferenceBlocks
+	block *types.Block
+	td    *big.Int
 }
 
 type peer struct {
@@ -122,20 +121,9 @@ func (p *peer) broadcast() {
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 		case prop := <-p.queuedProps:
-			/*
-			for _, reference := range prop.references{
-				if err := p.SendReferenceBlock(reference.Block, reference.Td); err != nil{
-					return
-				}
-
-				p.Log().Trace("Propagated reference block", "number", reference.Block.Number(), "hash", reference.Block.Hash(), "td", reference.Td)
-			}
-			*/
-
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
 			}
-
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
 		case block := <-p.queuedAnns:
@@ -259,24 +247,12 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	return p2p.Send(p.rw, NewBlockMsg, []interface{}{block, td})
 }
 
-/*
-// SendReferenceBlock propagates an entire block to a remote peer.
-func (p *peer) SendReferenceBlock(block *types.Block, td *big.Int) error {
-	p.knownBlocks.Add(block.Hash())
-	return p2p.Send(p.rw, ReferenceBlockMsg, []interface{}{block, td})
-}
-*/
-
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *peer) AsyncSendNewBlock(block *types.Block, references types.ReferenceBlocks, td *big.Int) {
+func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 	select {
-	case p.queuedProps <- &propEvent{block: block, td: td, references:references}:
+	case p.queuedProps <- &propEvent{block: block, td: td}:
 		p.knownBlocks.Add(block.Hash())
-		for _, reference := range references{
-			p.knownBlocks.Add(reference.Block.Hash())
-		}
-
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}

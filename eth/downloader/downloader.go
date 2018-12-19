@@ -438,6 +438,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	height := latest.Number.Uint64()
 
 	origin, err := d.findAncestor(p, height)
+	fmt.Printf("syncWithPeer findAncestor number: %v\n", origin)
 	if err != nil {
 		return err
 	}
@@ -492,7 +493,12 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
 		fn := fn
-		go func() { defer d.cancelWg.Done(); errc <- fn() }()
+		go func() {
+			fmt.Printf("Before Enter spawnSync ++++++++++++++\n")
+			defer d.cancelWg.Done()
+			errc <- fn()
+			fmt.Printf("After Enter spawnSync ++++++++++++++\n")
+			}()
 	}
 	// Wait for the first error, then terminate the others.
 	var err error
