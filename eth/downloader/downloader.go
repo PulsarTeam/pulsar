@@ -1007,8 +1007,9 @@ func (d *Downloader) fetchBodies(from uint64) error {
 		d.queue.PendingBlocks, d.queue.InFlightBlocks, d.queue.ShouldThrottleBlocks, d.queue.ReserveBodies,
 		d.bodyFetchHook, fetch, d.queue.CancelBodies, capacity, d.peers.BodyIdlePeers, setIdle, "bodies")
 
+	log.Info("Block body download terminated, send the Notify", "err", err)
 	d.finishCh <- struct{}{}
-	log.Info("Block body download terminated", "err", err)
+	log.Info("Notify is DONE", "err", err)
 	return err
 }
 

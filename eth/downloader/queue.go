@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"runtime/debug"
 	"fmt"
+	"sync/atomic"
 )
 
 var (
@@ -501,14 +502,22 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 			return nil
 		}
 
+		signalled := int32(0)
 		wakeCh := make(chan struct{})
 		go func() {
-			q.active.Wait()
+			if atomic.LoadInt32(&signalled) == 0 {
+				fmt.Printf(">>>>>>>>> signalled == 0, wait\n")
+				q.active.Wait()
+				fmt.Printf(">>>>>>>>> wait DONE\n")
+			}
 			wakeCh <- struct{}{}
 		}()
 
 		select {
 			case <-notify:
+				atomic.StoreInt32(&signalled, 1)
+				fmt.Printf(">>>>>>>>> signal wait\n")
+				fmt.Printf(">>>>>>>>>> atomic.LoadInt32(&signalled) == %d\n", atomic.LoadInt32(&signalled))
 				q.active.Signal()
 				<-wakeCh
 			case <-wakeCh:
