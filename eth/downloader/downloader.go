@@ -1610,6 +1610,9 @@ func (d *Downloader) processFullSyncContent() error {
 		}
 	}
 
+	log.Info("Notify reference body fetcher terminated")
+	d.referenceWakeCh <- false
+
 	//d.NotifyFetchReferenceFinished()
 	return nil
 }
