@@ -509,6 +509,8 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 
 		select {
 			case <-notify:
+				q.active.Signal()
+				<-wakeCh
 			case <-wakeCh:
 		}
 
