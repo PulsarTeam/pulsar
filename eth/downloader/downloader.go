@@ -474,7 +474,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
-
+	/*
 	fn1 := func() error {
 		fmt.Printf("syncWithPeer before fetchHeaders\n")
 		err := d.fetchHeaders(p, origin+1, pivot)
@@ -511,14 +511,15 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	for  _, fn := range fetchers{
 		fmt.Printf("func address : %v\n", fn)
 	}
-	/*
+	*/
+
 	fetchers := []func() error{
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
 		func() error { return d.fetchReceipts(origin + 1) },        // Receipts are retrieved during fast sync
 		func() error { return d.fetchReferenceBodies() },
 		func() error { return d.processHeaders(origin+1, pivot, td) },
-	}*/
+	}
 
 
 	if d.mode == FastSync {
@@ -537,10 +538,10 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 	for _, fn := range fetchers {
 		fn := fn
 		go func() {
-			fmt.Printf("Before spawnSync ++++++++++++++ address: %v\n", fn)
+			//fmt.Printf("Before spawnSync ++++++++++++++ address: %v\n", fn)
 			defer d.cancelWg.Done()
 			errc <- fn()
-			fmt.Printf("After spawnSync ++++++++++++++  address: %v\n", fn)
+			//fmt.Printf("After spawnSync ++++++++++++++  address: %v\n", fn)
 			}()
 	}
 	// Wait for the first error, then terminate the others.
@@ -1003,7 +1004,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 
 	//d.bodiesFinisedCh <- true
 	atomic.StoreInt32(&d.bodiesFinished, 1)
-	fmt.Printf("Block body download terminated")
+	fmt.Println("Block body download terminated")
 	log.Debug("Block body download terminated", "err", err)
 	return err
 }

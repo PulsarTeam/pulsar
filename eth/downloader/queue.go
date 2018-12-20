@@ -819,7 +819,8 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 	progress := false
 	for proc := 0; proc < space && len(send) < count && !taskQueue.Empty(); proc++ {
 
-		index := int(q.resultRefOffset)+proc
+		index := int(q.resultRefOffset)
+		q.resultRefOffset++
 
 		if index >= len(q.resultRefCache) || index < 0 {
 			common.Report("reserveRefHeaders index allocation went beyond available resultCache space")
