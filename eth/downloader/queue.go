@@ -490,17 +490,28 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 // Results retrieves and permanently removes a batch of fetch results from
 // the cache. the result slice will be empty if the queue has been closed.
-func (q *queue) Results(block bool) []*fetchResult {
+func (q *queue) Results(notify chan struct{}) []*fetchResult {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// Count the number of items available for processing
 	nproc := q.countProcessableItems()
 	for nproc == 0 && !q.closed {
-		if !block {
+		if notify == nil {
 			return nil
 		}
-		q.active.Wait()
+
+		wakeCh := make(chan struct{})
+		go func() {
+			q.active.Wait()
+			wakeCh <- struct{}{}
+		}()
+
+		select {
+			case <-notify:
+			case <-wakeCh:
+		}
+
 		nproc = q.countProcessableItems()
 	}
 	// Since we have a batch limit, don't pull more into "dangling" memory

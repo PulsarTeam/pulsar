@@ -122,7 +122,6 @@ type Downloader struct {
 	synchronising   int32
 	notified        int32
 	committed       int32
-	bodiesFinished  int32                //[conflux] bodies finished
 
 	// Channels
 	headerCh      	chan dataPack        // [eth/62]  Channel receiving inbound block headers
@@ -134,7 +133,7 @@ type Downloader struct {
 	referenceWakeCh chan bool            // [conflux] Channel to signal the reference blocks fetcher of new tasks
 	headerProcCh  	chan []*types.Header // [eth/62]  Channel to feed the header processor new tasks
 
-	//bodiesFinisedCh    chan bool			 // [conflux] Channel to signal reference blocks fetcher of task end
+	finishCh chan struct{}
 
 	// for stateFetcher
 	stateSyncStart chan *stateSync
@@ -231,6 +230,7 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 		referenceWakeCh:make(chan bool, 1),
 		//bodiesFinisedCh:make(chan bool, 1),
 		headerProcCh:   make(chan []*types.Header, 1),
+		finishCh: make(chan struct{}),
 		quitCh:         make(chan struct{}),
 		stateCh:        make(chan dataPack),
 		stateSyncStart: make(chan *stateSync),
@@ -368,14 +368,19 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	// Reset the queue, peer set and wake channels to clean any internal leftover state
 	d.queue.Reset()
 	d.peers.Reset()
-	atomic.StoreInt32(&d.bodiesFinished, 0)
 
-	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh/*, d.bodiesFinisedCh*/} {
+	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
 		select {
 		case <-ch:
 		default:
 		}
 	}
+
+	select {
+	case <-d.finishCh:
+	default:
+	}
+
 	for _, ch := range []chan dataPack{d.headerCh, d.bodyCh, d.receiptCh} {
 		for empty := false; !empty; {
 			select {
@@ -1002,8 +1007,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 		d.queue.PendingBlocks, d.queue.InFlightBlocks, d.queue.ShouldThrottleBlocks, d.queue.ReserveBodies,
 		d.bodyFetchHook, fetch, d.queue.CancelBodies, capacity, d.peers.BodyIdlePeers, setIdle, "bodies")
 
-	//d.bodiesFinisedCh <- true
-	atomic.StoreInt32(&d.bodiesFinished, 1)
+	d.finishCh <- struct{}{}
 	log.Info("Block body download terminated", "err", err)
 	return err
 }
@@ -1589,7 +1593,7 @@ func (d *Downloader) NotifyFetchReferenceFinished(){
 func (d *Downloader) processFullSyncContent() error {
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
-		results := d.queue.Results(true)
+		results := d.queue.Results(d.finishCh)
 		log.Info(">>>> retrieve queue result <EXIT>", "length", len(results))
 		if len(results) == 0 {
 			break
@@ -1604,12 +1608,6 @@ func (d *Downloader) processFullSyncContent() error {
 			log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
 			return errInvalidChain
 		}
-
-		if atomic.LoadInt32(&d.bodiesFinished) == 1 {
-			log.Info("notify the reference fetcher complete")
-			d.referenceWakeCh <- false
-		}
-
 	}
 
 	//d.NotifyFetchReferenceFinished()
@@ -1720,7 +1718,11 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	for {
 		// Wait for the next batch of downloaded data to be available, and if the pivot
 		// block became stale, move the goalpost
-		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness
+		notify := chan struct{} (nil)
+		if oldPivot == nil {
+			notify = d.finishCh
+		}
+		results := d.queue.Results(notify) // Block if we're not monitoring pivot staleness
 		if len(results) == 0 {
 			// If pivot sync is done, stop
 			if oldPivot == nil {
