@@ -986,7 +986,7 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchBodies(from uint64) error {
-	log.Debug("Downloading block bodies", "origin", from)
+	log.Info("Downloading block bodies", "origin", from)
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1004,8 +1004,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 
 	//d.bodiesFinisedCh <- true
 	atomic.StoreInt32(&d.bodiesFinished, 1)
-	fmt.Println("Block body download terminated")
-	log.Debug("Block body download terminated", "err", err)
+	log.Info("Block body download terminated", "err", err)
 	return err
 }
 
@@ -1013,7 +1012,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 // available peers, reserving a chunk of receipts for each, waiting for delivery
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReceipts(from uint64) error {
-	log.Debug("Downloading transaction receipts", "origin", from)
+	log.Info("Downloading transaction receipts", "origin", from)
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1029,7 +1028,7 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 		d.queue.PendingReceipts, d.queue.InFlightReceipts, d.queue.ShouldThrottleReceipts, d.queue.ReserveReceipts,
 		d.receiptFetchHook, fetch, d.queue.CancelReceipts, capacity, d.peers.ReceiptIdlePeers, setIdle, "receipts")
 
-	log.Debug("Transaction receipt download terminated", "err", err)
+	log.Info("Transaction receipt download terminated", "err", err)
 	return err
 }
 
@@ -1038,7 +1037,7 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReferenceBodies() error {
-	log.Debug("Downloading reference block bodies")
+	log.Info("Downloading reference block bodies")
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1054,8 +1053,7 @@ func (d *Downloader) fetchReferenceBodies() error {
 		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
 		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
 
-	fmt.Println("Reference block body download terminated")
-	log.Debug("Reference block body download terminated", "err", err)
+	log.Info("Reference block body download terminated", "err", err)
 	return err
 }
 
@@ -1675,6 +1673,9 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 			for recvCnt < schedCnt {
 				refResults := d.queue.ReferenceResults(true)
 				recvCnt += len(refResults)
+				if len(refResults) == 0 {
+					panic("blocking retrieve result should not return empty.")
+				}
 				for _, result := range refResults {
 					blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 					refBlocks.PushBack(blk)

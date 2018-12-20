@@ -549,24 +549,20 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	fmt.Printf("ReferenceResults ===================================== 0 \n")
 	// Count the number of reference items available for processing
 	nproc := q.countProcessableRefItems()
-	fmt.Printf("ReferenceResults ===================================== 1 \n")
+	fmt.Printf("ReferenceResults, nproc: %v \n", nproc)
 	for nproc == 0 && !q.closed {
-		fmt.Printf("ReferenceResults ===================================== 3 \n")
+		fmt.Printf("ReferenceResults nproc == 0 && !q.closed \n")
 		if !block {
-			fmt.Printf("ReferenceResults ===================================== 4 \n")
 			return nil
 		}
-		fmt.Printf("ReferenceResults ===================================== 5 \n")
+		fmt.Printf("ReferenceResults wait signal activeReference \n")
 		q.activeReference.Wait()
-		fmt.Printf("ReferenceResults ===================================== 6 \n")
 		nproc = q.countProcessableRefItems()
-		fmt.Printf("ReferenceResults ===================================== 7 \n")
+		fmt.Printf("ReferenceResults wait signal returned \n")
 	}
 
-	fmt.Printf("ReferenceResults, nproc: %v \n", nproc)
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	if nproc > maxResultsProcess {
 		nproc = maxResultsProcess
@@ -609,7 +605,6 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 		}
 	}
 
-	fmt.Printf("ReferenceResults, len(results) = %v\n", len(results))
 	return results
 }
 
