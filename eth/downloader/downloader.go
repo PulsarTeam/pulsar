@@ -1597,9 +1597,7 @@ func (d *Downloader) NotifyFetchReferenceFinished(){
 func (d *Downloader) processFullSyncContent() error {
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
-		fmt.Printf("before ========================================= 111111\n")
-		results := d.queue.Results(d.finishCh)
-		fmt.Printf("after  ========================================= 222222\n")
+		results, exit := d.queue.Results(d.finishCh)
 		log.Info(">>>> retrieve queue result <EXIT>", "length", len(results))
 		if len(results) == 0 {
 			break
@@ -1614,9 +1612,12 @@ func (d *Downloader) processFullSyncContent() error {
 			log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
 			return errInvalidChain
 		}
+		if exit {
+			log.Warn("=========> Rarely case: results return not null but should exit")
+			break
+		}
 	}
 
-	fmt.Printf("get d.finishCh ========================================= 0001\n")
 	log.Info("Notify reference body fetcher terminated")
 	d.referenceWakeCh <- false
 
@@ -1734,7 +1735,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 		if oldPivot == nil {
 			notify = d.finishCh
 		}
-		results := d.queue.Results(notify) // Block if we're not monitoring pivot staleness
+		results, _ := d.queue.Results(notify) // Block if we're not monitoring pivot staleness
 		if len(results) == 0 {
 			// If pivot sync is done, stop
 			if oldPivot == nil {

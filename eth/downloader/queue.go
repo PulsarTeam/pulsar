@@ -492,7 +492,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 // Results retrieves and permanently removes a batch of fetch results from
 // the cache. the result slice will be empty if the queue has been closed.
-func (q *queue) Results(notify chan struct{}) []*fetchResult {
+func (q *queue) Results(notify chan struct{}) ([]*fetchResult, bool) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -501,7 +501,7 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 	exit := false
 	for nproc == 0 && !q.closed && !exit {
 		if notify == nil {
-			return nil
+			return nil, false
 		}
 
 		signalled := int32(0)
@@ -563,7 +563,7 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 			q.resultSize = common.StorageSize(blockCacheSizeWeight)*size + (1-common.StorageSize(blockCacheSizeWeight))*q.resultSize
 		}
 	}
-	return results
+	return results, exit
 }
 
 
