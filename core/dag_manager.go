@@ -1013,6 +1013,15 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	referenceHeaders = append(referenceHeaders, pivotBlock.Header())
 	reorg, oldPivotChain, newPivotChain, err := dm.Dag().IsReorg(referenceHeaders)
 
+	for i, h := range oldPivotChain{
+		fmt.Printf("oldPivotChain i : %v, number: %v, hash : %v\n", i, h.Number.Uint64(), h.Hash().String())
+	}
+
+	for i, h := range newPivotChain{
+		fmt.Printf("newPivotChain i : %v, number: %v, hash : %v\n", i, h.Number.Uint64(), h.Hash().String())
+	}
+
+
 	if err != nil {
 		return NonStatTy, err
 	}
@@ -1114,6 +1123,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		// Write the positional metadata for preimages
 		rawdb.WritePreimages(batch, block.NumberU64(), state.Preimages())
 
+		fmt.Printf("reorg ==== %v, status = CanonStatTy\n", reorg)
 		status = CanonStatTy
 	} else {
 		status = SideStatTy

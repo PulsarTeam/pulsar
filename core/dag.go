@@ -82,7 +82,7 @@ func (dag *DAG)IsReorg(epochHeaders []*types.Header)(isReorg bool, oldPivotChain
 		// Split same-difficulty blocks by number, then at random
 		reorg = header.Number.Uint64() < currentBlock.NumberU64()
 		reorg = reorg || ((header.Number.Uint64() == currentBlock.NumberU64() && (header.Hash().Big().Cmp(currentBlock.Header().Hash().Big()) == -1)))
-		fmt.Printf("IsReorg header. number: %v, current number : %v, hash1 : %v, hash2 : %v\n", header.Number.Uint64(), currentBlock.NumberU64(), header.Hash().String(), currentBlock.Header().Hash().String())
+		fmt.Printf("IsReorg header. number: %v, current number : %v, hash1 : %v, hash2 : %v, reorg : %v\n", header.Number.Uint64(), currentBlock.NumberU64(), header.Hash().String(), currentBlock.Header().Hash().String(), reorg)
 	}
 
 	if reorg && header.ParentHash != currentBlock.Hash() {

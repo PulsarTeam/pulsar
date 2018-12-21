@@ -558,7 +558,6 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			// it has processed the queue.
 			d.queue.Close()
 		}
-
 		if err = <-errc; err != nil {
 			break
 		}
