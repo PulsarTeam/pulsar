@@ -1604,7 +1604,10 @@ func (d *Downloader) processFullSyncContent() error {
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
-		pivots, refs := d.processPivotBlocks(results)
+		pivots, refs, err := d.processPivotBlocks(results)
+		if err != nil {
+			return err
+		}
 		log.Info("Process pivot blocks", "pivot blocks", len(pivots), "reference blocks", refs.Len())
 		if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
 			//d.NotifyFetchReferenceFinished()
@@ -1652,7 +1655,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	return nil
 }
 
-func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *list.List) {
+func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *list.List, error) {
 	pivots := make(types.Blocks, len(results))
 	refHdrs := list.New()
 	refBlocks := list.New()
@@ -1683,7 +1686,8 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 				refResults := d.queue.ReferenceResults(true)
 				recvCnt += len(refResults)
 				if len(refResults) == 0 {
-					panic("blocking retrieve result should not return empty.")
+					log.Warn("blocking retrieve result is empty.")
+					return nil, nil, errors.New("blocking retrieve result is empty")
 				}
 				for _, result := range refResults {
 					blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
@@ -1700,7 +1704,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 		}
 	}
 
-	return pivots, refBlocks
+	return pivots, refBlocks, nil
 }
 
 // processFastSyncContent takes fetch results from the queue and writes them to the
