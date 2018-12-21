@@ -558,6 +558,7 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			// it has processed the queue.
 			d.queue.Close()
 		}
+
 		if err = <-errc; err != nil {
 			break
 		}
@@ -1058,6 +1059,8 @@ func (d *Downloader) fetchReferenceBodies() error {
 		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
 		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
 
+	fmt.Printf("Reference block body download terminated\n")
+	fmt.Printf("fetchReferenceBodies ========================================= 1\n")
 	log.Info("Reference block body download terminated", "err", err)
 	return err
 }
@@ -1594,7 +1597,9 @@ func (d *Downloader) NotifyFetchReferenceFinished(){
 func (d *Downloader) processFullSyncContent() error {
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
+		fmt.Printf("before ========================================= 111111\n")
 		results := d.queue.Results(d.finishCh)
+		fmt.Printf("after  ========================================= 222222\n")
 		log.Info(">>>> retrieve queue result <EXIT>", "length", len(results))
 		if len(results) == 0 {
 			break
@@ -1611,6 +1616,7 @@ func (d *Downloader) processFullSyncContent() error {
 		}
 	}
 
+	fmt.Printf("get d.finishCh ========================================= 0001\n")
 	log.Info("Notify reference body fetcher terminated")
 	d.referenceWakeCh <- false
 
@@ -1673,6 +1679,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 			schedRefHdr = schedRefHdr[schedCnt:]
 			recvCnt := 0
 			for recvCnt < schedCnt {
+				fmt.Printf("recvCnt : %v, schedCnt: %v\n", recvCnt, schedCnt)
 				refResults := d.queue.ReferenceResults(true)
 				recvCnt += len(refResults)
 				if len(refResults) == 0 {
@@ -1685,6 +1692,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 						refHdrs.PushBack(refHdr)
 					}
 				}
+				fmt.Printf("after ------- recvCnt : %v, schedCnt: %v\n", recvCnt, schedCnt)
 			}
 			if recvCnt != schedCnt {
 				panic(fmt.Sprintf("received count: %d is not equal to scheduled count: %d\n", recvCnt, schedCnt))
