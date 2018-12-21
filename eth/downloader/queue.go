@@ -497,7 +497,8 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 
 	// Count the number of items available for processing
 	nproc := q.countProcessableItems()
-	for nproc == 0 && !q.closed {
+	exit := false
+	for nproc == 0 && !q.closed && !exit {
 		if notify == nil {
 			return nil
 		}
@@ -506,9 +507,9 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 		wakeCh := make(chan struct{})
 		go func() {
 			if atomic.LoadInt32(&signalled) == 0 {
-				fmt.Printf(">>>>>>>>> signalled == 0, wait\n")
+				fmt.Printf(">>>>>>>>>>>> Wait signal >>>>>>>>>>>\n")
 				q.active.Wait()
-				fmt.Printf(">>>>>>>>> wait DONE\n")
+				fmt.Printf(">>>>>>>>>>>> Wakeup by signal >>>>>>>>>>>\n")
 			}
 			wakeCh <- struct{}{}
 		}()
@@ -516,10 +517,10 @@ func (q *queue) Results(notify chan struct{}) []*fetchResult {
 		select {
 			case <-notify:
 				atomic.StoreInt32(&signalled, 1)
-				fmt.Printf(">>>>>>>>> signal wait\n")
-				fmt.Printf(">>>>>>>>>> atomic.LoadInt32(&signalled) == %d\n", atomic.LoadInt32(&signalled))
+				fmt.Printf(">>>>>>>>>>>> Send signal >>>>>>>>>>>\n")
 				q.active.Signal()
 				<-wakeCh
+				exit = true
 			case <-wakeCh:
 		}
 
