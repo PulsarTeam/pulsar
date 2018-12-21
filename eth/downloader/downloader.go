@@ -1594,6 +1594,7 @@ func (d *Downloader) NotifyFetchReferenceFinished(){
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
+	var err error
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
 		results, exit := d.queue.Results(d.finishCh)
@@ -1604,9 +1605,10 @@ func (d *Downloader) processFullSyncContent() error {
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
-		pivots, refs, err := d.processPivotBlocks(results)
-		if err != nil {
-			return err
+		pivots, refs, e := d.processPivotBlocks(results)
+		if e != nil {
+			err = e
+			break
 		}
 		log.Info("Process pivot blocks", "pivot blocks", len(pivots), "reference blocks", refs.Len())
 		if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
@@ -1623,8 +1625,7 @@ func (d *Downloader) processFullSyncContent() error {
 	log.Info("Notify reference body fetcher terminated")
 	d.referenceWakeCh <- false
 
-	//d.NotifyFetchReferenceFinished()
-	return nil
+	return err
 }
 
 func (d *Downloader) importBlockResults(results []*fetchResult) error {
