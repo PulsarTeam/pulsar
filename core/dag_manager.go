@@ -1107,8 +1107,8 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 		//write transactions on the new pivot chain
 		if len(newPivotChain) > 1 {
-			newPivotChain = newPivotChain[:len(newPivotChain)-2]
-			for _, h := range newPivotChain {
+			tempNewPivotChain := newPivotChain[:len(newPivotChain)-2]
+			for _, h := range tempNewPivotChain {
 				epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
 				if epoc == nil {
 					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
