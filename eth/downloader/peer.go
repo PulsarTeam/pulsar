@@ -566,7 +566,7 @@ func (ps *peerSet) ReferenceIdlePeers() ([]*peerConnection, int) {
 		defer p.lock.RUnlock()
 		return p.referenceThroughput
 	}
-	return ps.idlePeers(62, 64, idle, throughput)
+	return ps.idlePeers(63, 64, idle, throughput)
 }
 
 // NodeDataIdlePeers retrieves a flat list of all the currently node-data-idle
