@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/swarm/log"
 	"sort"
 	"fmt"
+	"github.com/pkg/errors"
 )
 
 type DAGBlock struct{
@@ -34,15 +35,17 @@ type DAGCore struct{
 	tipBlocks		[]common.Hash
 	tipEndBlocks	[]common.Hash
 	root			common.Hash
+	ID 				int
 }
 
-func NewDAGCore() *DAGCore {
+func NewDAGCore(id int) *DAGCore {
 	return &DAGCore{
 		make(map[common.Hash]*DAGBlock),
 		make([]*EpochMeta,0, 16),
 		make([]common.Hash,0, 16),
 		make([]common.Hash,0, 8),
 		common.BytesToHash([]byte{0x0}),
+		id,
 	}
 }
 
@@ -83,7 +86,113 @@ func addIfNotExist(elem common.Hash, slice *[]common.Hash) bool {
 	return false
 }
 
-func (dag *DAGCore)InitDAG(blocks []*types.Block){
+// check the consensus between two dags
+func (dag *DAGCore)CheckConsensus(otherDag *DAGCore) error {
+
+	//fmt.Printf("Checking [%d] and [%d] ...\n", dag.ID, otherDag.ID )
+
+	// check roots
+	if dag.root!=otherDag.root {
+		msg := fmt.Sprintf("The roots are not equal! [%d]root[%s], [%d]root[%s]", dag.ID, dag.root.String(), otherDag.ID, otherDag.root.String())
+		fmt.Println(msg)
+		return errors.New(msg)
+	}
+
+	// check hashes
+	for k, _ := range dag.dagBlocks {
+		if _, ok := otherDag.dagBlocks[k]; !ok {
+			msg := fmt.Sprintf(" The block sets are not equal! block[%s] exists in [%d] but doesn't exist in [%d]!", k.String(), dag.ID, otherDag.ID)
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+	}
+	for k, _ := range otherDag.dagBlocks {
+		if _, ok := dag.dagBlocks[k]; !ok {
+			msg := fmt.Sprintf(" The block sets are not equal! block[%s] doesn't exist in [%d] but exists in [%d]!", k.String(), dag.ID, otherDag.ID)
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+	}
+
+	// check epoch list
+	len1 := len(dag.epochList)
+	len2 := len(otherDag.epochList)
+	if len1!=len2 {
+		msg := fmt.Sprintf("The epoch list length are not equal! %d, %d", len1, len2)
+		fmt.Println(msg)
+		return errors.New(msg)
+	}
+
+	for i:=0; i<len1; i++ {
+		epoch := dag.epochList[i]
+		otherEpoch := otherDag.epochList[i]
+		if epoch.BlockHash != otherEpoch.BlockHash || epoch.EpochNumber!=otherEpoch.EpochNumber {
+			msg := fmt.Sprintf("EpochList[%d] not equal! [%d]=%d:%s, [%d]=%d:%s", i,
+				dag.ID, epoch.EpochNumber, epoch.BlockHash.String(),
+				otherDag.ID, otherEpoch.EpochNumber, otherEpoch.BlockHash.String())
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+
+		mlen1 := len(epoch.MemberBlockHashes)
+		mlen2 := len(otherEpoch.MemberBlockHashes)
+		if mlen1!=mlen2 {
+			msg := fmt.Sprintf("The epochList[%d](%d:%s)'s member length are not equal! %d-%d, %d-%d", i,
+				epoch.EpochNumber, epoch.BlockHash.String(), dag.ID, mlen1, otherDag.ID, mlen2)
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+		for j:=0; j<mlen1; j++ {
+			if epoch.MemberBlockHashes[j]!=otherEpoch.MemberBlockHashes[j] {
+				msg := fmt.Sprintf("The epochList[%d](%d:%s)'s MemberBlockHashes[%d] are not equal! %d-%s, %d-%s", i,
+					epoch.EpochNumber, epoch.BlockHash.String(), j, dag.ID, epoch.MemberBlockHashes[j].String(), otherDag.ID, otherEpoch.MemberBlockHashes[j].String())
+				fmt.Println(msg)
+				return errors.New(msg)
+			}
+		}
+	}
+
+	// check tip list
+	tlen1 := len(dag.tipBlocks)
+	tlen2 := len(otherDag.tipBlocks)
+	if tlen1!=tlen2 {
+		msg := fmt.Sprintf("The tip list length are not equal! %d, %d", tlen1, tlen2)
+		fmt.Println(msg)
+		return errors.New(msg)
+	}
+
+	for i:=0; i<tlen1; i++ {
+		if dag.tipBlocks[i] != otherDag.tipBlocks[i] {
+			msg := fmt.Sprintf("tipBlocks[%d] not equal! %d-%s, %d-%s", i,
+				dag.ID, dag.tipBlocks[i].String(), otherDag.ID, otherDag.tipBlocks[i].String() )
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+	}
+
+	// check tip end list
+	telen1 := len(dag.tipEndBlocks)
+	telen2 := len(otherDag.tipEndBlocks)
+	if telen1!=telen2 {
+		msg := fmt.Sprintf("The tip end list length are not equal! %d, %d", telen1, telen2)
+		fmt.Println(msg)
+		return errors.New(msg)
+	}
+
+	for i:=0; i<telen1; i++ {
+		if dag.tipEndBlocks[i] != otherDag.tipEndBlocks[i] {
+			msg := fmt.Sprintf("tipEndBlocks[%d] not equal! %d-%s, %d-%s", i,
+				dag.ID, dag.tipEndBlocks[i].String(), otherDag.ID, otherDag.tipEndBlocks[i].String() )
+			fmt.Println(msg)
+			return errors.New(msg)
+		}
+	}
+
+	return nil
+
+}
+
+func (dag *DAGCore)InitDAG(blocks []*types.Block) error {
 
 	// add all blocks into the dag block total list and tip list
 	for i, block := range blocks {
@@ -93,7 +202,7 @@ func (dag *DAGCore)InitDAG(blocks []*types.Block){
 		if !dag.IsBlockInDAG(common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))) {
 			dag.insertBlockBaseData(block)
 		} else {
-			log.Error("InitDAG, when inserting block, but the block already in the DAG!", "hash", block.Hash())
+			return errors.Errorf("InitDAG, when inserting block, but the block already in the DAG! hash:%s", block.Hash().String())
 		}
 
 		if i==0 {
@@ -106,12 +215,10 @@ func (dag *DAGCore)InitDAG(blocks []*types.Block){
 	// update the child hash list
 	for hash, dagBlock := range dag.dagBlocks {
 		if parent, ok:= dag.dagBlocks[dagBlock.ParentHash]; ok {
-
 			parent.ChildHashes = append(dag.dagBlocks[dagBlock.ParentHash].ChildHashes, hash)
-			fmt.Printf("InitDAG [%s] add child:[%s]\n", dagBlock.ParentHash.String(), hash.String() )
-			fmt.Printf(" ChildHashes.len=%d\n", len(parent.ChildHashes))
-
-		} else {
+			//fmt.Printf("InitDAG [%s] add child:[%s]\n", dagBlock.ParentHash.String(), hash.String() )
+			//fmt.Printf(" ChildHashes.len=%d\n", len(parent.ChildHashes))
+		} else if hash!=dag.root {
 			log.Error("InitDAG, parent not found!", "hash", dagBlock.BlockHash, "parentHash", dagBlock.ParentHash)
 			fmt.Printf("InitDAG [%s]'s parent [%s] not found!\n", hash.String(), dagBlock.ParentHash.String() )
 		}
@@ -141,9 +248,10 @@ func (dag *DAGCore)InitDAG(blocks []*types.Block){
 
 	// gather the tip-end list
 	dag.gatherTipEndList()
+	return nil
 }
 
-func (dag *DAGCore)updateDescendantEpoches(dagBlock *DAGBlock){
+func (dag *DAGCore)updateDescendantEpoches(dagBlock *DAGBlock, ){
 	block := dagBlock
 	ok := false
 	for {
@@ -164,6 +272,20 @@ func (dag *DAGCore)updateDescendantEpoches(dagBlock *DAGBlock){
 			log.Error("updateDescendantEpoches, block not found!", "hash", hash)
 			break
 		}
+	}
+}
+
+func (dag *DAGCore)clearDescendantEpoches(epochHash common.Hash){
+
+	epoch, _ :=dag.GetEpochByHash(epochHash)
+	if epoch==nil {
+		log.Error("clearDescendantEpoches, epoch not found!", "hash", epochHash)
+		return
+	}
+
+	length := len(dag.epochList)
+	for i:=length-1; i>=0 && dag.epochList[i].BlockHash!=epochHash; i--{
+		dag.removeEpoch(dag.epochList[i].BlockHash)
 	}
 }
 
@@ -278,22 +400,24 @@ func (dag *DAGCore) isInTipBlocks( hash common.Hash) bool {
 	return findIn(hash, &dag.tipBlocks)>=0
 }
 
-func (dag *DAGCore) isTopoAvailable( hash common.Hash) bool {
-	if dagBlock, ok:= dag.dagBlocks[hash]; ok {
+// judge whether the block's parent and all its references are in the previous epoches.
+func (dag *DAGCore) isInsertPrepared(dagBlock *DAGBlock) bool {
+
 		// parent
-		if !dag.isInPreEpoch(dagBlock.ParentHash) {
+		if !dag.IsBlockInDAG(dagBlock.ParentHash) {
+
 			return false
 		}
+
 		// references
-		for _, memberHash := range dagBlock.ReferHashes {
-			if !dag.isInPreEpoch(memberHash) {
+		for _, uncle := range dagBlock.ReferHashes {
+
+			if !dag.IsBlockInDAG(uncle) {
+
 				return false
 			}
 		}
-	} else {
-		log.Error("isTopoAvailable, block not found!", "hash", hash)
-		return false
-	}
+
 	return true
 }
 
@@ -370,7 +494,7 @@ func (dag *DAGCore)topoSortInEpoch( members *[]common.Hash)  {
 		log.Error("topoSortInEpoch, not all elememts sorted!", "length", len(*members), "sorted", fence)
 		fmt.Printf("topoSortInEpoch, not all elememts sorted! length:%d, sorted:%d\n", len(*members), fence)
 	}
-	fmt.Printf("topoSortInEpoch, sorted! length:%d, sorted:%d\n", len(*members), fence)
+	//fmt.Printf("topoSortInEpoch, sorted! length:%d, sorted:%d\n", len(*members), fence)
 }
 
 func (dag *DAGCore)gatherTipEndList(){
@@ -391,6 +515,7 @@ func (dag *DAGCore)updatePivotChild(dagBlock *DAGBlock){
 	max := big.NewInt(0)
 	for i, childHash := range dagBlock.ChildHashes {
 		if child, ok:= dag.dagBlocks[childHash]; ok {
+			//fmt.Printf("%d||updatePivotChild,[%s]-(%d)[%s], diff(%s/%s)  max:%s\n", dag.ID, dagBlock.BlockHash.String(), i, childHash.String(), child.Difficulty.String(), child.SubtreeDifficulty.String(), max.String() )
 			if dagBlock.pivotChild ==-1 || child.SubtreeDifficulty.Cmp(max)>0 ||
 			(child.SubtreeDifficulty.Cmp(max)==0 && childHash.Big().Cmp(dagBlock.ChildHashes[dagBlock.pivotChild].Big())<0 )  {
 				max = child.SubtreeDifficulty
@@ -425,8 +550,7 @@ func (dag *DAGCore)calculateSubtreeDifficulty(dagBlock *DAGBlock, recalculateChi
 }
 
 //block insert into dag
-func (dag *DAGCore)insertBlockBaseData(block *types.Block) ( *DAGBlock) {
-
+func (dag *DAGCore)generateDAGBlock(block *types.Block) ( *DAGBlock) {
 
 	dagBlock := DAGBlock {
 		//block.Header().Hash(),
@@ -446,57 +570,188 @@ func (dag *DAGCore)insertBlockBaseData(block *types.Block) ( *DAGBlock) {
 		dagBlock.ReferHashes = append(dagBlock.ReferHashes, common.BigToHash( big.NewInt( int64(refer.GasLimit))))
 	}
 
-	//dag.dagBlocks[block.Hash()] = &dagBlock
-	dag.dagBlocks[common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))] = &dagBlock
-	//dag.tipBlocks = append(dag.tipBlocks, block.Hash())
-	dag.tipBlocks = append(dag.tipBlocks, common.BigToHash( big.NewInt( int64(block.Header().GasLimit))))
+	return &dagBlock
+}
 
+// clone a DAGBlock object
+func (dagBlock *DAGBlock)Clone() ( *DAGBlock) {
+
+	clonedBlock := DAGBlock {
+		dagBlock.BlockHash,
+		dagBlock.Number,
+		dagBlock.ParentHash,
+		make([]common.Hash, len(dagBlock.ReferHashes)),
+		new(big.Int).Set(dagBlock.Difficulty),
+		new(big.Int).Set(dagBlock.SubtreeDifficulty),
+		make([]common.Hash, len(dagBlock.ChildHashes)),
+		dagBlock.pivotChild,
+	}
+	// update the reference hashes
+	for i, _ := range dagBlock.ReferHashes {
+		clonedBlock.ReferHashes[i] = dagBlock.ReferHashes[i]
+	}
+
+	// update the child hashes
+	for i, _ := range dagBlock.ChildHashes {
+		clonedBlock.ChildHashes[i] = dagBlock.ChildHashes[i]
+	}
+
+	return &clonedBlock
+}
+
+func (dag *DAGCore)generateDAGBlockByParams(parentHash common.Hash, number uint64, uncles []common.Hash, difficulty int64, gasLimit int64) ( *DAGBlock) {
+
+	dagBlock := DAGBlock {
+		common.BigToHash( big.NewInt( gasLimit )),
+		number,
+		parentHash,
+		make([]common.Hash, 0, len(uncles)),
+		big.NewInt((difficulty)),
+		big.NewInt((difficulty)),
+		make([]common.Hash, 0),
+		-1,
+	}
+	// update the reference hashes
+	for _, refer := range uncles {
+		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
+		dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer)
+	}
 
 	return &dagBlock
 }
 
 //block insert into dag
-func (dag *DAGCore)InsertBlock(block *types.Block) bool {
-	if !dag.CanBlockInsert(block.Hash()) {
-		return false
-	}
-	dagBlock := dag.insertBlockBaseData(block);
-	if  dagBlock==nil {
-		return false
+func (dag *DAGCore)insertBlockBaseData(block *types.Block) ( *DAGBlock) {
+
+	dagBlock := dag.generateDAGBlock(block)
+
+	if dag.insertDAGBlock(dagBlock) {
+		return dagBlock
 	}
 
-	if parent, ok:= dag.dagBlocks[dagBlock.ParentHash]; ok {
-		parent.ChildHashes = append(parent.ChildHashes, dagBlock.BlockHash)
-		pivotUpdateBlock := common.BytesToHash([]byte{0x0})
+	return nil
+}
+
+//dagBlock insert into dag
+// return true if success, false if not
+func (dag *DAGCore)insertDAGBlock(dagBlock *DAGBlock) (bool) {
+
+	//fmt.Printf("%d||insert: %s\n" , dag.ID, dagBlock.BlockHash.String())
+	if _, ok := dag.dagBlocks[dagBlock.BlockHash]; !ok {
+		dag.dagBlocks[dagBlock.BlockHash] = dagBlock
+		dag.tipBlocks = append(dag.tipBlocks, dagBlock.BlockHash)
+		return true
+	}
+	return false
+}
+
+//block insert into dag
+func (dag *DAGCore)InsertBlock(block *types.Block) bool {
+
+	refers := make([]common.Hash, 0, 0)
+	// update the reference hashes
+	for _, refer := range block.Uncles() {
+		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
+		refers = append(refers, common.BigToHash( big.NewInt( int64(refer.GasLimit))))
+	}
+
+	dagBlock := dag.generateDAGBlockByParams(block.ParentHash(), block.NumberU64(), refers, 10000, int64(block.GasLimit()) )
+	return dag.InsertDAGBlock(dagBlock)
+
+}
+
+//block insert into dag
+func (dag *DAGCore)InsertDAGBlock(dagBlock *DAGBlock) bool {
+	if !dag.CanBlockInsert(dagBlock) {
+		return false
+	}
+	clonedBlock := dagBlock.Clone()
+	success := dag.insertDAGBlock(clonedBlock);
+	if  !success {
+		return false
+	}
+	if parent, ok:= dag.dagBlocks[clonedBlock.ParentHash]; ok {
+
+		//fmt.Printf("InsertBlock, hash:%s, parentHash:%s, childs=%d {", clonedBlock.BlockHash.String(), clonedBlock.ParentHash.String(), len(parent.ChildHashes), )
+		//for _, v := range parent.ChildHashes {
+		//	fmt.Println(v.String())
+		//}
+		//fmt.Println("}")
+		parent.ChildHashes = append(parent.ChildHashes, clonedBlock.BlockHash)
+		var pivotUpdateBlock *DAGBlock = nil
+
+		blockToProcess := parent
 
 		//TODO root need to be changed to isolation block
-		for parent.BlockHash!=dag.root {
-			parent.SubtreeDifficulty = dag.calculateSubtreeDifficulty(parent, false)
-
-			if !dag.isInPivot(parent.BlockHash) {
-				dag.updatePivotChild(parent)
-				dag.removeEpoch(parent.BlockHash)
-			} else {
-				pivotUpdateBlock = parent.BlockHash
+		for blockToProcess.BlockHash!=dag.root {
+			blockToProcess.SubtreeDifficulty = dag.calculateSubtreeDifficulty(blockToProcess, false)
+			if !dag.isInPivot(blockToProcess.BlockHash) {
+				dag.updatePivotChild(blockToProcess)
+			} else if pivotUpdateBlock==nil {
+				dag.updatePivotChild(blockToProcess)
+				pivotUpdateBlock = blockToProcess
 			}
+
+			if blockToProcess, ok = dag.dagBlocks[blockToProcess.ParentHash]; ok {
+
+
+			} else {
+				log.Error("InsertBlock, parent not found!", "hash", clonedBlock.BlockHash, "parentHash", clonedBlock.ParentHash)
+				fmt.Printf("InsertBlock, parent not found! hash:%s, parentHash:%s", clonedBlock.BlockHash.String(), clonedBlock.ParentHash.String() )
+			}
+
 		}
 
+		if blockToProcess.BlockHash==dag.root && pivotUpdateBlock==nil {
+			dag.updatePivotChild(blockToProcess)
+			pivotUpdateBlock = blockToProcess
+		}
+
+		dag.clearDescendantEpoches(pivotUpdateBlock.BlockHash)
+		//fmt.Printf("pivotUpdateBlock:%s\n", pivotUpdateBlock.BlockHash.String())
+		newEpochHash := pivotUpdateBlock.ChildHashes[pivotUpdateBlock.pivotChild]
+
 		// calculate epoches
-		if block, ok:= dag.dagBlocks[pivotUpdateBlock]; ok {
+		if block, ok:= dag.dagBlocks[newEpochHash]; ok {
+			//fmt.Printf("newEpochHash==%s\n" , newEpochHash.String())
 			dag.updateDescendantEpoches(block)
 		} else {
 			log.Error("InsertBlock, pivotUpdateBlock not found!", "hash", pivotUpdateBlock)
 		}
 
 	} else {
-		log.Error("InsertBlock, parent not found!", "hash", dagBlock.BlockHash, "parentHash", dagBlock.ParentHash)
+		log.Error("InsertBlock, parent not found!", "hash", clonedBlock.BlockHash, "parentHash", clonedBlock.ParentHash)
+		return false
 	}
+
+	// sort the tip list
+	dag.topoSortInEpoch(&dag.tipBlocks)
+
+	//clear the tip-end list
+	dag.tipEndBlocks = dag.tipEndBlocks[0:0]
+
+	// gather the tip-end list
+	dag.gatherTipEndList()
 
 	return true
 }
 
 func (dag *DAGCore)InsertBlocks(epochHeaders []*types.Header){
 	//block insert into dag
+}
+
+func (dag *DAGCore)GetTipEnds()(tipEnds []*DAGBlock, err error){
+
+	for _, hash := range dag.tipEndBlocks {
+		if dagBlock, ok:= dag.dagBlocks[hash]; ok {
+			tipEnds = append(tipEnds, dagBlock)
+		} else {
+			msg := fmt.Sprintf("tipEnd:%s not found\n", hash.String())
+			return tipEnds, errors.New(msg)
+		}
+	}
+
+	return tipEnds, nil
 }
 
 func (dag *DAGCore)GetFutureReferenceBlock()(hashes []common.Hash, err error){
@@ -506,7 +761,15 @@ func (dag *DAGCore)GetFutureReferenceBlock()(hashes []common.Hash, err error){
 func (dag *DAGCore)CurrentBlock()(hash common.Hash, err error){
 	length := len(dag.epochList)
 	return dag.epochList[length-1].BlockHash, nil
-	//return nil, nil
+}
+
+func (dag *DAGCore)GetBlockByHash(hash common.Hash) *DAGBlock{
+
+	if dagBlock, ok:= dag.dagBlocks[hash]; ok {
+		return dagBlock
+	} else {
+		return nil
+	}
 }
 
 func (dag *DAGCore)GetEpochByNumber(epochNumber uint64)(epoch *EpochMeta, err error){
@@ -531,14 +794,14 @@ func (dag *DAGCore)IsBlockInDAG(hash common.Hash)(IsOrNot bool){
 	return dag.isInPreEpoch(hash) || dag.isInTipBlocks(hash)
 }
 
-func (dag *DAGCore)CanBlockInsert(hash common.Hash)(canOrNot bool){
-	return !dag.IsBlockInDAG(hash) &&  dag.isTopoAvailable(hash)
+// judge whether the block can be inserted into the DAG
+func (dag *DAGCore)CanBlockInsert(dagBlock *DAGBlock)(canOrNot bool){
+	return !dag.IsBlockInDAG(dagBlock.BlockHash) && dag.isInsertPrepared(dagBlock)
 }
 
 func (dag *DAGCore)PrintDagBlocks(){
 	for hash, v := range dag.dagBlocks {
 		fmt.Printf("dagBlocks[%s]:[\n", hash.String())
-		//fmt.Print(v)
 		dag.PrintDagBlock(v)
 		fmt.Print("]\n")
 	}
