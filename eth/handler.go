@@ -331,9 +331,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// Gather headers until the fetch or network limits is reached
 		var (
-			bytes      common.StorageSize
-			headers    []*types.Header
-			unknown    bool
+			bytes   common.StorageSize
+			headers []*types.Header
+			unknown bool
 		)
 		for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit && len(headers) < downloader.MaxHeaderFetch {
 			// Retrieve the next header satisfying the query
@@ -434,10 +434,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Gather blocks until the fetch or network limits is reached
 		var (
-			hash   		common.Hash
-			bytes  		int
-			bodies  	[]rlp.RawValue
-			blocks		types.Blocks
+			hash   common.Hash
+			bytes  int
+			bodies []rlp.RawValue
+			blocks types.Blocks
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -453,21 +453,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 				//get reference blocks
 				block := pm.blockchain.GetBlockByHash(hash)
-				for _, uncle := range block.Uncles(){
+				for _, uncle := range block.Uncles() {
 					b := pm.blockchain.GetBlock(uncle.Hash(), uncle.Number.Uint64())
 					blocks = append(blocks, b)
 				}
 			}
 		}
 
-		if err := p.SendBlockBodiesRLP(bodies); err != nil{
+		if err := p.SendBlockBodiesRLP(bodies); err != nil {
 			return err
 		}
 
 		//send reference blocks
-		for _, b:= range blocks{
+		for _, b := range blocks {
 			td := new(big.Int).Add(b.Difficulty(), pm.blockchain.GetTd(b.ParentHash(), b.NumberU64()-1))
-			if err := p.SendReferenceBlock(b, td); err != nil{
+			if err := p.SendReferenceBlock(b, td); err != nil {
 				return err
 			}
 		}
@@ -484,15 +484,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		transactions := make([][]*types.Transaction, len(request))
 		uncles := make([][]*types.Header, len(request))
 
-		/*
 		for i, body := range request {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
-			if len(uncles[i]) > 0 {
-				fmt.Println("BlockBodiesMsg DownloadUncle------------")
-				pm.DownloadUncle(uncles[i])
-			}
-		}*/
+		}
 
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
@@ -625,9 +620,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.fetcher.Enqueue(p.id, request.Block)
 
 		/*
-		if request.Block.UncleHash() != types.EmptyUncleHash {
-			pm.DownloadUncle(request.Block.Uncles())
-		}
+			if request.Block.UncleHash() != types.EmptyUncleHash {
+				pm.DownloadUncle(request.Block.Uncles())
+			}
 		*/
 
 		// Assuming the block is importable by the peer, but possibly not yet done so,
@@ -661,7 +656,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// Mark the peer as owning the block and schedule it for import
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
-		
+
 	case msg.Code == TxMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
@@ -723,7 +718,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			var references types.ReferenceBlocks
-			for _, rh := range block.Uncles(){
+			for _, rh := range block.Uncles() {
 				rb := pm.blockchain.GetBlock(rh.Hash(), rh.Number.Uint64())
 				td1 := new(big.Int).Add(rb.Difficulty(), pm.blockchain.GetTd(rb.ParentHash(), rb.NumberU64()-1))
 				reference := &types.ReferenceBlock{
