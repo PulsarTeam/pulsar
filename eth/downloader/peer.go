@@ -225,6 +225,7 @@ func (p *peerConnection) FetchReferenceBodies(request *fetchRequest) error {
 	// Convert the header set to a retrievable slice
 	hashes := make([]common.Hash, 0, len(request.Headers))
 	for _, header := range request.Headers {
+		fmt.Printf("FetchReferenceBodies ===================== number : %v, hash: %v\n", header.Number.Uint64(), header.Hash().String())
 		hashes = append(hashes, header.Hash())
 	}
 	go p.peer.RequestReferenceBodies(hashes)

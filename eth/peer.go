@@ -324,7 +324,14 @@ func (p *peer) RequestBodies(hashes []common.Hash) error {
 // specified.
 func (p *peer) RequestReferenceBodies(hashes []common.Hash) error {
 	p.Log().Debug("Fetching batch of reference block bodies", "count", len(hashes))
-	return p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
+
+	for _, h := range hashes{
+		fmt.Printf("RequestReferenceBodies ===== , hash : %v\n", h.String())
+	}
+	//return p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
+	err := p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
+	fmt.Printf("RequestReferenceBodies ==================== %v\n", err)
+	return err
 }
 
 // RequestNodeData fetches a batch of arbitrary data from a node's known state

@@ -483,7 +483,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 		q.referenceTaskPool[hash] = header
 		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
-
+		fmt.Printf("push to tash Queue, number: %v, hash : %v\n", header.Number.Uint64(), header.Hash().String())
 
 	}
 
@@ -649,7 +649,9 @@ func (q *queue) countProcessableItems() int {
 func (q *queue) countProcessableRefItems() int {
 	for i, result := range q.resultRefCache {
 		if result == nil{
-			fmt.Printf("countProcessableRefItems ================result = nil, i : %v\n", i)
+			fmt.Printf("000 countProcessableRefItems ================result = nil, i : %v\n", i)
+		}else if result.Pending > 0{
+			fmt.Printf("111 countProcessableRefItems ================result = nil, i : %v\n", i)
 		}
 
 		if result == nil || result.Pending > 0 {
@@ -793,6 +795,9 @@ func (q *queue) reserveHeaders(p *peerConnection, count int, taskPool map[common
 			space, proc = space-1, proc-1
 			q.resultCache[index].Pending--
 			progress = true
+
+			//fmt.Printf("reserveHeaders ok header, header number : %v, header hash : %v, index : %v, int(q.resultRefOffset): %v \n", header.Number.Uint64(), header.Hash().String(), index, int(q.resultRefOffset))
+
 			continue
 		}
 		// Otherwise unless the peer is known not to have the data, add to the retrieve list
@@ -864,7 +869,7 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			return nil, false, errInvalidChain
 		}
 		*/
-
+		fmt.Printf("index ===================== %v\n", index)
 		if q.resultRefCache[index] == nil {
 			components := 1
 
@@ -900,6 +905,7 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 	if progress {
 		// Wake WaitResults, resultCache was modified
 		q.activeReference.Signal()
+		fmt.Printf("reserveRefHeaders q.activeReference.Signal()\n")
 	}
 	// Assemble and return the block download request
 	if len(send) == 0 {
@@ -1184,6 +1190,7 @@ func (q *queue) DeliverReferenceBodies(id string, txLists [][]*types.Transaction
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	fmt.Printf("DeliverReferenceBodies==================== \n")
 	reconstruct := func(header *types.Header, index int, result *fetchResult) error {
 		fmt.Printf("DeliverReferenceBodies ok header, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		if types.DeriveSha(types.Transactions(txLists[index])) != header.TxHash || types.CalcUncleHash(uncleLists[index]) != header.UncleHash {
@@ -1304,19 +1311,22 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		if i >= results {
 			break
 		}
-		// Reconstruct the next result if contents match up
-		index := int(q.resultRefOffset)
 
-		if index+1 >= len(q.resultRefCache) || index+1 < 0 || q.resultRefCache[index+1] == nil {
-			failure = errors.New("deliverReference beyond resultRefCache length")
-			break
+		finish := false
+		index := 0
+		var err error
+		for index := 0; index < int(q.resultRefOffset); index++{
+			if err = reconstruct(header, i, q.resultRefCache[index]); err == nil {
+				finish = true
+				break
+			}
 		}
-		q.resultRefOffset++
 
-		if err := reconstruct(header, i, q.resultRefCache[index]); err != nil {
+		if 	finish == false{
 			failure = err
 			break
 		}
+
 		hash := header.Hash()
 
 		donePool[hash] = struct{}{}
@@ -1338,7 +1348,7 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 	// Wake up WaitResults
 	if accepted > 0 {
 		q.activeReference.Signal()
-		fmt.Printf(" deliverReference q.active.Broadcast() ++++++++++ \n")
+		fmt.Printf(" deliverReference q.activeReference.Signal() ++++++++++ \n")
 	}
 	// If none of the data was good, it's a stale delivery
 	switch {

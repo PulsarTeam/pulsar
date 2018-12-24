@@ -1270,11 +1270,14 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			return errCancel
 
 		case packet := <-deliveryCh:
+			fmt.Printf("recv reference bodies!\n")
 			// If the peer was previously banned and failed to deliver its pack
 			// in a reasonable time frame, ignore its message.
 			if peer := d.peers.Peer(packet.PeerId()); peer != nil {
+				fmt.Printf("Enter =================== \n")
 				// Deliver the received chunk of data and check chain validity
 				accepted, err := deliver(packet)
+				fmt.Printf("After =================== \n")
 				if err == errInvalidChain {
 					return err
 				}
