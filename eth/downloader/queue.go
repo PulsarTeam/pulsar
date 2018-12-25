@@ -1316,6 +1316,7 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		var err error
 		for index := 0; index < int(q.resultRefOffset); index++{
 			if q.resultRefCache[index].Pending <= 0{
+				fmt.Printf("deliverReference ok header , index : %v is ok!   q.resultRefCache[index].Pending : %v\n", index, q.resultRefCache[index].Pending)
 				continue
 			}
 
