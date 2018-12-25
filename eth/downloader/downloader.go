@@ -1264,6 +1264,9 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 
 	// Prepare the queue and fetch block parts until the block header fetcher's done
 	finished := false
+
+	timeOutCnt := 0
+
 	for {
 		select {
 		case <-d.cancelCh:
@@ -1354,15 +1357,25 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			// If there's nothing more to fetch, wait or terminate
 			if pending() == 0 {
 				fmt.Printf("fetchParts2 finished : %v, inFlight() : %v\n", finished, inFlight())
+
 				if !inFlight() && finished {
 					log.Debug("Data fetching completed", "type", kind)
 					return nil
+				}
+				timeOutCnt++
+
+				if timeOutCnt >= 300{
+					d.queue.Close()
+					d.Cancel()
+					fmt.Printf("fetchPart2 time out, and the fetches of this time is over!\n")
+					return errors.New("fetchPart2 time out!\n")
 				}
 				break
 			}
 			// Send a download request to all idle peers, until throttled
 			progressed, throttled, running := false, false, inFlight()
 			idles, total := idle()
+			timeOutCnt = 0
 
 			for _, peer := range idles {
 				// Short circuit if throttling activated

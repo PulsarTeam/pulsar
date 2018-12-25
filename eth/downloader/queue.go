@@ -599,7 +599,6 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 		fmt.Printf("ReferenceResults ok header, header number : %v, header hash : %v\n", fr.Header.Number.Uint64(), fr.Header.Hash().String())
 	}
 
-
 	if len(results) > 0 {
 		// Mark results as done before dropping them from the cache.
 		for _, result := range results {
