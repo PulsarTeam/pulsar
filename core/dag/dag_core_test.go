@@ -29,6 +29,9 @@ func prepareBlock(parentHash common.Hash, number int64, uncles []*types.Header, 
 	return types.NewBlock(&header, nil, uncles, nil)
 }
 
+// prepare blocks for test.
+// for normal test, use real hash.
+// for simple hash test, use gasLimit instead.
 func prepareBlocks() ([]*types.Block) {
 
 	rootblock := prepareBlock(common.BytesToHash([]byte{0x0}), 0,nil, 10000, 1)
@@ -37,8 +40,12 @@ func prepareBlocks() ([]*types.Block) {
 	// epoch 0, genesis
 	blocks = append(blocks, rootblock)
 
+	// for simple hash test, use gasLimit instead.
+
 	// epoch 1
-	premain := prepareBlock(common.BigToHash( big.NewInt( int64(rootblock.Header().GasLimit))), 1,nil, 10000, 2)
+	premain := prepareBlock(rootblock.Header().Hash(), rootblock.Number().Int64()+1, nil, 10000, 2)
+	//SimpleHashTest
+	//premain := prepareBlock(common.BigToHash( big.NewInt( int64(rootblock.Header().GasLimit))), 1,nil, 10000, 2)
 
 	blocks = append(blocks, premain)
 
@@ -53,21 +60,25 @@ func prepareBlocks() ([]*types.Block) {
 		su[0] = premain.Header()
 		su[1] = presub2.Header()
 
-		//presub1 = prepareBlock(presub1.Header().Hash(), presub1.Number().Int64()+1, nil,10001, int64(i+0x10))
-		presub1 = prepareBlock(common.BigToHash( big.NewInt( int64(presub1.Header().GasLimit))), presub1.Number().Int64()+1, su,30001, int64((i-2)+0x11))
+		presub1 = prepareBlock(presub1.Header().Hash(), presub1.Number().Int64()+1, su,30001, int64(i+0x10))
+		//SimpleHashTest
+		//presub1 = prepareBlock(common.BigToHash( big.NewInt( int64(presub1.Header().GasLimit))), presub1.Number().Int64()+1, su,30001, int64((i-2)+0x11))
 		blocks = append(blocks, presub1 )
 
 		// sub2
-		//presub2 = prepareBlock(presub2.Header().Hash(), presub2.Number().Int64()+1,nil, 10002, int64(i+0x100))
-		presub2 = prepareBlock(common.BigToHash( big.NewInt( int64(presub2.Header().GasLimit))), presub2.Number().Int64()+1,nil, 10002, int64((i-2)+0x101))
+		presub2 = prepareBlock(presub2.Header().Hash(), presub2.Number().Int64()+1,nil, 10002, int64(i+0x100))
+		//SimpleHashTest
+		//presub2 = prepareBlock(common.BigToHash( big.NewInt( int64(presub2.Header().GasLimit))), presub2.Number().Int64()+1,nil, 10002, int64((i-2)+0x101))
 		blocks = append(blocks, presub2 )
 
 		// sub3
-		//presub3 = prepareBlock(presub3.Header().Hash(), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1000))
-		presub3 = prepareBlock(common.BigToHash( big.NewInt( int64(presub3.Header().GasLimit))), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1001))
+		presub3 = prepareBlock(presub3.Header().Hash(), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1000))
+		//SimpleHashTest
+		//presub3 = prepareBlock(common.BigToHash( big.NewInt( int64(presub3.Header().GasLimit))), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1001))
 		blocks = append(blocks, presub3 )
-		//presub3 = prepareBlock(presub3.Header().Hash(), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1001))
-		presub3 = prepareBlock(common.BigToHash( big.NewInt( int64(presub3.Header().GasLimit))), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1002))
+		presub3 = prepareBlock(presub3.Header().Hash(), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1001))
+		//SimpleHashTest
+		//presub3 = prepareBlock(common.BigToHash( big.NewInt( int64(presub3.Header().GasLimit))), presub3.Number().Int64()+1,nil, 10003, int64((i-2)*2+0x1002))
 		blocks = append(blocks, presub3 )
 
 		// main
@@ -76,14 +87,14 @@ func prepareBlocks() ([]*types.Block) {
 		uncles[1] = presub2.Header()
 		uncles[2] = presub3.Header()
 
-		//premain = prepareBlock(premain.Header().Hash(), premain.Number().Int64()+1, uncles, 30000, int64(i))
-		premain = prepareBlock(common.BigToHash( big.NewInt( int64(premain.Header().GasLimit))), premain.Number().Int64()+1, uncles, 10000, int64(i+1))
+		premain = prepareBlock(premain.Header().Hash(), premain.Number().Int64()+1, uncles, 10000, int64(i))
+		//SimpleHashTest
+		//premain = prepareBlock(common.BigToHash( big.NewInt( int64(premain.Header().GasLimit))), premain.Number().Int64()+1, uncles, 10000, int64(i+1))
 		blocks = append(blocks, premain )
 	}
 
 	return blocks
 }
-
 
 
 func TestInitDAG(t *testing.T) {
@@ -124,7 +135,8 @@ func TestMine(t *testing.T) {
 	var base int64 = 0x100000
 
 	gasLimit := base+1
-	dagBlock := dagCore.generateDAGBlockByParams(parent.BlockHash, parent.Number+1, ends, 10000, gasLimit)
+	newBlockHash := common.BigToHash( big.NewInt( gasLimit ))
+	dagBlock := dagCore.generateDAGBlockByParams(newBlockHash, parent.BlockHash, parent.Number+1, ends, 10000)
 
 	fmt.Println( dagCore.InsertDAGBlock(dagBlock))
 
@@ -206,8 +218,6 @@ func TestMultiMine(t *testing.T) {
 		}
 	}
 
-
-
 	// check consensus
 	for i:=0; i<len(dags); i++ {
 		for j:=i+1; j< len(dags); j++ {
@@ -230,7 +240,8 @@ func TestMultiMine(t *testing.T) {
 				ends := tipEnds
 				var base int64 = int64(0x100000 * (i + 1))
 				gasLimit := base + roundBase + int64(j+1)
-				dagBlock := dags[i].generateDAGBlockByParams(parent.BlockHash, parent.Number+1, ends, 10000, gasLimit)
+				newBlockHash := common.BigToHash( big.NewInt( gasLimit ))
+				dagBlock := dags[i].generateDAGBlockByParams(newBlockHash, parent.BlockHash, parent.Number+1, ends, 10000)
 				minedBlocks[i] = append(minedBlocks[i], dagBlock)
 				if !dags[i].InsertDAGBlock(dagBlock) {
 					t.Errorf("InsertDAGBlock:%s failed!", dagBlock.BlockHash.String())
@@ -290,14 +301,14 @@ func TestMultiMine(t *testing.T) {
 				}
 			}
 		}
-		//// print dags
-		//for i, _ := range dags {
-		//	fmt.Printf("2=============dags[%d]begin=================\n", i)
-		//	dags[i].PrintTips()
-		//	dags[i].PrintTipEnds()
-		//	dags[i].PrintEpoches()
-		//	fmt.Printf("2=============dags[%d]end=================\n", i)
-		//}
+		// print dags
+		for i, _ := range dags {
+			fmt.Printf("2=============dags[%d]begin=================\n", i)
+			dags[i].PrintTips()
+			dags[i].PrintTipEnds()
+			dags[i].PrintEpoches()
+			fmt.Printf("2=============dags[%d]end=================\n", i)
+		}
 
 		// check consensus
 		for i := 0; i < len(dags); i++ {
@@ -315,8 +326,8 @@ func TestMultiMine(t *testing.T) {
 		fmt.Printf("round %d passed!\n", round)
 	}
 }
-
-
+//
+//
 func TestMultiMineCoroutine(t *testing.T) {
 
 	const (
@@ -379,7 +390,8 @@ func TestMultiMineCoroutine(t *testing.T) {
 					ends := tipEnds
 					var base int64 = int64(0x100000 * (index + 1))
 					gasLimit := base + roundBase + int64(j+1)
-					dagBlock := (*dags)[index].generateDAGBlockByParams(parent.BlockHash, parent.Number+1, ends, 10000, gasLimit)
+					newBlockHash := common.BigToHash( big.NewInt( gasLimit ))
+					dagBlock := (*dags)[index].generateDAGBlockByParams(newBlockHash, parent.BlockHash, parent.Number+1, ends, 10000)
 					(*minedBlocks)[index] = append((*minedBlocks)[index], dagBlock)
 					if !(*dags)[index].InsertDAGBlock(dagBlock) {
 						return errors.Errorf("dag[%d], InsertDAGBlock:%s failed!", index, dagBlock.BlockHash.String())
@@ -435,14 +447,14 @@ func TestMultiMineCoroutine(t *testing.T) {
 			t.Error(err2)
 		}
 
-		//// print dags
-		//for i, _ := range dags {
-		//	fmt.Printf("2=============dags[%d]begin=================\n", i)
-		//	dags[i].PrintTips()
-		//	dags[i].PrintTipEnds()
-		//	dags[i].PrintEpoches()
-		//	fmt.Printf("2=============dags[%d]end=================\n", i)
-		//}
+		// print dags
+		for i, _ := range dags {
+			fmt.Printf("2=============dags[%d]begin=================\n", i)
+			dags[i].PrintTips()
+			dags[i].PrintTipEnds()
+			dags[i].PrintEpoches()
+			fmt.Printf("2=============dags[%d]end=================\n", i)
+		}
 
 		// check consensus
 		for i := 0; i < len(dags); i++ {
