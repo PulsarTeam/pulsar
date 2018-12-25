@@ -1315,6 +1315,10 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		index := 0
 		var err error
 		for index := 0; index < int(q.resultRefOffset); index++{
+			if q.resultRefCache[index].Pending <= 0{
+				continue
+			}
+
 			if err = reconstruct(header, i, q.resultRefCache[index]); err == nil {
 				finish = true
 				break
