@@ -197,18 +197,18 @@ func (dag *DAGCore)InitDAG(blocks []*types.Block) error {
 	// add all blocks into the dag block total list and tip list
 	for i, block := range blocks {
 
-		//TODO
-		//if !dag.IsBlockInDAG(block.Hash()) {
-		if !dag.IsBlockInDAG(common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))) {
+		if !dag.IsBlockInDAG(block.Hash()) {
+		// SimpleHashTest
+		//if !dag.IsBlockInDAG(common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))) {
 			dag.insertBlockBaseData(block)
 		} else {
 			return errors.Errorf("InitDAG, when inserting block, but the block already in the DAG! hash:%s", block.Hash().String())
 		}
 
 		if i==0 {
-			//TODO
-			//dag.root = block.Hash()
-			dag.root = common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))
+			dag.root = block.Hash()
+			// SimpleHashTest
+			//dag.root = common.BigToHash( big.NewInt( int64(block.Header().GasLimit)))
 		}
 	}
 
@@ -553,8 +553,9 @@ func (dag *DAGCore)calculateSubtreeDifficulty(dagBlock *DAGBlock, recalculateChi
 func (dag *DAGCore)generateDAGBlock(block *types.Block) ( *DAGBlock) {
 
 	dagBlock := DAGBlock {
-		//block.Header().Hash(),
-		common.BigToHash( big.NewInt( int64(block.Header().GasLimit))),
+		block.Header().Hash(),
+		//SimpleHashTest
+		//common.BigToHash( big.NewInt( int64(block.Header().GasLimit))),
 
 		block.NumberU64(),
 		block.ParentHash(),
@@ -566,8 +567,10 @@ func (dag *DAGCore)generateDAGBlock(block *types.Block) ( *DAGBlock) {
 	}
 	// update the reference hashes
 	for _, refer := range block.Uncles() {
-		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
-		dagBlock.ReferHashes = append(dagBlock.ReferHashes, common.BigToHash( big.NewInt( int64(refer.GasLimit))))
+
+		dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
+		//SimpleHashTest
+		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, common.BigToHash( big.NewInt( int64(refer.GasLimit))))
 	}
 
 	return &dagBlock
@@ -599,10 +602,10 @@ func (dagBlock *DAGBlock)Clone() ( *DAGBlock) {
 	return &clonedBlock
 }
 
-func (dag *DAGCore)generateDAGBlockByParams(parentHash common.Hash, number uint64, uncles []common.Hash, difficulty int64, gasLimit int64) ( *DAGBlock) {
+func (dag *DAGCore)generateDAGBlockByParams(hash common.Hash, parentHash common.Hash, number uint64, uncles []common.Hash, difficulty int64) ( *DAGBlock) {
 
 	dagBlock := DAGBlock {
-		common.BigToHash( big.NewInt( gasLimit )),
+		hash,
 		number,
 		parentHash,
 		make([]common.Hash, 0, len(uncles)),
@@ -613,7 +616,6 @@ func (dag *DAGCore)generateDAGBlockByParams(parentHash common.Hash, number uint6
 	}
 	// update the reference hashes
 	for _, refer := range uncles {
-		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
 		dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer)
 	}
 
@@ -651,11 +653,10 @@ func (dag *DAGCore)InsertBlock(block *types.Block) bool {
 	refers := make([]common.Hash, 0, 0)
 	// update the reference hashes
 	for _, refer := range block.Uncles() {
-		//dagBlock.ReferHashes = append(dagBlock.ReferHashes, refer.Hash())
-		refers = append(refers, common.BigToHash( big.NewInt( int64(refer.GasLimit))))
+		refers = append(refers, refer.Hash())
 	}
 
-	dagBlock := dag.generateDAGBlockByParams(block.ParentHash(), block.NumberU64(), refers, 10000, int64(block.GasLimit()) )
+	dagBlock := dag.generateDAGBlockByParams(block.Hash(), block.ParentHash(), block.NumberU64(), refers, 10000 )
 	return dag.InsertDAGBlock(dagBlock)
 
 }
