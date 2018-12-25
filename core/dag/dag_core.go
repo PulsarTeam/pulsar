@@ -737,8 +737,24 @@ func (dag *DAGCore)InsertDAGBlock(dagBlock *DAGBlock) bool {
 	return true
 }
 
-func (dag *DAGCore)InsertBlocks(epochHeaders []*types.Header){
-	//block insert into dag
+func (dag *DAGCore)InsertBlocks(epochBlocks []*types.Block) error{
+	//blocks insert into dag
+	for _, v := range epochBlocks {
+		if !dag.InsertBlock(v) {
+			return errors.Errorf("InsertBlocks, block:%s failed!", v.Hash().String())
+		}
+	}
+	return nil
+}
+
+func (dag *DAGCore)InsertDagBlocks(epochDagBlocks []*DAGBlock) error{
+	//blocks insert into dag
+	for _, v := range epochDagBlocks {
+		if !dag.InsertDAGBlock(v) {
+			return errors.Errorf("InsertDagBlocks:%s, block:failed!", v.BlockHash.String())
+		}
+	}
+	return nil
 }
 
 func (dag *DAGCore)GetTipEnds()(tipEnds []*DAGBlock, err error){
