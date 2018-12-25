@@ -175,6 +175,14 @@ func (s *PublicEthereumAPI) GetAllDepositMiners(ctx context.Context, addr common
 	return fields, state.Error()
 }
 
+func (s *PublicEthereumAPI) ShowPendingBlocks(ctx context.Context) ([]interface{}, error) {
+	var result []interface{}
+	if dag := s.b.DAGManager(); dag != nil {
+		result = dag.GetPendingBlocks()
+	}
+	return result, nil
+}
+
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:
 // - startingBlock: block number this node started to synchronise from
@@ -625,7 +633,6 @@ func (s *PublicBlockChainAPI) GetBlockByNumber(ctx context.Context, blockNr rpc.
 // GetBlockByHash returns the requested block. When fullTx is true all transactions in the block are returned in full
 // detail, otherwise only the transaction hash is returned.
 func (s *PublicBlockChainAPI) GetBlockByHash(ctx context.Context, blockHash common.Hash, fullTx bool) (map[string]interface{}, error) {
-	fmt.Printf("(<============ s *PublicBlockChainAPI) GetBlockByHash, block hash: %v\n", blockHash.String())
 	block, err := s.b.GetBlock(ctx, blockHash)
 	if block != nil {
 		return s.rpcOutputBlock(block, true, fullTx)
