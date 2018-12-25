@@ -290,13 +290,18 @@ func TestMultiMine(t *testing.T) {
 			for i, _ := range dags {
 				for j := 0; j < len(dags); j++ {
 					if j != i {
-						for k := 0; k < len(minedBlocks[j]); k++ {
-							dagBlock := minedBlocks[j][k]
-							if !dags[i].InsertDAGBlock(dagBlock) {
 
-								t.Errorf("dag[%d], InsertDAGBlock:%s failed!", i, dagBlock.BlockHash.String())
-							}
+						if err:=dags[i].InsertDagBlocks(minedBlocks[j]); err!=nil {
+							t.Error(err)
 						}
+
+						//for k := 0; k < len(minedBlocks[j]); k++ {
+						//	dagBlock := minedBlocks[j][k]
+						//	if !dags[i].InsertDAGBlock(dagBlock) {
+						//
+						//		t.Errorf("dag[%d], InsertDAGBlock:%s failed!", i, dagBlock.BlockHash.String())
+						//	}
+						//}
 					}
 				}
 			}
@@ -431,12 +436,17 @@ func TestMultiMineCoroutine(t *testing.T) {
 			func(index int, dags *[]*DAGCore, minedBlocks *[][] *DAGBlock) (error) {
 				for j := 0; j < len(*minedBlocks); j++ {
 					if j != index {
-						for k := 0; k < len((*minedBlocks)[j]); k++ {
-							dagBlock := (*minedBlocks)[j][k]
-							if !(*dags)[index].InsertDAGBlock(dagBlock) {
-								return errors.Errorf("dag[%d], InsertDAGBlock:%s failed!", index, dagBlock.BlockHash.String())
-							}
+
+						if err:=(*dags)[index].InsertDagBlocks((*minedBlocks)[j]); err!=nil {
+							return err
 						}
+
+						//for k := 0; k < len((*minedBlocks)[j]); k++ {
+						//	dagBlock := (*minedBlocks)[j][k]
+						//	if !(*dags)[index].InsertDAGBlock(dagBlock) {
+						//		return errors.Errorf("dag[%d], InsertDAGBlock:%s failed!", index, dagBlock.BlockHash.String())
+						//	}
+						//}
 					}
 				}
 				return nil
