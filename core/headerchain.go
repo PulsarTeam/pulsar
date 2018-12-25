@@ -379,6 +379,9 @@ func (hc *HeaderChain) GetTdByHash(hash common.Hash) *big.Int {
 func (hc *HeaderChain) WriteTd(hash common.Hash, number uint64, td *big.Int) error {
 	rawdb.WriteTd(hc.chainDb, hash, number, td)
 	hc.tdCache.Add(hash, new(big.Int).Set(td))
+
+	td1 := hc.GetTd(hash, number)
+	fmt.Printf(">>>>>>>>>>>>>>>> td1 : %v, number : %v, hash: %v\n", td1.String(), number, hash.String())
 	return nil
 }
 
