@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -62,6 +63,9 @@ func (p *StateProcessor) Process(block *types.Block, txs types.TransactionRefs, 
 		execTxs   types.Transactions
 		errResult error
 	)
+	if len(txs) == 0 {
+		log.Warn("txs count is 0 --------------")
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range txs {
 		statedb.Prepare(tx.Tx.Hash(), block.Hash(), i)

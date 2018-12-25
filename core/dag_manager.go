@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"container/list"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -44,7 +45,6 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"runtime/debug"
-	"container/list"
 )
 
 var (
@@ -137,9 +137,8 @@ type DAGManager struct {
 	pbm *pendingBlocksManager
 }
 
-
 type BlockAndWait struct {
-	Block common.Hash `json:"block" gencodec:"required"`
+	Block       common.Hash   `json:"block" gencodec:"required"`
 	WaitedBlock []common.Hash `json:"waitedBlocks" gencodec:"required"`
 }
 
@@ -828,7 +827,7 @@ func (dm *DAGManager) procFutureBlocks() {
 
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
 		for i := range blocks {
-			dm.InsertBlocks(blocks[i : i+1], nil)
+			dm.InsertBlocks(blocks[i:i+1], nil)
 		}
 	}
 }
@@ -1096,14 +1095,13 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	referenceHeaders = append(referenceHeaders, pivotBlock.Header())
 	reorg, oldPivotChain, newPivotChain, err := dm.Dag().IsReorg(referenceHeaders)
 
-	for i, h := range oldPivotChain{
+	for i, h := range oldPivotChain {
 		fmt.Printf("oldPivotChain i : %v, number: %v, hash : %v\n", i, h.Number.Uint64(), h.Hash().String())
 	}
 
-	for i, h := range newPivotChain{
+	for i, h := range newPivotChain {
 		fmt.Printf("newPivotChain i : %v, number: %v, hash : %v\n", i, h.Number.Uint64(), h.Hash().String())
 	}
-
 
 	if err != nil {
 		return NonStatTy, err
@@ -1257,6 +1255,8 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
 			//refers = append(refers, dm.GetBlockByHash(block.Uncles()[i].Hash()))
 			refTxsTmp = append(refTxsTmp, dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions()...)
+		} else {
+			log.Warn("the block uncles is not complete, num:", block.Uncles()[i].Number.Uint64())
 		}
 	}
 	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
@@ -1401,38 +1401,38 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
-				// Block competing with the canonical chain, store in the db, but don't process
-				// until the competitor TD goes above the canonical TD
-				currentBlock := dm.CurrentBlock()
-				localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-				externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
-				if localTd.Cmp(externTd) > 0 {
-					if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
-						return i, events, coalescedLogs, err
-					}
-					continue
-				}
-				// Competitor chain beat canonical, gather all blocks from the common ancestor
-				var winner []*types.Block
-
-				parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
-				for !dm.HasState(parent.Root()) {
-					winner = append(winner, parent)
-					parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
-					fmt.Printf("ErrPrunedAncestor, winner number : %v, hash : %v\n", parent.Number(), parent.Hash().String())
-				}
-				for j := 0; j < len(winner)/2; j++ {
-					winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
-				}
-				// Import all the pruned blocks to make the state available
-				dm.chainmu.Unlock()
-				_, evs, logs, err := dm.insertBlocks(winner, nil)
-				dm.chainmu.Lock()
-				events, coalescedLogs = evs, logs
-
-				if err != nil {
+			// Block competing with the canonical chain, store in the db, but don't process
+			// until the competitor TD goes above the canonical TD
+			currentBlock := dm.CurrentBlock()
+			localTd := dm.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+			externTd := new(big.Int).Add(dm.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
+			if localTd.Cmp(externTd) > 0 {
+				if err = dm.WriteBlockWithoutState(block, externTd); err != nil {
 					return i, events, coalescedLogs, err
 				}
+				continue
+			}
+			// Competitor chain beat canonical, gather all blocks from the common ancestor
+			var winner []*types.Block
+
+			parent := dm.GetBlock(block.ParentHash(), block.NumberU64()-1)
+			for !dm.HasState(parent.Root()) {
+				winner = append(winner, parent)
+				parent = dm.GetBlock(parent.ParentHash(), parent.NumberU64()-1)
+				fmt.Printf("ErrPrunedAncestor, winner number : %v, hash : %v\n", parent.Number(), parent.Hash().String())
+			}
+			for j := 0; j < len(winner)/2; j++ {
+				winner[j], winner[len(winner)-1-j] = winner[len(winner)-1-j], winner[j]
+			}
+			// Import all the pruned blocks to make the state available
+			dm.chainmu.Unlock()
+			_, evs, logs, err := dm.insertBlocks(winner, nil)
+			dm.chainmu.Lock()
+			events, coalescedLogs = evs, logs
+
+			if err != nil {
+				return i, events, coalescedLogs, err
+			}
 
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 
