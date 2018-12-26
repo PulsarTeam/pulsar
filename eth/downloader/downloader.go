@@ -1352,7 +1352,7 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			}
 			// If there's nothing more to fetch, wait or terminate
 			if pending() == 0 {
-				fmt.Printf("fetchParts2 finished : %v, inFlight() : %v\n", finished, inFlight())
+				fmt.Printf("fetchParts2 finished : %v, inFlight() : %v, timeOutCnt : %v\n", finished, inFlight(), timeOutCnt)
 
 				if !inFlight() && finished {
 					log.Debug("Data fetching completed", "type", kind)
@@ -1360,10 +1360,10 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 				}
 				timeOutCnt++
 
-				if timeOutCnt >= 300 {
-					d.queue.Close()
-					d.Cancel()
+
+				if timeOutCnt >= 300{
 					fmt.Printf("fetchPart2 time out, and the fetches of this time is over!\n")
+					d.queue.Close()
 					return errors.New("fetchPart2 time out!\n")
 				}
 				break

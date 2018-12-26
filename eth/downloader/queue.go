@@ -188,8 +188,8 @@ func (q *queue) Close() {
 	q.closed = true
 	q.lock.Unlock()
 	q.active.Broadcast()
-	fmt.Printf(" q.active.Broadcast() ++++++++++ \n")
 	q.activeReference.Broadcast()
+	fmt.Printf(" close q.active.Broadcast() ++++++++++ \n")
 }
 
 // PendingHeaders retrieves the number of header requests pending for retrieval.
