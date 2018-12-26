@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"container/list"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -34,7 +35,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
-	"container/list"
 )
 
 var (
@@ -124,14 +124,14 @@ type Downloader struct {
 	committed       int32
 
 	// Channels
-	headerCh      	chan dataPack        // [eth/62]  Channel receiving inbound block headers
-	bodyCh        	chan dataPack        // [eth/62]  Channel receiving inbound block bodies
-	receiptCh     	chan dataPack        // [eth/63]  Channel receiving inbound receipts
-	referenceCh  	chan dataPack		 // [conflux] Channel receiving reference blocks
-	bodyWakeCh    	chan bool            // [eth/62]  Channel to signal the block body fetcher of new tasks
-	receiptWakeCh 	chan bool            // [eth/63]  Channel to signal the receipt fetcher of new tasks
+	headerCh        chan dataPack        // [eth/62]  Channel receiving inbound block headers
+	bodyCh          chan dataPack        // [eth/62]  Channel receiving inbound block bodies
+	receiptCh       chan dataPack        // [eth/63]  Channel receiving inbound receipts
+	referenceCh     chan dataPack        // [conflux] Channel receiving reference blocks
+	bodyWakeCh      chan bool            // [eth/62]  Channel to signal the block body fetcher of new tasks
+	receiptWakeCh   chan bool            // [eth/63]  Channel to signal the receipt fetcher of new tasks
 	referenceWakeCh chan bool            // [conflux] Channel to signal the reference blocks fetcher of new tasks
-	headerProcCh  	chan []*types.Header // [eth/62]  Channel to feed the header processor new tasks
+	headerProcCh    chan []*types.Header // [eth/62]  Channel to feed the header processor new tasks
 
 	finishCh chan struct{}
 
@@ -150,10 +150,10 @@ type Downloader struct {
 	quitLock sync.RWMutex  // Lock to prevent double closes
 
 	// Testing hooks
-	syncInitHook     func(uint64, uint64)  // Method to call upon initiating a new sync run
-	bodyFetchHook    func([]*types.Header) // Method to call upon starting a block body fetch
-	receiptFetchHook func([]*types.Header) // Method to call upon starting a receipt fetch
-	chainInsertHook  func([]*fetchResult)  // Method to call upon inserting a chain of blocks (possibly in multiple invocations)
+	syncInitHook       func(uint64, uint64)  // Method to call upon initiating a new sync run
+	bodyFetchHook      func([]*types.Header) // Method to call upon starting a block body fetch
+	receiptFetchHook   func([]*types.Header) // Method to call upon starting a receipt fetch
+	chainInsertHook    func([]*fetchResult)  // Method to call upon inserting a chain of blocks (possibly in multiple invocations)
 	referenceFetchHook func([]*types.Header) // Method to call upon starting a reference block body fetch
 }
 
@@ -211,26 +211,26 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 	}
 
 	dl := &Downloader{
-		mode:           mode,
-		stateDB:        stateDb,
-		mux:            mux,
-		queue:          newQueue(),
-		peers:          newPeerSet(),
-		rttEstimate:    uint64(rttMaxEstimate),
-		rttConfidence:  uint64(1000000),
-		blockchain:     chain,
-		lightchain:     lightchain,
-		dropPeer:       dropPeer,
-		headerCh:       make(chan dataPack, 1),
-		bodyCh:         make(chan dataPack, 1),
-		receiptCh:      make(chan dataPack, 1),
-		referenceCh:   make(chan dataPack, 1),
-		bodyWakeCh:     make(chan bool, 1),
-		receiptWakeCh:  make(chan bool, 1),
-		referenceWakeCh:make(chan bool, 1),
+		mode:            mode,
+		stateDB:         stateDb,
+		mux:             mux,
+		queue:           newQueue(),
+		peers:           newPeerSet(),
+		rttEstimate:     uint64(rttMaxEstimate),
+		rttConfidence:   uint64(1000000),
+		blockchain:      chain,
+		lightchain:      lightchain,
+		dropPeer:        dropPeer,
+		headerCh:        make(chan dataPack, 1),
+		bodyCh:          make(chan dataPack, 1),
+		receiptCh:       make(chan dataPack, 1),
+		referenceCh:     make(chan dataPack, 1),
+		bodyWakeCh:      make(chan bool, 1),
+		receiptWakeCh:   make(chan bool, 1),
+		referenceWakeCh: make(chan bool, 1),
 		//bodiesFinisedCh:make(chan bool, 1),
 		headerProcCh:   make(chan []*types.Header, 1),
-		finishCh: make(chan struct{}),
+		finishCh:       make(chan struct{}),
 		quitCh:         make(chan struct{}),
 		stateCh:        make(chan dataPack),
 		stateSyncStart: make(chan *stateSync),
@@ -439,10 +439,10 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 
 	// Look up the sync boundaries: the common ancestor and the target block
 	latest, err := d.fetchHeight(p)
-	fmt.Printf("syncWithPeer height number: %v, hash: %v\n", latest.Number.Uint64(), latest.Hash().String())
 	if err != nil {
 		return err
 	}
+	fmt.Printf("syncWithPeer height number: %v, hash: %v\n", latest.Number.Uint64(), latest.Hash().String())
 	height := latest.Number.Uint64()
 
 	origin, err := d.findAncestor(p, height)
@@ -480,42 +480,42 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	}
 
 	/*
-	fn1 := func() error {
-		fmt.Printf("syncWithPeer before fetchHeaders\n")
-		err := d.fetchHeaders(p, origin+1, pivot)
-		fmt.Printf("syncWithPeer after fetchHeaders\n")
-		return err
-	}// Headers are always retrieved
-	fn2 := func() error {
-		fmt.Printf("syncWithPeer before fetchBodies\n")
-		err := d.fetchBodies(origin + 1)
-		fmt.Printf("syncWithPeer after fetchBodies\n")
-		return err
-	}         // Bodies are retrieved during normal and fast sync
-	fn3 := func() error {
-		fmt.Printf("syncWithPeer before fetchReceipts\n")
-		err := d.fetchReceipts(origin + 1)
-		fmt.Printf("syncWithPeer after fetchReceipts\n")
-		return err
-		}        // Receipts are retrieved during fast sync
-	fn4 := func() error {
-		fmt.Printf("syncWithPeer before fetchReferenceBodies\n")
-		err := d.fetchReferenceBodies()
-		fmt.Printf("syncWithPeer after fetchReferenceBodies\n")
-		return err
-		}
-	fn5 := func() error {
-		fmt.Printf("syncWithPeer before processHeaders\n")
-		err := d.processHeaders(origin+1, pivot, td)
-		fmt.Printf("syncWithPeer after processHeaders\n")
-		return err
-		}
+		fn1 := func() error {
+			fmt.Printf("syncWithPeer before fetchHeaders\n")
+			err := d.fetchHeaders(p, origin+1, pivot)
+			fmt.Printf("syncWithPeer after fetchHeaders\n")
+			return err
+		}// Headers are always retrieved
+		fn2 := func() error {
+			fmt.Printf("syncWithPeer before fetchBodies\n")
+			err := d.fetchBodies(origin + 1)
+			fmt.Printf("syncWithPeer after fetchBodies\n")
+			return err
+		}         // Bodies are retrieved during normal and fast sync
+		fn3 := func() error {
+			fmt.Printf("syncWithPeer before fetchReceipts\n")
+			err := d.fetchReceipts(origin + 1)
+			fmt.Printf("syncWithPeer after fetchReceipts\n")
+			return err
+			}        // Receipts are retrieved during fast sync
+		fn4 := func() error {
+			fmt.Printf("syncWithPeer before fetchReferenceBodies\n")
+			err := d.fetchReferenceBodies()
+			fmt.Printf("syncWithPeer after fetchReferenceBodies\n")
+			return err
+			}
+		fn5 := func() error {
+			fmt.Printf("syncWithPeer before processHeaders\n")
+			err := d.processHeaders(origin+1, pivot, td)
+			fmt.Printf("syncWithPeer after processHeaders\n")
+			return err
+			}
 
-	fetchers := []func() error{fn4, fn1, fn2, fn3, fn5}
+		fetchers := []func() error{fn4, fn1, fn2, fn3, fn5}
 
-	for  _, fn := range fetchers{
-		fmt.Printf("func address : %v\n", fn)
-	}
+		for  _, fn := range fetchers{
+			fmt.Printf("func address : %v\n", fn)
+		}
 	*/
 
 	fetchers := []func() error{
@@ -525,7 +525,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		func() error { return d.fetchReferenceBodies() },
 		func() error { return d.processHeaders(origin+1, pivot, td) },
 	}
-
 
 	if d.mode == FastSync {
 		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })
@@ -547,7 +546,7 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			defer d.cancelWg.Done()
 			errc <- fn()
 			//fmt.Printf("After spawnSync ++++++++++++++  address: %v\n", fn)
-			}()
+		}()
 	}
 	// Wait for the first error, then terminate the others.
 	var err error
@@ -1037,7 +1036,6 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 	return err
 }
 
-
 // fetchBodies iteratively downloads the scheduled block bodies, taking any
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
@@ -1249,8 +1247,6 @@ func (d *Downloader) fetchParts(errCancel error, deliveryCh chan dataPack, deliv
 	}
 }
 
-
-
 func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deliver func(dataPack) (int, error), wakeCh chan bool,
 	expire func() map[string]int, pending func() int, inFlight func() bool, throttle func() bool, reserve func(*peerConnection, int) (*fetchRequest, bool, error),
 	fetchHook func([]*types.Header), fetch func(*peerConnection, *fetchRequest) error, cancel func(*fetchRequest), capacity func(*peerConnection) int,
@@ -1364,7 +1360,7 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 				}
 				timeOutCnt++
 
-				if timeOutCnt >= 300{
+				if timeOutCnt >= 300 {
 					d.queue.Close()
 					d.Cancel()
 					fmt.Printf("fetchPart2 time out, and the fetches of this time is over!\n")
@@ -1751,7 +1747,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	for {
 		// Wait for the next batch of downloaded data to be available, and if the pivot
 		// block became stale, move the goalpost
-		notify := chan struct{} (nil)
+		notify := chan struct{}(nil)
 		if oldPivot == nil {
 			notify = d.finishCh
 		}
