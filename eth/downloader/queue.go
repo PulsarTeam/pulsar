@@ -1314,14 +1314,15 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		finish := false
 		index := 0
 		var err error
-		for index := 0; index < int(q.resultRefOffset); index++{
-			if q.resultRefCache[index].Pending <= 0{
-				fmt.Printf("deliverReference ok header , index : %v is ok!   q.resultRefCache[index].Pending : %v\n", index, q.resultRefCache[index].Pending)
+		for j := 0; j < int(q.resultRefOffset); j++{
+			if q.resultRefCache[j].Pending <= 0{
+				fmt.Printf("deliverReference ok header , index : %v is ok!   q.resultRefCache[index].Pending : %v, number: %v, hash: %v\n", index, q.resultRefCache[index].Pending, header.Number.Uint64(), header.Hash().String())
 				continue
 			}
 
-			if err = reconstruct(header, i, q.resultRefCache[index]); err == nil {
+			if err = reconstruct(header, i, q.resultRefCache[j]); err == nil {
 				finish = true
+				index = j
 				break
 			}
 		}
