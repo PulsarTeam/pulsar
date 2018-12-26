@@ -230,7 +230,6 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 		referenceWakeCh: make(chan bool, 1),
 		//bodiesFinisedCh:make(chan bool, 1),
 		headerProcCh:   make(chan []*types.Header, 1),
-		finishCh:       make(chan struct{}),
 		quitCh:         make(chan struct{}),
 		stateCh:        make(chan dataPack),
 		stateSyncStart: make(chan *stateSync),
@@ -368,17 +367,13 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	// Reset the queue, peer set and wake channels to clean any internal leftover state
 	d.queue.Reset()
 	d.peers.Reset()
+	d.finishCh = make(chan struct{})
 
 	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
 		select {
 		case <-ch:
 		default:
 		}
-	}
-
-	select {
-	case <-d.finishCh:
-	default:
 	}
 
 	for _, ch := range []chan dataPack{d.headerCh, d.bodyCh, d.receiptCh} {
@@ -1006,9 +1001,9 @@ func (d *Downloader) fetchBodies(from uint64) error {
 		d.queue.PendingBlocks, d.queue.InFlightBlocks, d.queue.ShouldThrottleBlocks, d.queue.ReserveBodies,
 		d.bodyFetchHook, fetch, d.queue.CancelBodies, capacity, d.peers.BodyIdlePeers, setIdle, "bodies")
 
-	log.Info("Block body download terminated, send the Notify", "err", err)
-	d.finishCh <- struct{}{}
-	log.Info("Notify is DONE", "err", err)
+	log.Info("Block body download terminated, close the Notify", "err", err)
+	close(d.finishCh)
+	log.Info("Notify is CLOSED", "err", err)
 	return err
 }
 
