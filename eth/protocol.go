@@ -66,6 +66,8 @@ const (
 	//Protocol messages belonging to conflux
 	GetReferenceBodiesMsg = 0x08
 	ReferenceBodiesMsg = 0x09
+	GetReferenceBodyMsg = 0x0a
+	ReferenceBodyMsg = 0x0b
 )
 
 type errCode int
@@ -80,6 +82,7 @@ const (
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
 	ErrSuspendedPeer
+	ErrNoSuchData
 )
 
 func (e errCode) String() string {

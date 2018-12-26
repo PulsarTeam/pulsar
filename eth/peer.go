@@ -280,6 +280,12 @@ func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
 	return p2p.Send(p.rw, ReferenceBodiesMsg, blocks)
 }
 
+// SendBlockBodies sends a batch of block contents to the remote peer.
+func (p *peer) SendReferenceBody(resp refResp) error {
+	return p2p.Send(p.rw, ReferenceBodyMsg, resp)
+}
+
+
 // SendNodeDataRLP sends a batch of arbitrary internal data, corresponding to the
 // hashes requested.
 func (p *peer) SendNodeData(data [][]byte) error {
@@ -331,6 +337,11 @@ func (p *peer) RequestReferenceBodies(hashes []common.Hash) error {
 	//return p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
 	err := p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
 	fmt.Printf("RequestReferenceBodies ==================== %v\n", err)
+	return err
+}
+
+func (p *peer) RequestReferenceBody(hash common.Hash) error {
+	err := p2p.Send(p.rw, GetReferenceBodyMsg, hash)
 	return err
 }
 
@@ -491,6 +502,19 @@ func (ps *peerSet) PeersWithoutBlock(hash common.Hash) []*peer {
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.knownBlocks.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) PeersWithBlock(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.knownBlocks.Has(hash) {
 			list = append(list, p)
 		}
 	}

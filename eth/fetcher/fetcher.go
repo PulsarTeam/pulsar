@@ -61,8 +61,8 @@ type blockBroadcasterFn func(block *types.Block, propagate bool)
 // chainHeightFn is a callback type to retrieve the current chain height.
 type chainHeightFn func() uint64
 
-// chainInsertFn is a callback type to insert a batch of blocks into the local chain.
-type chainInsertFn func(types.Blocks) (int, error)
+// blockInsertFn is a callback type to insert a block into the local chain.
+type blockInsertFn func(*types.Block) (int, error)
 
 // peerDropFn is a callback type for dropping a peer detected as malicious.
 type peerDropFn func(id string)
@@ -79,6 +79,12 @@ type announce struct {
 
 	fetchHeader headerRequesterFn // Fetcher function to retrieve the header of an announced block
 	fetchBodies bodyRequesterFn   // Fetcher function to retrieve the body of an announced block
+}
+
+type announceRef struct {
+	hash common.Hash
+	number uint64
+	origin string
 }
 
 // headerFilterTask represents a batch of headers needing fetcher filtering.
@@ -134,7 +140,7 @@ type Fetcher struct {
 	verifyHeader   headerVerifierFn   // Checks if a block's headers have a valid proof of work
 	broadcastBlock blockBroadcasterFn // Broadcasts a block to connected peers
 	chainHeight    chainHeightFn      // Retrieves the current chain's height
-	insertChain    chainInsertFn      // Injects a batch of blocks into the chain
+	insertBlock    blockInsertFn      // Injects a batch of blocks into the chain
 	dropPeer       peerDropFn         // Drops a peer for misbehaving
 
 	// Testing hooks
@@ -143,10 +149,13 @@ type Fetcher struct {
 	fetchingHook       func([]common.Hash)     // Method to call upon starting a block (eth/61) or header (eth/62) fetch
 	completingHook     func([]common.Hash)     // Method to call upon starting a block body fetch (eth/62)
 	importedHook       func(*types.Block)      // Method to call upon successful block import (both eth/61 and eth/62)
+
+	quitRef chan struct{}
+	notifyRef chan *announceRef
 }
 
 // New creates a block fetcher to retrieve blocks based on hash announcements.
-func New(getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertChain chainInsertFn, dropPeer peerDropFn) *Fetcher {
+func New(getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertBlk blockInsertFn, dropPeer peerDropFn) *Fetcher {
 	return &Fetcher{
 		notify:         make(chan *announce),
 		inject:         make(chan *inject),
@@ -167,8 +176,11 @@ func New(getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBloc
 		verifyHeader:   verifyHeader,
 		broadcastBlock: broadcastBlock,
 		chainHeight:    chainHeight,
-		insertChain:    insertChain,
+		insertBlock:    insertBlk,
 		dropPeer:       dropPeer,
+
+		quitRef: make(chan struct{}),
+		notifyRef: make(chan *announceRef),
 	}
 }
 
@@ -182,6 +194,7 @@ func (f *Fetcher) Start() {
 // operations.
 func (f *Fetcher) Stop() {
 	close(f.quit)
+	close(f.quitRef)
 }
 
 // Notify announces the fetcher of the potential availability of a new block in
@@ -669,7 +682,7 @@ func (f *Fetcher) insert(peer string, block *types.Block) {
 			return
 		}
 		// Run the actual import and log any issues
-		if _, err := f.insertChain(types.Blocks{block}); err != nil {
+		if _, err := f.insertBlock(block); err != nil {
 			log.Debug("Propagated block import failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
 			return
 		}

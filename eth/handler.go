@@ -62,6 +62,16 @@ func errResp(code errCode, format string, v ...interface{}) error {
 	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
 }
 
+type refRequest struct {
+	hash common.Hash
+	header *types.Header
+}
+
+type refResp struct {
+	hash common.Hash
+	body types.Body
+}
+
 type ProtocolManager struct {
 	networkID uint64
 
@@ -82,6 +92,8 @@ type ProtocolManager struct {
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
+	refReqCh      chan refRequest
+	refRespCh     chan refResp
 	minedBlockSub *event.TypeMuxSubscription
 
 	// channels for fetcher, syncer, txsyncLoop
@@ -171,14 +183,19 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	heighter := func() uint64 {
 		return blockchain.CurrentBlock().NumberU64()
 	}
-	inserter := func(blocks types.Blocks) (int, error) {
+	inserter := func(block *types.Block) (int, error) {
 		// If fast sync is running, deny importing weird blocks
 		if atomic.LoadUint32(&manager.fastSync) == 1 {
-			log.Warn("Discarded bad propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
+			log.Warn("Discarded bad propagated block", "number", block.Number(), "hash", block.Hash())
 			return 0, nil
 		}
 		atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import
-		return manager.blockchain.InsertBlocks(blocks, nil)
+
+		idx, err := manager.processReferenceBlocks(block)
+		if err != nil {
+			return idx, err
+		}
+		return manager.blockchain.InsertBlocks(types.Blocks{block}, nil)
 	}
 	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 
@@ -210,7 +227,10 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// broadcast transactions
 	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
+	pm.refReqCh = make(chan refRequest)
+	pm.refRespCh = make(chan refResp)
 	go pm.txBroadcastLoop()
+	go pm.syncReferenceBlockLoop()
 
 	// broadcast mined blocks
 	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
@@ -648,6 +668,25 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		return p.SendReferenceBodiesRLP(bodies)
 
+	case msg.Code == GetReferenceBodyMsg:
+		var req common.Hash
+		if err := msg.Decode(&req); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		body := pm.blockchain.GetBody(req)
+		if body == nil {
+			log.Warn("Can not get the reference body", "Hash", req.String())
+			return errResp(ErrNoSuchData, "msg %v", msg)
+		}
+		return p.SendReferenceBody(refResp{req, *body})
+
+	case msg.Code == ReferenceBodyMsg:
+		var resp refResp
+		if err := msg.Decode(&resp); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		pm.refRespCh <- resp
+
 	case msg.Code == ReferenceBodiesMsg:
 		// A batch of reference block bodies arrived to one of our previous requests
 		var request blockBodiesData
@@ -693,22 +732,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
-	return nil
-}
-
-func (pm *ProtocolManager) DownloadUncle(Uncles []*types.Header) error {
-	for _, uncle := range Uncles {
-		fmt.Printf("uncle Number=%v,  hash = %v\n", uncle.Number.Uint64(), uncle.Hash().String())
-		if !pm.blockchain.HasBlock(uncle.Hash(), uncle.Number.Uint64()) {
-			number := uncle.Number.Uint64()
-			hash := uncle.Hash()
-			for _, peer := range pm.peers.peers {
-				pm.fetcher.Notify(peer.id, hash, number, time.Now(), peer.RequestOneHeader, peer.RequestBodies)
-				//fmt.Printf("DownloadUncle  p.id = %v  Number=%v  Hash=%v \n", peer.id, number, hash.String())
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -761,6 +784,69 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
 	for peer, txs := range txset {
 		peer.AsyncSendTransactions(txs)
+	}
+}
+
+func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, error) {
+	hdrs := block.Uncles()
+	for _, hdr := range hdrs {
+		if !pm.blockchain.HasBlock(hdr.Hash(), hdr.Number.Uint64()) {
+			if hdr.TxHash == types.EmptyRootHash && hdr.UncleHash == types.EmptyUncleHash {
+				// empty reference block
+				refBlk := types.NewBlockWithHeader(hdr)
+				idx, err := pm.blockchain.InsertBlocks(types.Blocks{refBlk}, nil)
+				if err != nil {
+					log.Warn("Insert reference block failed", "error", err)
+					return idx, err
+				}
+				continue
+			}
+			// schedule reference block request
+			pm.refReqCh <- refRequest{block.Hash(), hdr}
+		}
+	}
+	return 0, nil
+}
+
+func (pm *ProtocolManager) syncReferenceBlockLoop() {
+	pendingHdrs := make(map[common.Hash]*types.Header)
+
+	for {
+		select {
+		case <- pm.quitSync:
+			return
+		case req := <- pm.refReqCh:
+			if v, exist := pendingHdrs[req.header.Hash()]; exist {
+				if v != req.header {
+					panic("logic error: reference block has been scheduled but the header is not same")
+				}
+				log.Warn("reference block has been scheduled")
+				continue
+			}
+			pendingHdrs[req.header.Hash()] = req.header
+			peers := pm.peers.PeersWithBlock(req.hash)
+			if len(peers) == 0 {
+				panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+			}
+			for _, peer := range peers {
+				err := peer.RequestReferenceBody(req.header.Hash())
+				if err == nil {
+					break
+				}
+				log.Warn("Request reference body failed", "peer", peer.String(), "error", err)
+			}
+		case resp := <- pm.refRespCh:
+			hdr, exist := pendingHdrs[resp.hash]
+			if !exist {
+				log.Warn("Received reference block but not scheduled", "hash", resp.hash.String())
+				continue
+			}
+
+			delete(pendingHdrs, resp.hash)
+			blk := types.NewBlockWithHeader(hdr).WithBody(resp.body.Transactions, resp.body.Uncles)
+			pm.processReferenceBlocks(blk)
+			pm.blockchain.InsertBlocks(types.Blocks{blk}, nil)
+		}
 	}
 }
 
