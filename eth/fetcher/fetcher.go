@@ -81,12 +81,6 @@ type announce struct {
 	fetchBodies bodyRequesterFn   // Fetcher function to retrieve the body of an announced block
 }
 
-type announceRef struct {
-	hash common.Hash
-	number uint64
-	origin string
-}
-
 // headerFilterTask represents a batch of headers needing fetcher filtering.
 type headerFilterTask struct {
 	peer    string          // The source peer of block headers
@@ -149,9 +143,6 @@ type Fetcher struct {
 	fetchingHook       func([]common.Hash)     // Method to call upon starting a block (eth/61) or header (eth/62) fetch
 	completingHook     func([]common.Hash)     // Method to call upon starting a block body fetch (eth/62)
 	importedHook       func(*types.Block)      // Method to call upon successful block import (both eth/61 and eth/62)
-
-	quitRef chan struct{}
-	notifyRef chan *announceRef
 }
 
 // New creates a block fetcher to retrieve blocks based on hash announcements.
@@ -178,9 +169,6 @@ func New(getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBloc
 		chainHeight:    chainHeight,
 		insertBlock:    insertBlk,
 		dropPeer:       dropPeer,
-
-		quitRef: make(chan struct{}),
-		notifyRef: make(chan *announceRef),
 	}
 }
 
@@ -194,7 +182,6 @@ func (f *Fetcher) Start() {
 // operations.
 func (f *Fetcher) Stop() {
 	close(f.quit)
-	close(f.quitRef)
 }
 
 // Notify announces the fetcher of the potential availability of a new block in
