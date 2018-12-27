@@ -71,6 +71,16 @@ func (s *PublicEthereumAPI) ProtocolVersion() hexutil.Uint {
 	return hexutil.Uint(s.b.ProtocolVersion())
 }
 
+//get address tx nonce
+func (s *PublicBlockChainAPI) GetAccountNonce(ctx context.Context, address common.Address, blockNr rpc.BlockNumber) (hexutil.Uint64, error){
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return 0, err
+	}
+
+	return (hexutil.Uint64)(state.GetNonce(address)), state.Error()
+}
+
 //For Ds-pow: GetAllDelegateMiners return a list of all delegate miners
 func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)

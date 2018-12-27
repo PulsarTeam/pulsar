@@ -424,6 +424,12 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
+			name: 'getAccountNonce',
+			call: 'eth_getAccountNonce',
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
 			name: 'getAllDelegateMiners',
 			call: 'eth_getAllDelegateMiners',
 			params: 1,
