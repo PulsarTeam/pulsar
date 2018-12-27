@@ -384,15 +384,6 @@ func (t *TransactionsByPriceAndNonce) IsRef() bool {
 	return t.isRef
 }
 
-//get txs
-func (t *TransactionsByPriceAndNonce) GetTxs() Transactions {
-	var txsResult Transactions
-	for _, val := range t.txs {
-		txsResult = append(txsResult, val...)
-	}
-	return txsResult
-}
-
 // Peek returns the next transaction by price.
 func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
 	if len(t.heads) == 0 {

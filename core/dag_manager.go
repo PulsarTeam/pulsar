@@ -1245,40 +1245,38 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 //Based pivot block fetch uncles transactions
 func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.TransactionRefs {
 	var (
-		txRefs      types.TransactionRefs
-		refTxsTmp   types.Transactions                    = make([]*types.Transaction, 0)
-		refTxs      types.Transactions                    = make([]*types.Transaction, 0)
-		refAccTxsMp map[common.Address]types.Transactions = make(map[common.Address]types.Transactions, 0)
-		signer      types.Signer                          = types.MakeSigner(dm.chainConfig, block.Number())
+		txRefs    types.TransactionRefs = make([]*types.TransactionRef, 0)
+		refTxsTmp types.Transactions    = make([]*types.Transaction, 0)
+		refTxs    types.Transactions    = make([]*types.Transaction, 0)
 	)
 	for i := 0; i < len(block.Uncles()); i++ {
+
 		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
-			//refers = append(refers, dm.GetBlockByHash(block.Uncles()[i].Hash()))
 			refTxsTmp = append(refTxsTmp, dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions()...)
 		} else {
 			log.Warn("the block uncles is not complete, num:", block.Uncles()[i].Number.Uint64())
 		}
 	}
 	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
-	for _, rtx := range refTxsTmp {
-		for i := len(parentTxs) - 1; i >= 0; i-- {
-			if rtx.Hash() == parentTxs[i].Hash() {
-				break
-			}
-			if i == 0 && rtx.Hash() != parentTxs[i].Hash() {
-				refTxs = append(refTxs, rtx)
+	if len(parentTxs) > 0 {
+		for _, rtx := range refTxsTmp {
+			for i := len(parentTxs) - 1; i >= 0; i-- {
+				if rtx.Hash() == parentTxs[i].Hash() {
+					break
+				}
+				if i == 0 && rtx.Hash() != parentTxs[i].Hash() {
+					refTxs = append(refTxs, rtx)
+				}
 			}
 		}
+	} else {
+		refTxs = append(refTxs, refTxsTmp...)
 	}
+
 	for _, tx := range refTxs {
-		acc, _ := types.Sender(signer, tx)
-		refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
-	}
-	txsRef := types.NewTransactionsByPriceAndNonce(signer, refAccTxsMp, true)
-	resultTxs := txsRef.GetTxs()
-	for _, tx := range resultTxs {
 		txRefs = append(txRefs, &types.TransactionRef{Tx: tx, IsRef: true})
 	}
+
 	return txRefs
 }
 
@@ -1491,10 +1489,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		// Process block using the parent state as reference point.
 		execTxs := dm.getPivotBlockReferencesTxs(block)
 		referenceBlocks := dm.getPivotBlockReferences(block)
-		for _, tx := range block.Transactions() {
-			execTxs = append(execTxs, &types.TransactionRef{Tx: tx, IsRef: false})
-		}
-		receipts, logs, usedGas, txs, err := dm.processor.Process(block, execTxs, state, dm.vmConfig)
+		receipts, logs, usedGas, txs, err := dm.processor.Process(block, block.Transactions(), execTxs, state, dm.vmConfig)
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
