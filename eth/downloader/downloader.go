@@ -532,6 +532,10 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
 func (d *Downloader) spawnSync(fetchers []func() error) error {
+	defer func(){
+		fmt.Printf("spawnSync terminated!\n")
+	}()
+
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
@@ -825,6 +829,9 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 	p.log.Debug("Directing header downloads", "origin", from)
 	defer p.log.Debug("Header download terminated")
 
+	defer func(){
+		fmt.Printf("fetchHeaders terminated!\n")
+	}()
 	// Create a timeout timer, and the associated header fetcher
 	skeleton := true            // Skeleton assembly phase or finishing up
 	request := time.Now()       // time of the last skeleton fetch request
@@ -986,6 +993,9 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchBodies(from uint64) error {
 	log.Info("Downloading block bodies", "origin", from)
+	defer func(){
+		fmt.Printf("fetchBodies terminated!\n")
+	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1012,6 +1022,9 @@ func (d *Downloader) fetchBodies(from uint64) error {
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReceipts(from uint64) error {
 	log.Info("Downloading transaction receipts", "origin", from)
+	defer func(){
+		fmt.Printf("fetchReceipts terminated!\n")
+	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1036,6 +1049,9 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReferenceBodies() error {
 	log.Info("Downloading reference block bodies")
+	defer func(){
+		fmt.Printf("fetchReferenceBodies terminated!\n")
+	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1424,6 +1440,10 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
 func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) error {
+	defer func(){
+		fmt.Printf("processHeaders terminated!\n")
+	}()
+
 	// Keep a count of uncertain headers to roll back
 	rollback := []*types.Header{}
 	defer func() {
@@ -1450,6 +1470,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 				"block", fmt.Sprintf("%d->%d", lastBlock, curBlock))
 		}
 	}()
+
 
 	// Wait for batches of headers to process
 	gotHeaders := false
@@ -1601,6 +1622,11 @@ func (d *Downloader) NotifyFetchReferenceFinished(){
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
+
+	defer func(){
+		fmt.Printf("processFullSyncContent terminated!\n")
+	}()
+
 	var err error
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
