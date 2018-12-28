@@ -88,9 +88,11 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 		default:
 			refTxs.Shift()
 		}
-		receipts = append(receipts, receipt)
-		allLogs = append(allLogs, receipt.Logs...)
-		execTxs = append(execTxs, rtx)
+		if err == nil {
+			receipts = append(receipts, receipt)
+			allLogs = append(allLogs, receipt.Logs...)
+			execTxs = append(execTxs, rtx)
+		}
 	}
 	// Iterate over and process the individual transactions
 	for i, tx := range pivotTxs {
