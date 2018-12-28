@@ -188,11 +188,10 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 }
 
 func (pbm *pendingBlocksManager) processBlock(block *types.Block) types.Blocks {
-	log.Info("Process pending block", "block Hash", block.Hash())
-
 	var blocks types.Blocks
 	waitedSet, exist := pbm.waitedBlocks[block.Hash()]
 	if exist {
+		log.Info("Process pending block", "block Hash", block.Hash())
 		for waited := range waitedSet {
 			// Waited is the hash of the block which is on the pending list and waited for us
 			pending, ok := pbm.pendingBlocks[waited]
