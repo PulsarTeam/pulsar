@@ -1560,7 +1560,9 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 
 		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 011\n")
 		for len(blockList) > 0 {
+			dm.chainmu.Unlock()
 			_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(blockList[0:1], nil)
+			dm.chainmu.Lock()
 			events = append(events, pendingEvs)
 			coalescedLogs = append(coalescedLogs, pendingLogs...)
 			if pendingErr != nil {
