@@ -860,6 +860,14 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 		header := taskQueue.PopItem().(*types.Header)
 		hash := header.Hash()
 
+		hasReserved := false
+		for curr := 0; curr < int(q.resultRefOffset); curr++{
+			if hash == q.resultRefCache[curr].Hash{
+				hasReserved = true
+				break
+			}
+		}
+
 		/*
 		// If we're the first to request this task, initialise the result container
 		index := int(header.Number.Int64() - int64(q.resultOffset))
@@ -869,7 +877,8 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 		}
 		*/
 		fmt.Printf("reserveRefHeaders, header number: %v, hash : %v, resultRefCache index : %v\n", header.Number.Uint64(), header.Hash().String(), index)
-		if q.resultRefCache[index] == nil {
+		//if q.resultRefCache[index] == nil {
+		if hasReserved == false{
 			components := 1
 
 			q.resultRefCache[index] = &fetchResult{
@@ -877,7 +886,10 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 				Hash:    hash,
 				Header:  header,
 			}
+		}else{
+			q.resultRefOffset--
 		}
+
 		// If this fetch task is a noop, skip this fetch operation
 		if isNoop(header) {
 			donePool[hash] = struct{}{}
