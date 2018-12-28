@@ -868,7 +868,7 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			return nil, false, errInvalidChain
 		}
 		*/
-		fmt.Printf("index ===================== %v\n", index)
+		fmt.Printf("reserveRefHeaders, header number: %v, hash : %v, resultRefCache index : %v\n", header.Number.Uint64(), header.Hash().String(), index)
 		if q.resultRefCache[index] == nil {
 			components := 1
 
@@ -1342,7 +1342,7 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		q.resultRefCache[index].Pending--
 		useful = true
 		accepted++
-		fmt.Printf("deliverReference ok header, header number : %v, header hash : %v, index : %v, int(q.resultRefOffset): %v\n", header.Number.Uint64(), header.Hash().String(), index, int(q.resultRefOffset))
+		fmt.Printf("deliverReference ok header, q.resultRefCache[index] header number : %v, q.resultRefCache[index] header hash : %v, index : %v, int(q.resultRefOffset): %v\n", q.resultRefCache[index].Header.Number.Uint64(), q.resultRefCache[index].Hash.String(), index, int(q.resultRefOffset))
 
 		// Clean up a successful fetch
 		request.Headers[i] = nil
