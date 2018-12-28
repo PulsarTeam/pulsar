@@ -1106,6 +1106,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	}
 
 	if err != nil {
+		fmt.Printf("000 err : %v, WriteBlockWithState\n", err)
 		return NonStatTy, err
 	}
 
@@ -1122,6 +1123,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	//write epoch data
 	rawdb.WriteEpochData(batch, epochData.PivotBlockHeader.Hash(), epochData.PivotBlockHeader.Number.Uint64(), epochData)
 	if err := batch.Write(); err != nil {
+		fmt.Printf("001 err : %v, WriteBlockWithState\n", err)
 		return NonStatTy, err
 	}
 
@@ -1129,6 +1131,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	block := pivotBlock
 	root, err := state.Commit(dm.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
+		fmt.Printf("002 err : %v, WriteBlockWithState\n", err)
 		return NonStatTy, err
 	}
 	triedb := dm.stateCache.TrieDB()
@@ -1185,6 +1188,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	//reorg
 	if reorg {
 		if err := dm.deleteOldTransaction(oldPivotChain); err != nil {
+			fmt.Printf("003 err : %v, WriteBlockWithState\n", err)
 			return NonStatTy, err
 		}
 
@@ -1321,6 +1325,11 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 	dm.chainmu.Lock()
 	defer dm.chainmu.Unlock()
 
+
+	defer func(){
+		fmt.Printf("leave insertBlocks\n")
+	}()
+
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
 	// acquiring.
@@ -1377,6 +1386,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		}
 		switch {
 		case err == ErrKnownBlock:
+			fmt.Printf("err == consensus.ErrKnownBlock\n")
 			// Block and state both already known. However if the current block is below
 			// this number we did a rollback and we should reimport it nonetheless.
 			if dm.CurrentBlock().NumberU64() >= block.NumberU64() {
@@ -1385,6 +1395,8 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			}
 
 		case err == consensus.ErrFutureBlock:
+			fmt.Printf("err == consensus.ErrFutureBlock\n")
+
 			// Allow up to MaxFuture second in the future blocks. If this limit is exceeded
 			// the chain is discarded and processed at a later time if given.
 			max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
@@ -1396,11 +1408,13 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			continue
 
 		case err == consensus.ErrUnknownAncestor && dm.futureBlocks.Contains(block.ParentHash()):
+			fmt.Printf("err == consensus.ErrUnknownAncestor && dm.futureBlocks.Contains(block.ParentHash())\n")
 			dm.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
+			fmt.Printf("err == consensus.ErrPrunedAncestor:\n")
 			// Block competing with the canonical chain, store in the db, but don't process
 			// until the competitor TD goes above the canonical TD
 			currentBlock := dm.CurrentBlock()
@@ -1437,6 +1451,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			fmt.Printf("do nothing! block number: %v, block hash: %v\n", block.NumberU64(), block.Hash().String())
 
 		case err == ErrUnclesNotCompletely:
+			fmt.Printf("err == ErrUnclesNotCompletely\n")
 			if refBlocks == nil {
 				if len(blocks) != 1 {
 					panic("logic error, can not handle list of block without reference downloaded")
@@ -1472,6 +1487,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			}
 
 		case err != nil:
+			fmt.Printf("err != nil:\n")
 			dm.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err
 		}
@@ -1484,6 +1500,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		} else {
 			parent = blocks[i-1]
 		}
+		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 005\n")
 		state, err := state.New(parent.Root(), dm.stateCache)
 		if err != nil {
 			return i, events, coalescedLogs, err
@@ -1492,6 +1509,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		execTxs := dm.getPivotBlockReferencesTxs(block)
 		referenceBlocks := dm.getPivotBlockReferences(block)
 		receipts, logs, usedGas, txs, err := dm.processor.Process(block, block.Transactions(), execTxs, state, dm.vmConfig)
+		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 006\n")
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
@@ -1500,6 +1518,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		err = dm.Validator().ValidateState(block, parent, state, receipts, usedGas)
 		//\err2 := dm.Validator().ValidateHeader(block, state)
 
+		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 007\n")
 		//\\if err != nil || err2 != nil{
 		if err != nil {
 			dm.reportBlock(block, receipts, err)
@@ -1509,6 +1528,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		// Write the block to the chain and get the status.
 		status, err := dm.WriteBlockWithState(block, referenceBlocks, txs, receipts, state)
 		blockList := dm.pbm.processBlock(block)
+		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 010\n")
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
@@ -1538,6 +1558,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		cache, _ := dm.stateCache.TrieDB().Size()
 		stats.report(blocks, i, cache)
 
+		fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 011\n")
 		for len(blockList) > 0 {
 			_, pendingEvs, pendingLogs, pendingErr := dm.insertBlocks(blockList[0:1], nil)
 			events = append(events, pendingEvs)
@@ -1548,6 +1569,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			blockList = blockList[1:]
 		}
 	}
+	fmt.Printf("func (dm *DAGManager) insertBlocks ++++++++++++++++++++++ 012\n")
 	// Append a single chain head event if we've progressed the chain
 	if lastCanon != nil && dm.CurrentBlock().Hash() == lastCanon.Hash() {
 		events = append(events, ChainHeadEvent{lastCanon})
