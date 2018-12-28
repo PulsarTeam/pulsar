@@ -862,6 +862,10 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 
 		hasReserved := false
 		for curr := 0; curr < int(q.resultRefOffset); curr++{
+			if q.resultRefCache[curr] == nil{
+				break
+			}
+
 			if hash == q.resultRefCache[curr].Hash{
 				hasReserved = true
 				break
