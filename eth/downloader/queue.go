@@ -648,9 +648,9 @@ func (q *queue) countProcessableItems() int {
 func (q *queue) countProcessableRefItems() int {
 	for i, result := range q.resultRefCache {
 		if result == nil{
-			fmt.Printf("000 countProcessableRefItems ================result = nil, result.number: %v, result.hash: %v, i : %v\n", i, result.Header.Number.Uint64(), result.Header.Hash().String())
+			fmt.Printf("000 countProcessableRefItems ================result = nil, i : %v\n", i)
 		}else if result.Pending > 0{
-			fmt.Printf("000 countProcessableRefItems ================Pending > 0, result.number: %v, result.hash: %v, i : %v\n", i, result.Header.Number.Uint64(), result.Header.Hash().String())
+			fmt.Printf("000 countProcessableRefItems ================Pending > 0, result.number: %v, result.hash: %v, i : %v\n", result.Header.Number.Uint64(), result.Header.Hash().String(), i)
 		}
 
 		if result == nil || result.Pending > 0 {
