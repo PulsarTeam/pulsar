@@ -90,6 +90,15 @@ func (dag *DAG)IsReorg(epochHeaders []*types.Header)(isReorg bool, oldPivotChain
 		if err != nil{
 			return false, nil, nil, errors.New("find split block error")
 		}
+
+		for j := 0; j < len(oldPivotChain)/2; j++ {
+			oldPivotChain[j], oldPivotChain[len(oldPivotChain)-1-j] = oldPivotChain[len(oldPivotChain)-1-j], oldPivotChain[j]
+		}
+
+		for j := 0; j < len(newPivotChain)/2; j++ {
+			newPivotChain[j], newPivotChain[len(newPivotChain)-1-j] = newPivotChain[len(newPivotChain)-1-j], newPivotChain[j]
+		}
+
 	} else {
 		newPivotChain = append(newPivotChain, header)
 	}

@@ -1004,6 +1004,8 @@ func (dm *DAGManager) WriteBlockWithoutState(block *types.Block, td *big.Int) (e
 	}
 	rawdb.WriteBlock(dm.db, block)
 
+	fmt.Printf("WriteBlockWithoutState, block num : %v, hash : %v\n", block.Number().Uint64(), block.Hash().String())
+
 	return nil
 }
 
