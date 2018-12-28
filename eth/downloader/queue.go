@@ -1320,6 +1320,10 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 				continue
 			}
 
+			if q.resultRefCache[j].Hash != header.Hash(){
+				continue
+			}
+
 			if err = reconstruct(header, i, q.resultRefCache[j]); err == nil {
 				finish = true
 				index = j
