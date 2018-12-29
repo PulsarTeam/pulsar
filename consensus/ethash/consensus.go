@@ -333,8 +333,10 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 	//fmt.Println(ethash.powTargetTimespan, ethash.powTargetSpacing)
 	//ethash.powTargetSpacing = 15
 
-	var difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
-
+	var (
+		difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
+		h                        *types.Header
+	)
 	//var difficultyAdjustInterval int64 = 100
 
 	if parent.Number.Cmp(new(big.Int).SetInt64(0)) == 0 {
@@ -345,16 +347,25 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 		return parent.Difficulty
 	}
 
-	start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
-
-	h := chain.GetHeaderByNumber(start)
-	if h == nil {
-		h = ethash.FindInHeadersByNum(start, headers)
+	hash := parent.Hash()
+	for i := 0; i < (int)(difficultyAdjustInterval); i++ {
+		h = chain.GetHeaderByHash(hash)
 		if h == nil {
-			log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
+			log.Error("FATAL ERROR", "CalcDifficulty can not get header", "hash", hash)
 			panic("Logical error.\n")
 		}
+		hash = h.ParentHash
 	}
+	/*
+		start := (uint64)(parent.Number.Int64() + 1 - difficultyAdjustInterval)
+		h := chain.GetHeaderByNumber(start)
+		if h == nil {
+			h = ethash.FindInHeadersByNum(start, headers)
+			if h == nil {
+				log.Error("FATAL ERROR", "CalcDifficulty can not get header", start)
+				panic("Logical error.\n")
+			}
+		}*/
 
 	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (h.Time.Int64()))
 
