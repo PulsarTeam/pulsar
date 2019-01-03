@@ -26,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
-	"fmt"
 )
 
 const (
@@ -197,12 +196,11 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		}
 	}
 
-	fmt.Printf("func (pm *ProtocolManager) synchronise: before Synchronise\n")
 	// Run the sync cycle, and disable fast sync if we've went past the pivot block
 	if err := pm.downloader.Synchronise(peer.id, pHead, pTd, mode); err != nil {
 		return
 	}
-	fmt.Printf("func (pm *ProtocolManager) synchronise: after Synchronise\n")
+
 	if atomic.LoadUint32(&pm.fastSync) == 1 {
 		log.Info("Fast sync complete, auto disabling")
 		atomic.StoreUint32(&pm.fastSync, 0)
