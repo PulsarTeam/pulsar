@@ -597,7 +597,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		for _, block := range announces {
 			if !pm.blockchain.HasBlock(block.Hash, block.Number) {
 				unknown = append(unknown, block)
-				fmt.Printf("NewBlockHashesMsg, number: %v, hash: %v\n", block.Number, block.Hash.String())
 			}
 		}
 		for _, block := range unknown {
@@ -612,7 +611,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		request.Block.ReceivedAt = msg.ReceivedAt
 		request.Block.ReceivedFrom = p
-		fmt.Printf("NewBlockMsg block num = %v, hash = %v\n", request.Block.Number(), request.Block.Hash().String())
 		// Mark the peer as owning the block and schedule it for import
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
@@ -624,8 +622,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
 		)
 
-		_, ttd := p.Head()
-		fmt.Printf("NewBlockMsg td: %v, trueTD: %v, request.Block.Difficulty() : %v\n", ttd.String(), trueTD.String(), request.Block.Difficulty().String())
+
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
 			p.SetHead(trueHead, trueTD)
@@ -635,7 +632,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// scenario should easily be covered by the fetcher.
 			currentBlock := pm.blockchain.CurrentBlock()
 			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())) > 0 {
-				fmt.Printf("NewBlockMsg: before pm.synchronise(p)!\n")
 				go pm.synchronise(p)
 			}
 		}
