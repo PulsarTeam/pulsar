@@ -63,7 +63,7 @@ func errResp(code errCode, format string, v ...interface{}) error {
 }
 
 type refRequest struct {
-	hash common.Hash
+	hash   common.Hash
 	header *types.Header
 }
 
@@ -622,7 +622,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
 		)
 
-
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
 			p.SetHead(trueHead, trueTD)
@@ -644,9 +643,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Gather blocks until the fetch or network limits is reached
 		var (
-			hash   		common.Hash
-			bytes  		int
-			bodies  	[]rlp.RawValue
+			hash   common.Hash
+			bytes  int
+			bodies []rlp.RawValue
 		)
 		for bytes < softResponseLimit && len(bodies) < downloader.MaxBlockFetch {
 			// Retrieve the hash of the next block
@@ -705,7 +704,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				log.Debug("Failed to deliver reference bodies", "err", err)
 			}
 		}
-		
+
 	case msg.Code == TxMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
@@ -809,9 +808,9 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 
 	for {
 		select {
-		case <- pm.quitSync:
+		case <-pm.quitSync:
 			return
-		case req := <- pm.refReqCh:
+		case req := <-pm.refReqCh:
 			if v, exist := pendingHdrs[req.header.Hash()]; exist {
 				if v != req.header {
 					panic("logic error: reference block has been scheduled but the header is not same")
@@ -831,7 +830,7 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 				}
 				log.Warn("Request reference body failed", "peer", peer.String(), "error", err)
 			}
-		case resp := <- pm.refRespCh:
+		case resp := <-pm.refRespCh:
 			hdr, exist := pendingHdrs[resp.hash]
 			if !exist {
 				log.Warn("Received reference block but not scheduled", "hash", resp.hash.String())
