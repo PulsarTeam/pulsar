@@ -327,8 +327,6 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode 
 	err := d.synchronise(id, head, td, mode)
 	switch err {
 	case nil:
-	case errBusy:
-		fmt.Printf("func (d *Downloader) Synchronise: errBusy!\n")
 	case errTimeout, errBadPeer, errStallingPeer,
 		errEmptyHeaderSet, errPeersUnavailable, errTooOld,
 		errInvalidAncestor, errInvalidChain:
@@ -437,11 +435,9 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	if err != nil {
 		return err
 	}
-	fmt.Printf("syncWithPeer height number: %v, hash: %v\n", latest.Number.Uint64(), latest.Hash().String())
 	height := latest.Number.Uint64()
 
 	origin, err := d.findAncestor(p, height)
-	fmt.Printf("syncWithPeer findAncestor number: %v\n", origin)
 	if err != nil {
 		return err
 	}
@@ -474,45 +470,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
-	/*
-		fn1 := func() error {
-			fmt.Printf("syncWithPeer before fetchHeaders\n")
-			err := d.fetchHeaders(p, origin+1, pivot)
-			fmt.Printf("syncWithPeer after fetchHeaders\n")
-			return err
-		}// Headers are always retrieved
-		fn2 := func() error {
-			fmt.Printf("syncWithPeer before fetchBodies\n")
-			err := d.fetchBodies(origin + 1)
-			fmt.Printf("syncWithPeer after fetchBodies\n")
-			return err
-		}         // Bodies are retrieved during normal and fast sync
-		fn3 := func() error {
-			fmt.Printf("syncWithPeer before fetchReceipts\n")
-			err := d.fetchReceipts(origin + 1)
-			fmt.Printf("syncWithPeer after fetchReceipts\n")
-			return err
-			}        // Receipts are retrieved during fast sync
-		fn4 := func() error {
-			fmt.Printf("syncWithPeer before fetchReferenceBodies\n")
-			err := d.fetchReferenceBodies()
-			fmt.Printf("syncWithPeer after fetchReferenceBodies\n")
-			return err
-			}
-		fn5 := func() error {
-			fmt.Printf("syncWithPeer before processHeaders\n")
-			err := d.processHeaders(origin+1, pivot, td)
-			fmt.Printf("syncWithPeer after processHeaders\n")
-			return err
-			}
-
-		fetchers := []func() error{fn4, fn1, fn2, fn3, fn5}
-
-		for  _, fn := range fetchers{
-			fmt.Printf("func address : %v\n", fn)
-		}
-	*/
-
 	fetchers := []func() error{
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
@@ -532,19 +489,13 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
 func (d *Downloader) spawnSync(fetchers []func() error) error {
-	defer func(){
-		fmt.Printf("spawnSync terminated!\n")
-	}()
-
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
 		fn := fn
 		go func() {
-			//fmt.Printf("Before spawnSync ++++++++++++++ address: %v\n", fn)
 			defer d.cancelWg.Done()
 			errc <- fn()
-			//fmt.Printf("After spawnSync ++++++++++++++  address: %v\n", fn)
 		}()
 	}
 	// Wait for the first error, then terminate the others.
@@ -829,9 +780,6 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 	p.log.Debug("Directing header downloads", "origin", from)
 	defer p.log.Debug("Header download terminated")
 
-	defer func(){
-		fmt.Printf("fetchHeaders terminated!\n")
-	}()
 	// Create a timeout timer, and the associated header fetcher
 	skeleton := true            // Skeleton assembly phase or finishing up
 	request := time.Now()       // time of the last skeleton fetch request
@@ -993,9 +941,6 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchBodies(from uint64) error {
 	log.Info("Downloading block bodies", "origin", from)
-	defer func(){
-		fmt.Printf("fetchBodies terminated!\n")
-	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1013,7 +958,6 @@ func (d *Downloader) fetchBodies(from uint64) error {
 
 	log.Info("Block body download terminated, close the Notify", "err", err)
 	close(d.finishCh)
-	log.Info("Notify is CLOSED", "err", err)
 	return err
 }
 
@@ -1022,9 +966,6 @@ func (d *Downloader) fetchBodies(from uint64) error {
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReceipts(from uint64) error {
 	log.Info("Downloading transaction receipts", "origin", from)
-	defer func(){
-		fmt.Printf("fetchReceipts terminated!\n")
-	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1049,9 +990,6 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchReferenceBodies() error {
 	log.Info("Downloading reference block bodies")
-	defer func(){
-		fmt.Printf("fetchReferenceBodies terminated!\n")
-	}()
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1067,8 +1005,6 @@ func (d *Downloader) fetchReferenceBodies() error {
 		d.queue.PendingReferenceBlocks, d.queue.InFlightReferenceBlocks, d.queue.ShouldThrottleReferenceBlocks, d.queue.ReserveReferenceBodies,
 		d.referenceFetchHook, fetch, d.queue.CancelReferenceBodies, capacity, d.peers.ReferenceIdlePeers, setIdle, "referenceBodies")
 
-	fmt.Printf("Reference block body download terminated\n")
-	fmt.Printf("fetchReferenceBodies ========================================= 1\n")
 	log.Info("Reference block body download terminated", "err", err)
 	return err
 }
@@ -1280,14 +1216,11 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			return errCancel
 
 		case packet := <-deliveryCh:
-			fmt.Printf("recv reference bodies!\n")
 			// If the peer was previously banned and failed to deliver its pack
 			// in a reasonable time frame, ignore its message.
 			if peer := d.peers.Peer(packet.PeerId()); peer != nil {
-				fmt.Printf("Enter =================== \n")
 				// Deliver the received chunk of data and check chain validity
 				accepted, err := deliver(packet)
-				fmt.Printf("After =================== \n")
 				if err == errInvalidChain {
 					return err
 				}
@@ -1363,8 +1296,6 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			}
 			// If there's nothing more to fetch, wait or terminate
 			if pending() == 0 {
-				fmt.Printf("fetchParts2 finished : %v, inFlight() : %v\n", finished, inFlight())
-
 				if !inFlight() && finished {
 					log.Debug("Data fetching completed", "type", kind)
 					return nil
@@ -1405,7 +1336,6 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 					progressed = true
 				}
 				if request == nil {
-					fmt.Printf("fetchParts2 no request!\n")
 					continue
 				}
 				if request.From > 0 {
@@ -1440,10 +1370,6 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
 func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) error {
-	defer func(){
-		fmt.Printf("processHeaders terminated!\n")
-	}()
-
 	// Keep a count of uncertain headers to roll back
 	rollback := []*types.Header{}
 	defer func() {
@@ -1609,24 +1535,8 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 	}
 }
 
-/*
-func (d *Downloader) NotifyFetchReferenceFinished(){
-	select {
-	case <-d.bodiesFinisedCh:
-		d.referenceWakeCh <- false
-		fmt.Printf("NotifyFetchReferenceFinished\n")
-	default:
-	}
-}
-*/
-
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
-
-	defer func(){
-		fmt.Printf("processFullSyncContent terminated!\n")
-	}()
-
 	var err error
 	for {
 		log.Info(">>>> retrieve queue result <ENTER>")
@@ -1645,18 +1555,17 @@ func (d *Downloader) processFullSyncContent() error {
 		}
 		log.Info("Process pivot blocks", "pivot blocks", len(pivots), "reference blocks", refs.Len())
 		if index, err := d.blockchain.InsertBlocks(pivots, refs); err != nil {
-			//d.NotifyFetchReferenceFinished()
-			log.Debug("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
+			log.Warn("Downloaded item processing failed", "number", pivots[index].NumberU64(), "hash", pivots[index].Hash(), "err", err)
 			return errInvalidChain
 		}
 		if exit {
-			log.Warn("=========> Rarely case: results return not null but should exit")
 			break
 		}
 	}
 
 	log.Info("Notify reference body fetcher terminated")
 	d.referenceWakeCh <- false
+	log.Info("Notify reference body fetcher terminated DONE")
 
 	return err
 }
@@ -1716,7 +1625,6 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 			schedRefHdr = schedRefHdr[schedCnt:]
 			recvCnt := 0
 			for recvCnt < schedCnt {
-				fmt.Printf("recvCnt : %v, schedCnt: %v\n", recvCnt, schedCnt)
 				refResults := d.queue.ReferenceResults(true)
 				recvCnt += len(refResults)
 				if len(refResults) == 0 {
@@ -1730,7 +1638,6 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 						refHdrs.PushBack(refHdr)
 					}
 				}
-				fmt.Printf("after ------- recvCnt : %v, schedCnt: %v\n", recvCnt, schedCnt)
 			}
 			if recvCnt != schedCnt {
 				panic(fmt.Sprintf("received count: %d is not equal to scheduled count: %d\n", recvCnt, schedCnt))

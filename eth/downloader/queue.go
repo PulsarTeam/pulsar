@@ -189,7 +189,6 @@ func (q *queue) Close() {
 	q.lock.Unlock()
 	q.active.Broadcast()
 	q.activeReference.Broadcast()
-	fmt.Printf(" close q.active.Broadcast() ++++++++++ \n")
 }
 
 // PendingHeaders retrieves the number of header requests pending for retrieval.
@@ -466,7 +465,6 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 	scheduled := 0
 	for _, header := range headers {
-		fmt.Printf("ScheduleForReference, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		// Queue the header for content retrieval
 		hash := header.Hash()
 		if header.Number == nil {
@@ -483,8 +481,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 		q.referenceTaskPool[hash] = header
 		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
-		fmt.Printf("push to tash Queue, number: %v, hash : %v\n", header.Number.Uint64(), header.Hash().String())
-
+		log.Info("ScheduleForReference, push to task Queue, number: ", header.Number.Uint64(), ", hash : ", header.Hash().String())
 	}
 
 	return scheduled
@@ -508,9 +505,7 @@ func (q *queue) Results(notify chan struct{}) ([]*fetchResult, bool) {
 		wakeCh := make(chan struct{})
 		go func() {
 			if atomic.LoadInt32(&signalled) == 0 {
-				fmt.Printf(">>>>>>>>>>>> Wait signal >>>>>>>>>>>\n")
 				q.active.Wait()
-				fmt.Printf(">>>>>>>>>>>> Wakeup by signal >>>>>>>>>>>\n")
 			}
 			wakeCh <- struct{}{}
 		}()
@@ -518,7 +513,6 @@ func (q *queue) Results(notify chan struct{}) ([]*fetchResult, bool) {
 		select {
 			case <-notify:
 				atomic.StoreInt32(&signalled, 1)
-				fmt.Printf(">>>>>>>>>>>> Send signal >>>>>>>>>>>\n")
 				q.active.Signal()
 				<-wakeCh
 				exit = true
@@ -575,19 +569,18 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 
 	// Count the number of reference items available for processing
 	nproc := q.countProcessableRefItems()
-	fmt.Printf("ReferenceResults, nproc: %v \n", nproc)
 	for nproc == 0 && !q.closed {
-		fmt.Printf("ReferenceResults nproc == 0 && !q.closed \n")
 		if !block {
 			return nil
 		}
-		fmt.Printf("ReferenceResults wait signal activeReference \n")
+
 		q.activeReference.Wait()
 		nproc = q.countProcessableRefItems()
-		fmt.Printf("ReferenceResults wait signal returned, nproc : %v \n", nproc)
+
 	}
 
-	fmt.Printf("out ++++++++++ ReferenceResults wait signal returned, nproc : %v \n", nproc)
+	log.Info("ReferenceResults get items, nproc : ", nproc)
+
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	if nproc > maxResultsProcess {
 		nproc = maxResultsProcess
@@ -596,7 +589,7 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 	copy(results, q.resultRefCache[:nproc])
 
 	for _, fr := range results{
-		fmt.Printf("ReferenceResults ok header, header number : %v, header hash : %v\n", fr.Header.Number.Uint64(), fr.Header.Hash().String())
+		log.Info("ReferenceResults ok header, header number : ", fr.Header.Number.Uint64(), ", header hash : ",  fr.Header.Hash().String())
 	}
 
 	if len(results) > 0 {
@@ -612,7 +605,6 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 		}
 		// Advance the expected block number of the first cache entry.
 		q.resultRefOffset = uint64(int(q.resultRefOffset) - nproc)
-		fmt.Printf("q.resultRefOffset =================== %v\n", q.resultRefOffset)
 
 		// Recalculate the result item weights to prevent memory exhaustion
 		for _, result := range results {
@@ -630,7 +622,6 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 		}
 	}
 
-	fmt.Printf("ReferenceResults len(results) =================== %v\n", len(results))
 	return results
 }
 
@@ -647,12 +638,6 @@ func (q *queue) countProcessableItems() int {
 // countProcessableRefItems counts the processable reference items.
 func (q *queue) countProcessableRefItems() int {
 	for i, result := range q.resultRefCache {
-		if result == nil{
-			fmt.Printf("000 countProcessableRefItems ================result = nil, i : %v\n", i)
-		}else if result.Pending > 0{
-			fmt.Printf("000 countProcessableRefItems ================Pending > 0, result.number: %v, result.hash: %v, i : %v\n", result.Header.Number.Uint64(), result.Header.Hash().String(), i)
-		}
-
 		if result == nil || result.Pending > 0 {
 			return i
 		}
@@ -795,8 +780,6 @@ func (q *queue) reserveHeaders(p *peerConnection, count int, taskPool map[common
 			q.resultCache[index].Pending--
 			progress = true
 
-			//fmt.Printf("reserveHeaders ok header, header number : %v, header hash : %v, index : %v, int(q.resultRefOffset): %v \n", header.Number.Uint64(), header.Hash().String(), index, int(q.resultRefOffset))
-
 			continue
 		}
 		// Otherwise unless the peer is known not to have the data, add to the retrieve list
@@ -813,7 +796,6 @@ func (q *queue) reserveHeaders(p *peerConnection, count int, taskPool map[common
 	if progress {
 		// Wake WaitResults, resultCache was modified
 		q.active.Signal()
-		fmt.Printf(" reserveHeaders q.active.Broadcast() ++++++++++ \n")
 	}
 	// Assemble and return the block download request
 	if len(send) == 0 {
@@ -872,16 +854,6 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			}
 		}
 
-		/*
-		// If we're the first to request this task, initialise the result container
-		index := int(header.Number.Int64() - int64(q.resultOffset))
-		if index >= len(q.resultCache) || index < 0 {
-			common.Report("index allocation went beyond available resultCache space")
-			return nil, false, errInvalidChain
-		}
-		*/
-		fmt.Printf("reserveRefHeaders, header number: %v, hash : %v, resultRefCache index : %v\n", header.Number.Uint64(), header.Hash().String(), index)
-		//if q.resultRefCache[index] == nil {
 		if hasReserved == false{
 			components := 1
 
@@ -903,7 +875,6 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 			q.resultRefCache[index].Pending--
 			progress = true
 
-			fmt.Printf("reserveRefHeaders ok header, header number : %v, header hash : %v, index : %v, int(q.resultRefOffset): %v \n", header.Number.Uint64(), header.Hash().String(), index, int(q.resultRefOffset))
 			continue
 		}
 		// Otherwise unless the peer is known not to have the data, add to the retrieve list
@@ -920,7 +891,6 @@ func (q *queue) reserveRefHeaders(p *peerConnection, count int, taskPool map[com
 	if progress {
 		// Wake WaitResults, resultCache was modified
 		q.activeReference.Signal()
-		fmt.Printf("reserveRefHeaders q.activeReference.Signal()\n")
 	}
 	// Assemble and return the block download request
 	if len(send) == 0 {
@@ -1172,9 +1142,6 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, uncleLi
 		result.Uncles = uncleLists[index]
 		result.IsReference = false
 
-		//q.referenceHeaders = result.Uncles
-		//q.refHeaderProced = len(result.Uncles)
-
 		return nil
 	}
 	return q.deliver(id, q.blockTaskPool, q.blockTaskQueue, q.blockPendPool, q.blockDonePool, bodyReqTimer, len(txLists), reconstruct)
@@ -1205,9 +1172,7 @@ func (q *queue) DeliverReferenceBodies(id string, txLists [][]*types.Transaction
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	fmt.Printf("DeliverReferenceBodies==================== \n")
 	reconstruct := func(header *types.Header, index int, result *fetchResult) error {
-		fmt.Printf("DeliverReferenceBodies ok header, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		if types.DeriveSha(types.Transactions(txLists[index])) != header.TxHash || types.CalcUncleHash(uncleLists[index]) != header.UncleHash {
 			return errInvalidBody
 		}
@@ -1283,7 +1248,6 @@ func (q *queue) deliver(id string, taskPool map[common.Hash]*types.Header, taskQ
 	// Wake up WaitResults
 	if accepted > 0 {
 		q.active.Signal()
-		fmt.Printf(" deliver q.active.Broadcast() ++++++++++ \n")
 	}
 	// If none of the data was good, it's a stale delivery
 	switch {
@@ -1332,7 +1296,6 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		var err error
 		for j := 0; j < int(q.resultRefOffset); j++{
 			if q.resultRefCache[j].Pending <= 0{
-				fmt.Printf("deliverReference ok header , index : %v is ok!   q.resultRefCache[index].Pending : %v, number: %v, hash: %v\n", index, q.resultRefCache[index].Pending, header.Number.Uint64(), header.Hash().String())
 				continue
 			}
 
@@ -1358,7 +1321,6 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 		q.resultRefCache[index].Pending--
 		useful = true
 		accepted++
-		fmt.Printf("deliverReference ok header, q.resultRefCache[index] header number : %v, q.resultRefCache[index] header hash : %v, index : %v, int(q.resultRefOffset): %v\n", q.resultRefCache[index].Header.Number.Uint64(), q.resultRefCache[index].Hash.String(), index, int(q.resultRefOffset))
 
 		// Clean up a successful fetch
 		request.Headers[i] = nil
@@ -1373,7 +1335,6 @@ func (q *queue) deliverReference(id string, taskPool map[common.Hash]*types.Head
 	// Wake up WaitResults
 	if accepted > 0 {
 		q.activeReference.Signal()
-		fmt.Printf(" deliverReference q.activeReference.Signal() ++++++++++ \n")
 	}
 	// If none of the data was good, it's a stale delivery
 	switch {
