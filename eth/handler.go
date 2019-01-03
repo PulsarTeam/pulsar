@@ -696,7 +696,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
 		}
-		
+
 		if len(transactions) > 0 || len(uncles) > 0 {
 			err := pm.downloader.DeliverReferenceBodies(p.id, transactions, uncles)
 			if err != nil {
