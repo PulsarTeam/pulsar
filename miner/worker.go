@@ -18,7 +18,9 @@ package miner
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -442,36 +444,46 @@ func (self *worker) commitNewWork() {
 	}
 	// compute uncles for the new block.
 	var (
-		uncles    []*types.Header
-		badUncles []common.Hash
+		uncles []*types.Header
+		// badUncles []common.Hash
 		refBlocks []*types.Block
 	)
-	for hash, uncle := range self.possibleUncles {
-		if len(uncles) == 2 {
-			break
-		}
-		if err := self.commitUncle(work, uncle.Header()); err != nil {
-			log.Trace("Bad uncle found and will be removed", "hash", hash)
-			log.Trace(fmt.Sprint(uncle))
+	//for hash, uncle := range self.possibleUncles {
+	//	if len(uncles) == 2 {
+	//		break
+	//	}
+	//	if err := self.commitUncle(work, uncle.Header()); err != nil {
+	//		log.Trace("Bad uncle found and will be removed", "hash", hash)
+	//		log.Trace(fmt.Sprint(uncle))
+	//
+	//		badUncles = append(badUncles, hash)
+	//	} else {
+	//		if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1 {
+	//			log.Debug("Committing new uncle to block", "hash", hash)
+	//			uncles = append(uncles, uncle.Header())
+	//			refBlocks = append(refBlocks, uncle)
+	//		}
+	//	}
+	//}
+	//
+	//
+	//for _, hash := range badUncles {
+	//	delete(self.possibleUncles, hash)
+	//}
 
-			badUncles = append(badUncles, hash)
-		} else {
-			if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1 {
-				log.Debug("Committing new uncle to block", "hash", hash)
-				uncles = append(uncles, uncle.Header())
-				refBlocks = append(refBlocks, uncle)
-			}
-		}
-	}
+	// dagManager := self.chain
+	// allRefBlocks := dagManager.XXX()
+	// refsBlocks := allRefBlocks[:]
 
-	for _, hash := range badUncles {
-		delete(self.possibleUncles, hash)
-	}
+	//for i := 0; i < len(uncles); i++ {
+	//	work.header.GasLimit += uncles[i].GasLimit
+	//	header.GasLimit += uncles[i].GasLimit
+	//}
 
-	for i := 0; i < len(uncles); i++ {
-		work.header.GasLimit += uncles[i].GasLimit
-		header.GasLimit += uncles[i].GasLimit
-	}
+	//for i := 0; i < len(refBlocks); i++ {
+	//	work.header.GasLimit += refBlocks[i].Header().GasLimit
+	//	header.GasLimit += refBlocks[i].Header().GasLimit
+	//}
 
 	// parent transactions
 	var parentTxs []*types.Transaction
@@ -491,7 +503,7 @@ func (self *worker) commitNewWork() {
 		}
 
 		for _, tx := range refTxs {
-			if !isContained(tx, parentTxs) {
+			if !self.isContained(tx, parentTxs) {
 				tmpTxs = append(tmpTxs, tx)
 				acc, _ := types.Sender(self.current.signer, tx)
 				refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
@@ -505,7 +517,7 @@ func (self *worker) commitNewWork() {
 	}
 	pendingAccTxsMp := make(map[common.Address]types.Transactions)
 	for _, tx := range pendingTxs {
-		if !isContained(tx, tmpTxs) {
+		if !self.isContained(tx, tmpTxs) {
 			acc, _ := types.Sender(self.current.signer, tx)
 			pendingAccTxsMp[acc] = append(pendingAccTxsMp[acc], tx)
 		}
@@ -535,12 +547,21 @@ func (self *worker) commitNewWork() {
 }
 
 //
-func isContained(tx *types.Transaction, txs []*types.Transaction) bool {
-	for _, t := range txs {
-		if t.Hash() == tx.Hash() {
-			return true
-		}
+func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction) bool {
+	//for _, t := range txs {
+	//	if t.Hash() == tx.Hash() {
+	//		return true
+	//	}
+	//}
+
+	if sort.Search(len(txs), func(i int) bool { return txs[i] == tx }) != -1 {
+		return true
 	}
+
+	if h, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); h != nil {
+		return true
+	}
+
 	return false
 }
 
@@ -556,7 +577,7 @@ func (self *worker) commitUncle(work *Work, uncle *types.Header) error {
 		return fmt.Errorf("uncle already in family (%x)", hash)
 	}
 
-	if uncle.Number.Uint64() == self.current.header.Number.Uint64()-1{
+	if uncle.Number.Uint64() == self.current.header.Number.Uint64()-1 {
 		work.uncles.Add(uncle.Hash())
 	}
 
