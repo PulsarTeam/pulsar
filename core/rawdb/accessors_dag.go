@@ -92,6 +92,42 @@ func WriteHeadBlockHash(db DatabaseWriter, hash common.Hash) {
 	}
 }
 
+
+// ReadTipHeadersHashes retrieves the hashes of the current tip headers.
+func ReadTipHeadersHashes(db DatabaseReader) []common.Hash {
+	data, _ := db.Get(tipHeadersKey)
+	if len(data) == 0 {
+		return []common.Hash{}
+	}
+	return common.BytesToHashArray(data)
+}
+
+// WriteTipHeadersHashes stores the hash of the current tip headers.
+func WriteTipHeadersHashes(db DatabaseWriter, hashes []common.Hash) {
+
+	 bytes := common.HashArrayToBytes(hashes)
+	if err := db.Put(tipHeadersKey, bytes); err != nil {
+		log.Crit("Failed to store tip headers's hash", "err", err)
+	}
+}
+
+// ReadTipBlocksHashes retrieves the hash of the current tip blocks.
+func ReadTipBlocksHashes(db DatabaseReader) []common.Hash {
+	data, _ := db.Get(tipBlocksKey)
+	if len(data) == 0 {
+		return []common.Hash{}
+	}
+	return common.BytesToHashArray(data)
+}
+
+// WriteTipBlocksHashes stores the hash of the current tip blocks.
+func WriteTipBlocksHashes(db DatabaseWriter, hashes []common.Hash) {
+	bytes := common.HashArrayToBytes(hashes)
+	if err := db.Put(tipBlocksKey, bytes); err != nil {
+		log.Crit("Failed to store tip blocks' hash", "err", err)
+	}
+}
+
 // ReadHeadFastBlockHash retrieves the hash of the current fast-sync head block.
 func ReadHeadFastBlockHash(db DatabaseReader) common.Hash {
 	data, _ := db.Get(headFastBlockKey)

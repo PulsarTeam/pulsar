@@ -35,6 +35,12 @@ var (
 	// headBlockKey tracks the latest know full block's hash.
 	headBlockKey = []byte("LastBlock")
 
+	// tipHeadersKey tracks the tip headers excluded from any epoch.
+	tipHeadersKey = []byte("TipHeaders")
+
+	// tipBlocksKey tracks the tip blocks excluded from any epoch.
+	tipBlocksKey = []byte("TipBlocks")
+
 	// headFastBlockKey tracks the latest known incomplete block's hash duirng fast sync.
 	headFastBlockKey = []byte("LastFast")
 

@@ -65,7 +65,7 @@ func findIn(elem common.Hash, slice *[]common.Hash) int {
 // remove element from the slice
 // if the element exists, remove it and return true
 // if not, return false
-func removeIfExist(elem common.Hash, slice *[]common.Hash) bool {
+func RemoveIfExist(elem common.Hash, slice *[]common.Hash) bool {
 	idx:= findIn(elem, slice)
 	if idx>=0 {
 		*slice = append((*slice)[:idx], (*slice)[idx+1:]...)
@@ -298,7 +298,7 @@ func (dag *DAGCore)updateEpoch(dagBlock *DAGBlock) {
 		make([]common.Hash, 0, 16),
 	}
 
-	if !removeIfExist(dagBlock.BlockHash, &dag.tipBlocks) {
+	if !RemoveIfExist(dagBlock.BlockHash, &dag.tipBlocks) {
 		log.Error("updateEpoch, remove from tipBlocks but not found!", "hash", dagBlock.BlockHash)
 	}
 
@@ -352,7 +352,7 @@ func (dag *DAGCore)addIntoEpoch(dagBlock *DAGBlock, members *[]common.Hash)  {
 	}
 
 	(*members) = append(*members, dagBlock.BlockHash)
-	if !removeIfExist(dagBlock.BlockHash, &dag.tipBlocks) {
+	if !RemoveIfExist(dagBlock.BlockHash, &dag.tipBlocks) {
 		log.Error("addIntoEpoch, remove from tipBlocks but not found!", "hash", dagBlock.BlockHash)
 	}
 
@@ -387,7 +387,7 @@ func (dag *DAGCore) isInPreEpoch( hash common.Hash) bool {
 	return false
 }
 
-func (dag *DAGCore) isBeforeFence( hash common.Hash, members *[]common.Hash, fence int) bool {
+func IsBeforeFence( hash common.Hash, members *[]common.Hash, fence int) bool {
 	for i:=0; i<fence; i++ {
 		if (*members)[i]==hash{
 			return true
@@ -427,14 +427,14 @@ func (dag *DAGCore) isTopoPrepared( hash common.Hash, members *[]common.Hash, fe
 
 		// parent
 		if !dag.isInPreEpoch(dagBlock.ParentHash) &&
-			!dag.isBeforeFence(dagBlock.ParentHash, members, fence) {
+			!IsBeforeFence(dagBlock.ParentHash, members, fence) {
 			return false
 		}
 
 		// references
 		for _, memberHash := range dagBlock.ReferHashes {
 			if !dag.isInPreEpoch(memberHash) &&
-				!dag.isBeforeFence(memberHash, members, fence) {
+				!IsBeforeFence(memberHash, members, fence) {
 				return false
 			}
 		}
