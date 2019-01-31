@@ -444,7 +444,7 @@ func (self *worker) commitNewWork() {
 	}
 	// compute uncles for the new block.
 	var (
-		uncles []*types.Header
+		unclesHeaders []*types.Header
 		// badUncles []common.Hash
 		refBlocks []*types.Block
 	)
@@ -471,19 +471,21 @@ func (self *worker) commitNewWork() {
 	//	delete(self.possibleUncles, hash)
 	//}
 
-	// dagManager := self.chain
-	// allRefBlocks := dagManager.XXX()
-	// refsBlocks := allRefBlocks[:]
+	refBlocks = self.chain.GetTips()
 
 	//for i := 0; i < len(uncles); i++ {
 	//	work.header.GasLimit += uncles[i].GasLimit
 	//	header.GasLimit += uncles[i].GasLimit
 	//}
 
-	//for i := 0; i < len(refBlocks); i++ {
-	//	work.header.GasLimit += refBlocks[i].Header().GasLimit
-	//	header.GasLimit += refBlocks[i].Header().GasLimit
-	//}
+	for _, rb := range refBlocks {
+		h := rb.Header()
+		// append refBlock's header
+		unclesHeaders = append(unclesHeaders, h)
+		// add gaslimit on header
+		work.header.GasLimit += h.GasLimit
+		header.GasLimit += h.GasLimit
+	}
 
 	// parent transactions
 	var parentTxs []*types.Transaction
@@ -533,13 +535,13 @@ func (self *worker) commitNewWork() {
 	work.ExecutedTxs = executedTxs
 
 	// Create the new block to seal with the consensus engine
-	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
+	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, unclesHeaders, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
 	}
 	// We only care about logging if we're actually mining.
 	if atomic.LoadInt32(&self.mining) == 1 {
-		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
+		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(unclesHeaders), "elapsed", common.PrettyDuration(time.Since(tstart)))
 		self.unconfirmed.Shift(work.Block.NumberU64() - 1)
 	}
 	self.push(work)
@@ -554,11 +556,11 @@ func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction)
 	//	}
 	//}
 
-	if sort.Search(len(txs), func(i int) bool { return txs[i] == tx }) != -1 {
+	if sort.Search(len(txs), func(i int) bool { return txs[i].Hash() == tx.Hash() }) != -1 {
 		return true
 	}
 
-	if h, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); h != nil {
+	if t, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); t != nil {
 		return true
 	}
 
