@@ -30,10 +30,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/dag"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/dag"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -114,7 +114,7 @@ type DAGManager struct {
 	checkpoint       int          // checkpoint counts towards the new checkpoint
 	currentBlock     atomic.Value // Current head of the pivot chain
 	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
-	currentTips    	 atomic.Value // the most recent tips currently
+	currentTips      atomic.Value // the most recent tips currently
 
 	stateCache   state.Database // State database to reuse between imports (contains state cache)
 	bodyCache    *lru.Cache     // Cache for the most recent block bodies
@@ -718,14 +718,14 @@ func (dm *DAGManager) GetEpochData(hash common.Hash, number uint64) *types.Epoch
 
 // GetTips retrieves a list of tips currently,
 // caching it if found.
-func (dm *DAGManager) GetTips() ( []*types.Block) {
+func (dm *DAGManager) GetTips() []*types.Block {
 
 	hashes := dm.GetTipsHashes()
 	blocks := make([]*types.Block, 0, len(hashes))
 
 	for _, v := range hashes {
 		block := dm.GetBlockByHash(v)
-		if block==nil {
+		if block == nil {
 			log.Error("GetTips, block not found!", "hash", v)
 		}
 		blocks = append(blocks, block)
@@ -735,10 +735,10 @@ func (dm *DAGManager) GetTips() ( []*types.Block) {
 
 // GetTipsHashes retrieves a list of tips currently,
 // caching it if found.
-func (dm *DAGManager) GetTipsHashes() ( []common.Hash) {
+func (dm *DAGManager) GetTipsHashes() []common.Hash {
 
 	// Short circuit if the current tips is already in the cache, retrieve otherwise
-	if tips := dm.CurrentTips(); tips!=nil {
+	if tips := dm.CurrentTips(); tips != nil {
 		return tips
 	}
 
@@ -755,7 +755,7 @@ func (dm *DAGManager) GetTipsHashes() ( []common.Hash) {
 
 // setTipsHashes set a list of tips currently,
 // and caching it.
-func (dm *DAGManager) setTipsHashes(tips[]common.Hash) {
+func (dm *DAGManager) setTipsHashes(tips []common.Hash) {
 
 	// Cache
 	dm.currentBlock.Store(tips)
@@ -1261,7 +1261,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 		status = CanonStatTy
 	} else {
-		hashes := append( dm.GetTipsHashes(), block.Hash())
+		hashes := append(dm.GetTipsHashes(), block.Hash())
 
 		// toposort the tip list
 		dm.topoSortInEpoch(&hashes)
@@ -1295,25 +1295,25 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 func (dm *DAGManager) isInPreEpoch(hash common.Hash) bool {
 	currentBlock := dm.CurrentBlock()
-	for currentBlock!=nil && dm.genesisBlock.Hash()!=currentBlock.Hash() {
-		if currentBlock.Hash()==hash {
+	for currentBlock != nil && dm.genesisBlock.Hash() != currentBlock.Hash() {
+		if currentBlock.Hash() == hash {
 			return true
 		}
 		epochData := dm.GetEpochData(currentBlock.Hash(), currentBlock.NumberU64())
 		headers := epochData.ReferenceBlockHeader
 		for _, h := range headers {
-			if h.Hash()==hash{
+			if h.Hash() == hash {
 				return true
 			}
 		}
-		currentBlock = dm.GetBlockByHash( currentBlock.ParentHash())
+		currentBlock = dm.GetBlockByHash(currentBlock.ParentHash())
 	}
 	return false
 }
 
-func (dm *DAGManager) isTopoPrepared( hash common.Hash, members *[]common.Hash, fence int ) bool {
+func (dm *DAGManager) isTopoPrepared(hash common.Hash, members *[]common.Hash, fence int) bool {
 
-	if block := dm.GetBlockByHash( hash); block!=nil {
+	if block := dm.GetBlockByHash(hash); block != nil {
 
 		// parent
 		if !dm.isInPreEpoch(block.ParentHash()) &&
@@ -1339,26 +1339,26 @@ func (dm *DAGManager) isTopoPrepared( hash common.Hash, members *[]common.Hash, 
 	return true
 }
 
-func (dm *DAGManager)topoSortInEpoch( members *[]common.Hash)  {
+func (dm *DAGManager) topoSortInEpoch(members *[]common.Hash) {
 
 	// firstly sort by hash
 	sort.Sort(dag.HashSlice(*members))
 
 	// topology sort
 	fence := 0
-	for i:=fence; i<len(*members); i++ {
-		if dm.isTopoPrepared( (*members)[i], members, fence) {
-			for j:=i; j>fence; j-- {
-				(*members)[j-1],(*members)[j] = (*members)[j],(*members)[j-1]
+	for i := fence; i < len(*members); i++ {
+		if dm.isTopoPrepared((*members)[i], members, fence) {
+			for j := i; j > fence; j-- {
+				(*members)[j-1], (*members)[j] = (*members)[j], (*members)[j-1]
 			}
 			//fmt.Printf("topoSortInEpoch, (%s) :%d ---> %d\n", (*members)[fence].String(), fence, fence+1)
-			i=fence
+			i = fence
 			fence++
 			continue
 		}
 	}
 
-	if fence!=len(*members) {
+	if fence != len(*members) {
 		log.Error("topoSortInEpoch, not all elememts sorted!", "length", len(*members), "sorted", fence)
 		fmt.Printf("topoSortInEpoch, not all elememts sorted! length:%d, sorted:%d\n", len(*members), fence)
 	}
@@ -1395,6 +1395,10 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
 	if len(parentTxs) > 0 {
 		for _, rtx := range refTxsTmp {
+			tx, _, _, _ := rawdb.ReadTransaction(dm.db, rtx.Hash())
+			if tx != nil {
+				continue
+			}
 			for i := len(parentTxs) - 1; i >= 0; i-- {
 				if rtx.Hash() == parentTxs[i].Hash() {
 					break
