@@ -560,7 +560,7 @@ func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction)
 		return true
 	}
 
-	if h, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); h != nil {
+	if t, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); t != nil {
 		return true
 	}
 
