@@ -471,19 +471,17 @@ func (self *worker) commitNewWork() {
 	//	delete(self.possibleUncles, hash)
 	//}
 
-	// dagManager := self.chain
-	// allRefBlocks := dagManager.XXX()
-	// refsBlocks := allRefBlocks[:]
+	refBlocks = self.chain.GetTips()
 
 	//for i := 0; i < len(uncles); i++ {
 	//	work.header.GasLimit += uncles[i].GasLimit
 	//	header.GasLimit += uncles[i].GasLimit
 	//}
 
-	//for i := 0; i < len(refBlocks); i++ {
-	//	work.header.GasLimit += refBlocks[i].Header().GasLimit
-	//	header.GasLimit += refBlocks[i].Header().GasLimit
-	//}
+	for _, rb := range refBlocks {
+		work.header.GasLimit += rb.Header().GasLimit
+		header.GasLimit += rb.Header().GasLimit
+	}
 
 	// parent transactions
 	var parentTxs []*types.Transaction
