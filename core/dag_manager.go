@@ -300,6 +300,9 @@ func (dm *DAGManager) loadLastState() error {
 		log.Warn("Empty database, resetting chain")
 		return dm.Reset()
 	}
+	// Restore the last known head block
+	tips := rawdb.ReadTipBlocksHashes(dm.db)
+
 	// Make sure the entire head block is available
 	currentBlock := dm.GetBlockByHash(head)
 	if currentBlock == nil {
@@ -317,6 +320,22 @@ func (dm *DAGManager) loadLastState() error {
 	}
 	// Everything seems to be fine, set as the head block
 	dm.currentBlock.Store(currentBlock)
+
+	// Everything seems to be fine, set as tips
+	dm.currentTips.Store(tips)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	// Restore the last known head header
 	currentHeader := currentBlock.Header()
@@ -534,6 +553,7 @@ func (dm *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
 	dm.genesisBlock = genesis
 	dm.insert(dm.genesisBlock)
 	dm.currentBlock.Store(dm.genesisBlock)
+	dm.currentTips.Store([]common.Hash{})
 	dm.hc.SetGenesis(dm.genesisBlock.Header())
 	dm.hc.SetCurrentHeader(dm.genesisBlock.Header())
 	dm.currentFastBlock.Store(dm.genesisBlock)
@@ -748,7 +768,7 @@ func (dm *DAGManager) GetTipsHashes() ( []common.Hash) {
 		return []common.Hash{}
 	}
 	// Cache the found tips for next time and return
-	dm.currentBlock.Store(tips)
+	dm.currentTips.Store(tips)
 
 	return tips
 }
@@ -758,7 +778,7 @@ func (dm *DAGManager) GetTipsHashes() ( []common.Hash) {
 func (dm *DAGManager) setTipsHashes(tips[]common.Hash) {
 
 	// Cache
-	dm.currentBlock.Store(tips)
+	dm.currentTips.Store(tips)
 
 	// Write into db
 	rawdb.WriteTipBlocksHashes(dm.db, tips)
@@ -1117,6 +1137,29 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header) (err e
 	return nil
 }
 
+
+// get all block hashes from the pivotchain and all it's references
+func (dm *DAGManager) getPivotChainEpochHashes(oldPivotChain []*types.Header) ( []common.Hash) {
+
+	hashes := make([]common.Hash, 0)
+
+	if len(oldPivotChain) != 0 {
+		for _, h := range oldPivotChain {
+			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
+			if epoc == nil {
+				log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
+				panic("can not get epoc error.\n")
+			}
+			headers := epoc.ReferenceBlockHeader
+			hashes = append(hashes, h.Hash())
+			for _, refh := range headers {
+				hashes = append(hashes, refh.Hash())
+			}
+		}
+	}
+	return hashes
+}
+
 // WriteBlockWithState write epoch data and all associated state to the database.
 func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	referenceBlocks []*types.Block,
@@ -1236,6 +1279,21 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	//reorg
 	if reorg {
+
+		// get the old pivot chain epoch block hashes
+		hashes := dm.getPivotChainEpochHashes(oldPivotChain)
+		if len(hashes)>0 {
+
+			// merge the hashes into tips
+			tiphashes := append( dm.GetTipsHashes(), hashes...)
+
+			// toposort the tip list
+			dm.topoSortInEpoch(&tiphashes)
+
+			// Set the tips hashes
+			dm.setTipsHashes(tiphashes)
+		}
+
 		if err := dm.deleteOldTransaction(oldPivotChain); err != nil {
 			log.Error("reorg WriteBlockWithState error", err)
 			return NonStatTy, err
@@ -1250,6 +1308,15 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
 					panic("can not get epoc error.\n")
 				}
+
+				// remove the blocks in this epoch from the tiplist
+				tips := dm.GetTipsHashes()
+				dag.RemoveIfExist(epochData.PivotBlockHeader.Hash(), &tips)
+				for _, v := range epochData.ReferenceBlockHeader {
+					dag.RemoveIfExist(v.Hash(), &tips)
+				}
+				dm.setTipsHashes(tips)
+
 				rawdb.WriteTxLookupEntries(batch, epoc.Transactions, h)
 			}
 

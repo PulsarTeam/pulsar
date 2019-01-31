@@ -139,7 +139,7 @@ func HashArrayToBytes(hashes []Hash) []byte {
 	lowbyte := byte(length & 0x00ff)
 	highbyte := byte(length & 0xff00)
 
-	bytes := make([]byte, 0, 2 + HashLength*length)
+	bytes := make([]byte, 2 + HashLength*length)
 	bytes[0] = lowbyte
 	bytes[1] = highbyte
 
@@ -156,7 +156,7 @@ func BytesToHashArray(bytes []byte) []Hash {
 	lowbyte := bytes[0]
 	highbyte := bytes[1]
 	var length uint16 = uint16(lowbyte) | ( uint16(highbyte) << 8)
-	hashes := make([]Hash, 0, HashLength)
+	hashes := make([]Hash, length)
 	for i:=0; i<int(length); i++ {
 		hashes[i].SetBytes( bytes[(2+HashLength*i):(2+HashLength*(i+1))])
 	}
