@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -550,15 +549,15 @@ func (self *worker) commitNewWork() {
 
 //
 func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction) bool {
-	//for _, t := range txs {
-	//	if t.Hash() == tx.Hash() {
-	//		return true
-	//	}
-	//}
-	txsLen := len(txs)
-	if sort.Search(txsLen, func(i int) bool { return txs[i].Hash() == tx.Hash() }) != txsLen {
-		return true
+	for _, t := range txs {
+		if t.Hash() == tx.Hash() {
+			return true
+		}
 	}
+	//txsLen := len(txs)
+	//if sort.Search(txsLen, func(i int) bool { return txs[i].Hash() == tx.Hash() }) != txsLen {
+	//	return true
+	//}
 
 	if t, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); t != nil {
 		return true
