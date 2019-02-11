@@ -555,8 +555,8 @@ func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction)
 	//		return true
 	//	}
 	//}
-
-	if sort.Search(len(txs), func(i int) bool { return txs[i].Hash() == tx.Hash() }) != -1 {
+	txsLen := len(txs)
+	if sort.Search(txsLen, func(i int) bool { return txs[i].Hash() == tx.Hash() }) == txsLen {
 		return true
 	}
 
