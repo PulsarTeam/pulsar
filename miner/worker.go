@@ -444,38 +444,10 @@ func (self *worker) commitNewWork() {
 	// compute uncles for the new block.
 	var (
 		unclesHeaders []*types.Header
-		// badUncles []common.Hash
-		refBlocks []*types.Block
+		refBlocks     []*types.Block
 	)
-	//for hash, uncle := range self.possibleUncles {
-	//	if len(uncles) == 2 {
-	//		break
-	//	}
-	//	if err := self.commitUncle(work, uncle.Header()); err != nil {
-	//		log.Trace("Bad uncle found and will be removed", "hash", hash)
-	//		log.Trace(fmt.Sprint(uncle))
-	//
-	//		badUncles = append(badUncles, hash)
-	//	} else {
-	//		if uncle.Number().Uint64() == self.current.header.Number.Uint64()-1 {
-	//			log.Debug("Committing new uncle to block", "hash", hash)
-	//			uncles = append(uncles, uncle.Header())
-	//			refBlocks = append(refBlocks, uncle)
-	//		}
-	//	}
-	//}
-	//
-	//
-	//for _, hash := range badUncles {
-	//	delete(self.possibleUncles, hash)
-	//}
 
 	refBlocks = self.chain.GetTips()
-
-	//for i := 0; i < len(uncles); i++ {
-	//	work.header.GasLimit += uncles[i].GasLimit
-	//	header.GasLimit += uncles[i].GasLimit
-	//}
 
 	for _, rb := range refBlocks {
 		h := rb.Header()
@@ -554,10 +526,6 @@ func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction)
 			return true
 		}
 	}
-	//txsLen := len(txs)
-	//if sort.Search(txsLen, func(i int) bool { return txs[i].Hash() == tx.Hash() }) != txsLen {
-	//	return true
-	//}
 
 	if t, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); t != nil {
 		return true
