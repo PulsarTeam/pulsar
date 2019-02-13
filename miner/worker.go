@@ -486,6 +486,8 @@ func (self *worker) commitNewWork() {
 		} else {
 			if self.canBackToPivot(uncle, ancestors) && !self.isReferenced(uncle, ancestors) {
 				refBlocks = append(refBlocks, uncle)
+			} else {
+				delete(self.possibleUncles, hash)
 			}
 		}
 	}
@@ -566,6 +568,11 @@ func (self *worker) commitNewWork() {
 //
 func (self *worker) isReferenced(block *types.Block, ancestors []*types.Block) bool {
 	for _, act := range ancestors {
+
+		if act.Hash() == block.Hash() {
+			return true
+		}
+
 		for _, uncle := range act.Uncles() {
 			if block.Hash() == uncle.Hash() {
 				return true
@@ -579,7 +586,7 @@ func (self *worker) isReferenced(block *types.Block, ancestors []*types.Block) b
 func (self *worker) canBackToPivot(block *types.Block, ancestors []*types.Block) bool {
 	b := block
 	for i := 0; i < len(ancestors); i++ {
-		b := self.chain.GetBlockByHash(b.ParentHash())
+		b = self.chain.GetBlockByHash(b.ParentHash())
 		if self.inAncestors(b, ancestors) {
 			return true
 		}
