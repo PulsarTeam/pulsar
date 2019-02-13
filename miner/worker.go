@@ -584,7 +584,7 @@ func (self *worker) isReferenced(block *types.Block, ancestors []*types.Block) b
 //
 func (self *worker) canBackToPivot(block *types.Block, ancestors []*types.Block) bool {
 	b := block
-	for i := 0; i < len(ancestors); i++ {
+	for i := 0; i < 7; i++ {
 		b = self.chain.GetBlockByHash(b.ParentHash())
 		if self.inAncestors(b, ancestors) {
 			return true
