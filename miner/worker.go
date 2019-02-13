@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,6 +86,24 @@ type Work struct {
 type Result struct {
 	Work  *Work
 	Block *types.Block
+}
+
+type RefBlocks []*types.Block
+
+func (rb *RefBlocks) Len() int {
+	return len(*rb)
+}
+
+func (rb *RefBlocks) Less(i, j int) bool {
+	if (*rb)[i].Number().Uint64() == (*rb)[j].Number().Uint64() {
+		return (*rb)[i].Hash().Hex() < (*rb)[j].Hash().Hex()
+	} else {
+		return (*rb)[i].Number().Uint64() < (*rb)[j].Number().Uint64()
+	}
+}
+
+func (rb *RefBlocks) Swap(i, j int) {
+	(*rb)[i], (*rb)[j] = (*rb)[j], (*rb)[i]
 }
 
 // worker is the main object which takes care of applying messages to the new state
@@ -444,10 +463,35 @@ func (self *worker) commitNewWork() {
 	// compute uncles for the new block.
 	var (
 		unclesHeaders []*types.Header
-		refBlocks     []*types.Block
 	)
 
-	refBlocks = self.chain.GetTips()
+	// refBlocks = self.chain.GetTips()
+
+	refBlocks := make(RefBlocks, 0)
+	ancestors := make([]*types.Block, 0)
+	farthestAncestor := self.current.header.Number.Uint64() - 7
+	currentNumber := self.current.header.Number.Uint64()
+
+	// get ancestors
+	for num := farthestAncestor; num < currentNumber; num++ {
+		if block := self.chain.GetBlockByNumber(num); block != nil {
+			ancestors = append(ancestors, block)
+		}
+	}
+
+	// filter uncles
+	for hash, uncle := range self.possibleUncles {
+		if uncle.Number().Uint64() < farthestAncestor {
+			delete(self.possibleUncles, hash)
+		} else {
+			if self.canBackToPivot(uncle, ancestors) && !self.isReferenced(uncle, ancestors) {
+				refBlocks = append(refBlocks, uncle)
+			}
+		}
+	}
+
+	// sort reference blocks
+	sort.Sort(&refBlocks)
 
 	for _, rb := range refBlocks {
 		h := rb.Header()
@@ -517,6 +561,39 @@ func (self *worker) commitNewWork() {
 	}
 	self.push(work)
 	self.updateSnapshot()
+}
+
+//
+func (self *worker) isReferenced(block *types.Block, ancestors []*types.Block) bool {
+	for _, act := range ancestors {
+		for _, uncle := range act.Uncles() {
+			if block.Hash() == uncle.Hash() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+//
+func (self *worker) canBackToPivot(block *types.Block, ancestors []*types.Block) bool {
+	for i := 0; i < len(ancestors); i++ {
+		b := self.chain.GetBlockByNumber(block.Number().Uint64() - uint64(i)) // block's parent
+		if self.inAncestors(b, ancestors) {
+			return true
+		}
+	}
+	return false
+}
+
+//
+func (self *worker) inAncestors(block *types.Block, ancestors []*types.Block) bool {
+	for _, act := range ancestors {
+		if block.Hash() == act.Hash() {
+			return true
+		}
+	}
+	return false
 }
 
 //
