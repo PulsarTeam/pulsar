@@ -469,8 +469,14 @@ func (self *worker) commitNewWork() {
 
 	refBlocks := make(RefBlocks, 0)
 	ancestors := make([]*types.Block, 0)
-	farthestAncestor := self.current.header.Number.Uint64() - 7
+	var farthestAncestor uint64
 	currentNumber := self.current.header.Number.Uint64()
+	if self.current.header.Number.Uint64() > 7 {
+		farthestAncestor = self.current.header.Number.Uint64() - 7
+
+	} else {
+		farthestAncestor = 0
+	}
 
 	// get ancestors
 	for num := farthestAncestor; num < currentNumber; num++ {
@@ -585,9 +591,10 @@ func (self *worker) isReferenced(block *types.Block, ancestors []*types.Block) b
 func (self *worker) canBackToPivot(block *types.Block, ancestors []*types.Block) bool {
 	b := block
 	for i := 0; i < len(ancestors); i++ {
-		b = self.chain.GetBlockByHash(b.ParentHash())
-		if self.inAncestors(b, ancestors) {
-			return true
+		if b = self.chain.GetBlockByHash(b.ParentHash()); b != nil {
+			if self.inAncestors(b, ancestors) {
+				return true
+			}
 		}
 	}
 	return false
