@@ -473,7 +473,6 @@ func (self *worker) commitNewWork() {
 	currentNumber := self.current.header.Number.Uint64()
 	if self.current.header.Number.Uint64() > 7 {
 		farthestAncestor = self.current.header.Number.Uint64() - 7
-
 	} else {
 		farthestAncestor = 0
 	}
