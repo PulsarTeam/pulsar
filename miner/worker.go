@@ -486,7 +486,6 @@ func (self *worker) commitNewWork() {
 		} else {
 			if self.canBackToPivot(uncle, ancestors) && !self.isReferenced(uncle, ancestors) {
 				refBlocks = append(refBlocks, uncle)
-			} else {
 				delete(self.possibleUncles, hash)
 			}
 		}
