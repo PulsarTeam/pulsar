@@ -216,7 +216,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 
 	// Verify each of the uncles that it's recent, but not an ancestor
 	for _, uncle := range block.Uncles() {
-		if uncle.Number.Uint64() < (block.Number().Uint64() - 7) {
+		if uncle.Number.Uint64() < (block.Number().Uint64() - (uint64)(len(ancestors))) {
 			return errors.New("uncle is too low")
 		}
 
