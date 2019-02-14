@@ -132,7 +132,7 @@ func send(count int, ip string) {
 
 	//unlock account
 	var reBool bool
-	err = client.Call(&reBool, "personal_unlockAccount", account[from], "yuan0", 90000)
+	err = client.Call(&reBool, "personal_unlockAccount", account[from], "123", 90000)
 	if err != nil {
 		fmt.Println("personal_unlockAccount Error:", err.Error())
 		msg <- false

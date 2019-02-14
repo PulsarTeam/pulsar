@@ -1212,12 +1212,14 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	}
 
 	// remove the blocks in this epoch from the tiplist
+	/*
 	tips := dm.GetTipsHashes()
 	dag.RemoveIfExist(epochData.PivotBlockHeader.Hash(), &tips)
 	for _, v := range epochData.ReferenceBlockHeader {
 		dag.RemoveIfExist(v.Hash(), &tips)
 	}
 	dm.setTipsHashes(tips)
+	*/
 
 	//get pivotBlock and commit db
 	block := pivotBlock
@@ -1279,7 +1281,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	//reorg
 	if reorg {
-
+/*
 		// get the old pivot chain epoch block hashes
 		hashes := dm.getPivotChainEpochHashes(oldPivotChain)
 		if len(hashes)>0 {
@@ -1293,7 +1295,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 			// Set the tips hashes
 			dm.setTipsHashes(tiphashes)
 		}
-
+*/
 		if err := dm.deleteOldTransaction(oldPivotChain); err != nil {
 			log.Error("reorg WriteBlockWithState error", err)
 			return NonStatTy, err
@@ -1308,7 +1310,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
 					panic("can not get epoc error.\n")
 				}
-
+/*
 				// remove the blocks in this epoch from the tiplist
 				tips := dm.GetTipsHashes()
 				dag.RemoveIfExist(epochData.PivotBlockHeader.Hash(), &tips)
@@ -1316,7 +1318,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 					dag.RemoveIfExist(v.Hash(), &tips)
 				}
 				dm.setTipsHashes(tips)
-
+*/
 				rawdb.WriteTxLookupEntries(batch, epoc.Transactions, h)
 			}
 
@@ -1328,6 +1330,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 		status = CanonStatTy
 	} else {
+		/*
 		hashes := append(dm.GetTipsHashes(), block.Hash())
 
 		// toposort the tip list
@@ -1335,7 +1338,7 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 		// Set the tips hashes
 		dm.setTipsHashes(hashes)
-
+		*/
 		status = SideStatTy
 	}
 
