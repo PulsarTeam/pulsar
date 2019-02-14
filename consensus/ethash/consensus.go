@@ -178,16 +178,23 @@ func (ethash *Ethash) verifyHeaderWorker(chain consensus.BlockReader, headers []
 	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index], headers)
 }
 
+func (ethash *Ethash) isBackToPivot(chain consensus.BlockReader, blockHeader *types.Header, ancestors map[common.Hash]*types.Header) bool {
+	header := blockHeader
+	for i := 0; i < len(ancestors); i++ {
+		header = chain.GetHeaderByHash(header.ParentHash)
+		if ancestors[header.Hash()] != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Ethereum ethash engine.
 func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Block) error {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
-	}
-	// Verify that there are at most 2 uncles included in this block
-	if len(block.Uncles()) > maxUncles {
-		return errTooManyUncles
 	}
 	// Gather the set of past uncles and ancestors
 	uncles, ancestors := set.New(), make(map[common.Hash]*types.Header)
@@ -209,6 +216,14 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 
 	// Verify each of the uncles that it's recent, but not an ancestor
 	for _, uncle := range block.Uncles() {
+		if uncle.Number.Uint64() < (block.Number().Uint64() - 7) {
+			return errors.New("uncle is too low")
+		}
+
+		if !ethash.isBackToPivot(chain,uncle,ancestors){
+			return errors.New("uncle's ancestor should in pivot chain")
+		}
+
 		// Make sure every uncle is rewarded only once
 		hash := uncle.Hash()
 		if uncles.Has(hash) {
@@ -220,15 +235,13 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-		if ancestors[uncle.ParentHash] == nil || uncle.ParentHash == block.ParentHash() {
-			return errDanglingUncle
-		}
 		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
 
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
