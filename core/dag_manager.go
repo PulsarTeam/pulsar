@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core/dag"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -46,7 +45,6 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"runtime/debug"
-	"sort"
 )
 
 var (
@@ -111,17 +109,15 @@ type DAGManager struct {
 	chainmu sync.RWMutex // blockchain insertion lock
 	procmu  sync.RWMutex // block processor lock
 
-	checkpoint       int          // checkpoint counts towards the new checkpoint
-	currentBlock     atomic.Value // Current head of the pivot chain
-	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
-	currentTips      atomic.Value // the most recent tips currently
-
-	stateCache   state.Database // State database to reuse between imports (contains state cache)
-	bodyCache    *lru.Cache     // Cache for the most recent block bodies
-	bodyRLPCache *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
-	blockCache   *lru.Cache     // Cache for the most recent entire blocks
-	futureBlocks *lru.Cache     // future blocks are blocks added for later processing
-	epochCache   *lru.Cache     // Cache for the most recent epoch data
+	checkpoint       int            // checkpoint counts towards the new checkpoint
+	currentBlock     atomic.Value   // Current head of the pivot chain
+	currentFastBlock atomic.Value   // Current head of the fast-sync chain (may be above the block chain!)
+	stateCache       state.Database // State database to reuse between imports (contains state cache)
+	bodyCache        *lru.Cache     // Cache for the most recent block bodies
+	bodyRLPCache     *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
+	blockCache       *lru.Cache     // Cache for the most recent entire blocks
+	futureBlocks     *lru.Cache     // future blocks are blocks added for later processing
+	epochCache       *lru.Cache     // Cache for the most recent epoch data
 
 	quit    chan struct{} // blockchain quit channel
 	running int32         // running must be called atomically
@@ -301,11 +297,6 @@ func (dm *DAGManager) loadLastState() error {
 		return dm.Reset()
 	}
 
-	/*
-	// Restore the last known head block
-	tips := rawdb.ReadTipBlocksHashes(dm.db)
-	*/
-
 	// Make sure the entire head block is available
 	currentBlock := dm.GetBlockByHash(head)
 	if currentBlock == nil {
@@ -323,23 +314,6 @@ func (dm *DAGManager) loadLastState() error {
 	}
 	// Everything seems to be fine, set as the head block
 	dm.currentBlock.Store(currentBlock)
-
-	/*
-	// Everything seems to be fine, set as tips
-	dm.currentTips.Store(tips)
-	*/
-
-
-
-
-
-
-
-
-
-
-
-
 
 	// Restore the last known head header
 	currentHeader := currentBlock.Header()
@@ -473,10 +447,6 @@ func (dm *DAGManager) CurrentFastBlock() *types.Block {
 	return dm.currentFastBlock.Load().(*types.Block)
 }
 
-func (dm *DAGManager) CurrentTips() []common.Hash {
-	return dm.currentTips.Load().([]common.Hash)
-}
-
 // SetProcessor sets the processor required for making state modifications.
 func (dm *DAGManager) SetProcessor(processor Processor) {
 	dm.procmu.Lock()
@@ -557,7 +527,6 @@ func (dm *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
 	dm.genesisBlock = genesis
 	dm.insert(dm.genesisBlock)
 	dm.currentBlock.Store(dm.genesisBlock)
-	//dm.currentTips.Store([]common.Hash{})
 	dm.hc.SetGenesis(dm.genesisBlock.Header())
 	dm.hc.SetCurrentHeader(dm.genesisBlock.Header())
 	dm.currentFastBlock.Store(dm.genesisBlock)
@@ -738,54 +707,6 @@ func (dm *DAGManager) GetEpochData(hash common.Hash, number uint64) *types.Epoch
 	// Cache the found epoch data for next time and return
 	dm.epochCache.Add(epochData.PivotBlockHeader.Hash(), epochData)
 	return epochData
-}
-
-// GetTips retrieves a list of tips currently,
-// caching it if found.
-func (dm *DAGManager) GetTips() []*types.Block {
-
-	hashes := dm.GetTipsHashes()
-	blocks := make([]*types.Block, 0, len(hashes))
-
-	for _, v := range hashes {
-		block := dm.GetBlockByHash(v)
-		if block == nil {
-			log.Error("GetTips, block not found!", "hash", v)
-		}
-		blocks = append(blocks, block)
-	}
-	return blocks
-}
-
-// GetTipsHashes retrieves a list of tips currently,
-// caching it if found.
-func (dm *DAGManager) GetTipsHashes() []common.Hash {
-
-	// Short circuit if the current tips is already in the cache, retrieve otherwise
-	if tips := dm.CurrentTips(); tips != nil {
-		return tips
-	}
-
-	tips := rawdb.ReadTipBlocksHashes(dm.db)
-
-	if tips == nil {
-		return []common.Hash{}
-	}
-	// Cache the found tips for next time and return
-	dm.currentTips.Store(tips)
-
-	return tips
-}
-
-// setTipsHashes set a list of tips currently,
-// and caching it.
-func (dm *DAGManager) setTipsHashes(tips []common.Hash) {
-
-	// Cache
-	dm.currentTips.Store(tips)
-
-	// Write into db
-	rawdb.WriteTipBlocksHashes(dm.db, tips)
 }
 
 // GetBlockByHash retrieves a block from the database by hash, caching it if found.
@@ -1141,29 +1062,6 @@ func (dm *DAGManager) deleteOldTransaction(oldPivotChain []*types.Header) (err e
 	return nil
 }
 
-
-// get all block hashes from the pivotchain and all it's references
-func (dm *DAGManager) getPivotChainEpochHashes(oldPivotChain []*types.Header) ( []common.Hash) {
-
-	hashes := make([]common.Hash, 0)
-
-	if len(oldPivotChain) != 0 {
-		for _, h := range oldPivotChain {
-			epoc := dm.GetEpochData(h.Hash(), h.Number.Uint64())
-			if epoc == nil {
-				log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
-				panic("can not get epoc error.\n")
-			}
-			headers := epoc.ReferenceBlockHeader
-			hashes = append(hashes, h.Hash())
-			for _, refh := range headers {
-				hashes = append(hashes, refh.Hash())
-			}
-		}
-	}
-	return hashes
-}
-
 // WriteBlockWithState write epoch data and all associated state to the database.
 func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	referenceBlocks []*types.Block,
@@ -1214,17 +1112,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 		log.Error("batch WriteBlockWithState error", err)
 		return NonStatTy, err
 	}
-
-	// remove the blocks in this epoch from the tiplist
-	/*
-	tips := dm.GetTipsHashes()
-	dag.RemoveIfExist(epochData.PivotBlockHeader.Hash(), &tips)
-	for _, v := range epochData.ReferenceBlockHeader {
-		dag.RemoveIfExist(v.Hash(), &tips)
-	}
-	dm.setTipsHashes(tips)
-	*/
-
 	//get pivotBlock and commit db
 	block := pivotBlock
 	root, err := state.Commit(dm.chainConfig.IsEIP158(block.Number()))
@@ -1285,21 +1172,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 	//reorg
 	if reorg {
-/*
-		// get the old pivot chain epoch block hashes
-		hashes := dm.getPivotChainEpochHashes(oldPivotChain)
-		if len(hashes)>0 {
-
-			// merge the hashes into tips
-			tiphashes := append( dm.GetTipsHashes(), hashes...)
-
-			// toposort the tip list
-			dm.topoSortInEpoch(&tiphashes)
-
-			// Set the tips hashes
-			dm.setTipsHashes(tiphashes)
-		}
-*/
 		if err := dm.deleteOldTransaction(oldPivotChain); err != nil {
 			log.Error("reorg WriteBlockWithState error", err)
 			return NonStatTy, err
@@ -1314,15 +1186,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 					log.Error("FATAL ERROR", "can not get epoc : ", h.Number.Uint64())
 					panic("can not get epoc error.\n")
 				}
-/*
-				// remove the blocks in this epoch from the tiplist
-				tips := dm.GetTipsHashes()
-				dag.RemoveIfExist(epochData.PivotBlockHeader.Hash(), &tips)
-				for _, v := range epochData.ReferenceBlockHeader {
-					dag.RemoveIfExist(v.Hash(), &tips)
-				}
-				dm.setTipsHashes(tips)
-*/
 				rawdb.WriteTxLookupEntries(batch, epoc.Transactions, h)
 			}
 
@@ -1334,15 +1197,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 
 		status = CanonStatTy
 	} else {
-		/*
-		hashes := append(dm.GetTipsHashes(), block.Hash())
-
-		// toposort the tip list
-		dm.topoSortInEpoch(&hashes)
-
-		// Set the tips hashes
-		dm.setTipsHashes(hashes)
-		*/
 		status = SideStatTy
 	}
 
@@ -1365,78 +1219,6 @@ func (dm *DAGManager) WriteBlockWithState(pivotBlock *types.Block,
 	}
 
 	return status, nil
-}
-
-func (dm *DAGManager) isInPreEpoch(hash common.Hash) bool {
-	currentBlock := dm.CurrentBlock()
-	for currentBlock != nil && dm.genesisBlock.Hash() != currentBlock.Hash() {
-		if currentBlock.Hash() == hash {
-			return true
-		}
-		epochData := dm.GetEpochData(currentBlock.Hash(), currentBlock.NumberU64())
-		headers := epochData.ReferenceBlockHeader
-		for _, h := range headers {
-			if h.Hash() == hash {
-				return true
-			}
-		}
-		currentBlock = dm.GetBlockByHash(currentBlock.ParentHash())
-	}
-	return false
-}
-
-func (dm *DAGManager) isTopoPrepared(hash common.Hash, members *[]common.Hash, fence int) bool {
-
-	if block := dm.GetBlockByHash(hash); block != nil {
-
-		// parent
-		if !dm.isInPreEpoch(block.ParentHash()) &&
-			!dag.IsBeforeFence(block.ParentHash(), members, fence) {
-			return false
-		}
-
-		epochData := dm.GetEpochData(block.Hash(), block.NumberU64())
-		headers := epochData.ReferenceBlockHeader
-
-		// references
-		for _, h := range headers {
-			if !dm.isInPreEpoch(h.Hash()) &&
-				!dag.IsBeforeFence(h.Hash(), members, fence) {
-				return false
-			}
-		}
-
-	} else {
-		log.Error("isTopoPrepared, block not found!", "hash", hash)
-		return false
-	}
-	return true
-}
-
-func (dm *DAGManager) topoSortInEpoch(members *[]common.Hash) {
-
-	// firstly sort by hash
-	sort.Sort(dag.HashSlice(*members))
-
-	// topology sort
-	fence := 0
-	for i := fence; i < len(*members); i++ {
-		if dm.isTopoPrepared((*members)[i], members, fence) {
-			for j := i; j > fence; j-- {
-				(*members)[j-1], (*members)[j] = (*members)[j], (*members)[j-1]
-			}
-			//fmt.Printf("topoSortInEpoch, (%s) :%d ---> %d\n", (*members)[fence].String(), fence, fence+1)
-			i = fence
-			fence++
-			continue
-		}
-	}
-
-	if fence != len(*members) {
-		log.Error("topoSortInEpoch, not all elememts sorted!", "length", len(*members), "sorted", fence)
-		fmt.Printf("topoSortInEpoch, not all elememts sorted! length:%d, sorted:%d\n", len(*members), fence)
-	}
-	//fmt.Printf("topoSortInEpoch, sorted! length:%d, sorted:%d\n", len(*members), fence)
 }
 
 // InsertBlocks attempts to insert the given batch of blocks in to the canonical
