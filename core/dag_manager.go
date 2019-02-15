@@ -300,8 +300,11 @@ func (dm *DAGManager) loadLastState() error {
 		log.Warn("Empty database, resetting chain")
 		return dm.Reset()
 	}
+
+	/*
 	// Restore the last known head block
 	tips := rawdb.ReadTipBlocksHashes(dm.db)
+	*/
 
 	// Make sure the entire head block is available
 	currentBlock := dm.GetBlockByHash(head)
@@ -321,9 +324,10 @@ func (dm *DAGManager) loadLastState() error {
 	// Everything seems to be fine, set as the head block
 	dm.currentBlock.Store(currentBlock)
 
+	/*
 	// Everything seems to be fine, set as tips
 	dm.currentTips.Store(tips)
-
+	*/
 
 
 
@@ -553,7 +557,7 @@ func (dm *DAGManager) ResetWithGenesisBlock(genesis *types.Block) error {
 	dm.genesisBlock = genesis
 	dm.insert(dm.genesisBlock)
 	dm.currentBlock.Store(dm.genesisBlock)
-	dm.currentTips.Store([]common.Hash{})
+	//dm.currentTips.Store([]common.Hash{})
 	dm.hc.SetGenesis(dm.genesisBlock.Header())
 	dm.hc.SetCurrentHeader(dm.genesisBlock.Header())
 	dm.currentFastBlock.Store(dm.genesisBlock)
