@@ -481,7 +481,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 		q.referenceTaskPool[hash] = header
 		q.referenceTaskQueue.Push(header, -float32(header.Number.Uint64()))
-		log.Info("ScheduleForReference, push to task Queue, number: ", header.Number.Uint64(), ", hash : ", header.Hash().String())
+		log.Info("ScheduleForReference, push to task Queue", " number: ", header.Number.Uint64(), ", hash : ", header.Hash().String())
 	}
 
 	return scheduled
@@ -579,7 +579,7 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 
 	}
 
-	log.Info("ReferenceResults get items, nproc : ", nproc)
+	log.Info("ReferenceResults get items"," nproc : ", nproc)
 
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	if nproc > maxResultsProcess {
@@ -589,7 +589,7 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 	copy(results, q.resultRefCache[:nproc])
 
 	for _, fr := range results{
-		log.Info("ReferenceResults ok header, header number : ", fr.Header.Number.Uint64(), ", header hash : ",  fr.Header.Hash().String())
+		log.Info("ReferenceResults ok header, header ", "number : ", fr.Header.Number.Uint64(), ", header hash : ",  fr.Header.Hash().String())
 	}
 
 	if len(results) > 0 {
