@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"gopkg.in/fatih/set.v0"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -197,7 +196,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 		return nil
 	}
 	// Gather the set of past uncles and ancestors
-	uncles, ancestors := set.New(), make(map[common.Hash]*types.Header)
+	uncles, ancestors := make(map[common.Hash]*types.Header), make(map[common.Hash]*types.Header)
 
 	number, parent := block.NumberU64()-1, block.ParentHash()
 	for i := 0; i < 7; i++ {
@@ -207,13 +206,16 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 		}
 		ancestors[ancestor.Hash()] = ancestor.Header()
 		for _, uncle := range ancestor.Uncles() {
-			uncles.Add(uncle.Hash())
+			if uncles[uncle.Hash()]==nil {
+				uncles[uncle.Hash()] = uncle
+			}
 		}
 		parent, number = ancestor.ParentHash(), number-1
 	}
 	ancestors[block.Hash()] = block.Header()
-	uncles.Add(block.Hash())
-
+	if uncles[block.Hash()]==nil {
+		uncles[block.Hash()] = block.Header()
+	}
 	// Verify each of the uncles that it's recent, but not an ancestor
 	for _, uncle := range block.Uncles() {
 		if uncle.Number.Uint64() < (block.Number().Uint64() - (uint64)(len(ancestors))) {
@@ -226,16 +228,28 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 
 		// Make sure every uncle is rewarded only once
 		hash := uncle.Hash()
-		if uncles.Has(hash) {
+		if uncles[hash] != nil {
 			return errDuplicateUncle
 		}
-		uncles.Add(hash)
+		uncles[hash] = uncle
 
 		// Make sure the uncle has a valid ancestry
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true, nil); err != nil {
+		var uncleParent *types.Header = ancestors[uncle.ParentHash]
+
+		if uncleParent==nil {
+			uncleParent = uncles[uncle.ParentHash]
+		}
+		if uncleParent==nil {
+			uncleParent = chain.GetHeaderByHash(uncle.ParentHash)
+		}
+		if uncleParent==nil {
+			return errors.New("uncle's parent should be available")
+		}
+
+		if err := ethash.verifyHeader(chain, uncle, uncleParent, true, true, nil); err != nil {
 			return err
 		}
 	}
