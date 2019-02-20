@@ -796,7 +796,8 @@ func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, erro
 				continue
 			}
 			// schedule reference block request
-			pm.refReqCh <- refRequest{block.Hash(), hdr}
+			//pm.refReqCh <- refRequest{block.Hash(), hdr}
+			pm.refReqCh <- refRequest{hdr.Hash(), hdr}
 		}
 	}
 	return 0, nil
