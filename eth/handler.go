@@ -92,7 +92,9 @@ type ProtocolManager struct {
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
+	refReqChMu    sync.RWMutex
 	refReqCh      chan refRequest
+
 	refRespCh     chan refResp
 	minedBlockSub *event.TypeMuxSubscription
 
@@ -797,7 +799,9 @@ func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, erro
 			}
 			// schedule reference block request
 			//pm.refReqCh <- refRequest{block.Hash(), hdr}
+			pm.refReqChMu.Lock()
 			pm.refReqCh <- refRequest{hdr.Hash(), hdr}
+			pm.refReqChMu.Unlock()
 		}
 	}
 	return 0, nil
