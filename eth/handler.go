@@ -229,7 +229,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// broadcast transactions
 	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-	pm.refReqCh = make(chan refRequest)
+	pm.refReqCh = make(chan refRequest, 1)
 	pm.refRespCh = make(chan refResp)
 	go pm.txBroadcastLoop()
 	go pm.syncReferenceBlockLoop()
@@ -815,10 +815,11 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 		case <-pm.quitSync:
 			return
 		case req := <-pm.refReqCh:
-			if v, exist := pendingHdrs[req.header.Hash()]; exist {
-				if v != req.header {
-					panic("logic error: reference block has been scheduled but the header is not same")
-				}
+			if _, exist := pendingHdrs[req.header.Hash()]; exist {
+				//if v, exist := pendingHdrs[req.header.Hash()]; exist {
+				//if v != req.header {
+				//	panic("logic error: reference block has been scheduled but the header is not same")
+				//}
 				log.Warn("reference block has been scheduled")
 				continue
 			}
