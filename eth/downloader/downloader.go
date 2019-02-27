@@ -1606,6 +1606,10 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 		blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		pivots[i] = blk
 		for _, refHdr := range blk.Uncles() {
+			ret := d.blockchain.GetBlockByHash(refHdr.Hash())
+			if ret != nil{
+				continue
+			}
 			refHdrs.PushBack(refHdr)
 		}
 	}
