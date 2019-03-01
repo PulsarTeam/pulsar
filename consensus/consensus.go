@@ -98,13 +98,13 @@ type Engine interface {
 	CalcDifficulty(chain BlockReader, time uint64, parent *types.Header, headers []*types.Header) *big.Int
 
 	// returns the pos weight in a certain cycle.
-	PosWeight(chain BlockReader, header *types.Header, headers []*types.Header) uint32
+	PosWeight(chain BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) uint32
 
 	// APIs returns the RPC APIs this consensus engine provides.
 	APIs(chain BlockReader) []rpc.API
 
 	//return target of the header
-	HashimotoforHeader(hash []byte, nonce uint64) ([]byte)
+	HashimotoforHeader(hash []byte, nonce uint64) []byte
 }
 
 // PoW is a consensus engine based on proof-of-work.

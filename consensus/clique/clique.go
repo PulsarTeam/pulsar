@@ -20,10 +20,6 @@ package clique
 import (
 	"bytes"
 	"errors"
-	"math/big"
-	"math/rand"
-	"sync"
-	"time"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -39,6 +35,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hashicorp/golang-lru"
+	"math/big"
+	"math/rand"
+	"sync"
+	"time"
 )
 
 const (
@@ -663,7 +663,7 @@ func (c *Clique) CalcDifficulty(chain consensus.BlockReader, time uint64, parent
 }
 
 // returns the pos weight in a certain cycle.
-func (c *Clique) PosWeight(chain consensus.BlockReader, header *types.Header, headers []*types.Header) uint32 {
+func (c *Clique) PosWeight(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) uint32 {
 	return 0
 }
 
@@ -688,6 +688,6 @@ func (c *Clique) APIs(chain consensus.BlockReader) []rpc.API {
 	}}
 }
 
-func (c *Clique)HashimotoforHeader(hash []byte, nonce uint64) ([]byte) {
+func (c *Clique) HashimotoforHeader(hash []byte, nonce uint64) []byte {
 	return nil
 }

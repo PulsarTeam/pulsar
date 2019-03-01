@@ -20,16 +20,16 @@ package ethash
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/rpc"
 	"math/big"
 	"math/rand"
 	"sync"
 	"time"
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/core"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -47,10 +47,10 @@ var (
 	// dumpMagic is a dataset dump header to sanity check a data dump.
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
 
-	initPosWeight = 5000
-	posWeightPrecision int64 = 10000
-	posWeightMax uint32 = 9500
-	posWeightMin uint32 = 500
+	initPosWeight             = 5000
+	posWeightPrecision int64  = 10000
+	posWeightMax       uint32 = 9500
+	posWeightMin       uint32 = 500
 )
 
 // Mode defines the type and amount of PoW verification an ethash engine makes.
@@ -66,7 +66,7 @@ const (
 
 // Config are the configuration parameters of the ethash.
 type Config struct {
-	PowMode        Mode
+	PowMode Mode
 }
 
 // Ethash is a consensus engine based on proof-of-work implementing the ethash
@@ -86,32 +86,32 @@ type Ethash struct {
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
 	//mining params
-	powTargetTimespan int64
-	minDifficulty int64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
-	powTargetSpacing int64
+	difficultyAdjustCycles uint64
+	minDifficulty          uint64 // The minimum of difficulty. It's also the maximum of delegate miner count, in order to avoid target overflow.
+	powTargetSpacing       uint64
 
 	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 }
 
-const(
+const (
 	TesterThreads = 1
 	//\\PowTargetTimespan = 14 * 24 * 60 * 60
 	//\\PowTargetTimespan = 75
-	PowTargetSpacing = 5
-	MinDifficulty = 131072
-)
 
-var PowTargetTimespan = core.BlocksInMatureCycle() * PowTargetSpacing
+	PowTargetSpacing       = 15
+	DifficultyAdjustCycles = 1 // how many cycles to adjust
+	MinDifficulty          = 131072
+)
 
 // New creates a full sized ethash PoW scheme.
 func New(config Config) *Ethash {
 	return &Ethash{
-		config:   config,
-		update:   make(chan struct{}),
-		hashrate: metrics.NewMeter(),
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
+		config:                 config,
+		update:                 make(chan struct{}),
+		hashrate:               metrics.NewMeter(),
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
 	}
 }
 
@@ -122,10 +122,10 @@ func NewTester() *Ethash {
 		config: Config{
 			PowMode: ModeTest,
 		},
-		threads: TesterThreads,
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
+		threads:                TesterThreads,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
 	}
 }
 
@@ -137,9 +137,9 @@ func NewFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
 	}
 }
 
@@ -151,11 +151,11 @@ func NewFakeFailer(fail uint64) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
-		threads: 1,
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
-		fakeFail: fail,
+		threads:                1,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
+		fakeFail:               fail,
 	}
 }
 
@@ -167,11 +167,11 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 		config: Config{
 			PowMode: ModeFake,
 		},
-		threads: 1,
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
-		fakeDelay: delay,
+		threads:                1,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
+		fakeDelay:              delay,
 	}
 }
 
@@ -182,31 +182,31 @@ func NewFullFaker() *Ethash {
 		config: Config{
 			PowMode: ModeFullFake,
 		},
-		threads: 1,
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
+		threads:                1,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
 	}
 }
 
 // NewShared creates a full sized ethash PoW shared between all requesters running
 // in the same process.
 func NewShared() *Ethash {
-//	return &Ethash{shared: sharedEthash}
+	//	return &Ethash{shared: sharedEthash}
 	return &Ethash{
-		shared: sharedEthash,
-		threads: 1,
-		powTargetTimespan: PowTargetTimespan,
-		powTargetSpacing: PowTargetSpacing,
-		minDifficulty: MinDifficulty,
+		shared:                 sharedEthash,
+		threads:                1,
+		difficultyAdjustCycles: DifficultyAdjustCycles,
+		powTargetSpacing:       PowTargetSpacing,
+		minDifficulty:          MinDifficulty,
 	}
 }
 
 // calculate the pos target.
 func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 
-	if header.Difficulty.Int64() < ethash.minDifficulty {
-		panic( fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64() , ethash.minDifficulty, header.Number.Int64() ))
+	if header.Difficulty.Uint64() < ethash.minDifficulty {
+		panic(fmt.Sprintf("The header difficulty(%d) is less than minDifficulty(%d), header number=%d", header.Difficulty.Int64(), ethash.minDifficulty, header.Number.Int64()))
 	}
 
 	// calc the target
@@ -214,7 +214,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 	//powWeight := posWeightPrecision - int64(header.PosWeight)
 	posTargetAvg := new(big.Int).Div(target, big.NewInt(posWeightPrecision))
 	posTargetAvg.Mul(posTargetAvg, big.NewInt(int64(header.PosWeight)))
-	powTarget := new(big.Int).Sub( target, posTargetAvg)
+	powTarget := new(big.Int).Sub(target, posTargetAvg)
 
 	//powTarget := new(big.Int).Mul(target, big.NewInt(powWeight))
 	matureState := core.GetMatureState(chain, header.Number.Uint64(), headers)
@@ -223,7 +223,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 	}
 
 	// POS
-	_, localSum, _:= matureState.GetDelegateMiner(header.Coinbase)
+	_, localSum, _ := matureState.GetDelegateMiner(header.Coinbase)
 	if localSum == nil || localSum.Sign() == 0 {
 		return powTarget
 	}
@@ -240,9 +240,14 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 }
 
 // returns the pos weight in a certain cycle.
-func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Header, headers []*types.Header) uint32 {
+func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) uint32 {
 	if header.Number.Uint64() < core.MinMatureBlockNumber() {
 		return uint32(initPosWeight)
+	}
+
+	weightAdjustInterval := uint64(core.BlocksInMatureCycle())
+	if (parent.Number.Uint64() % weightAdjustInterval) != 0 {
+		return parent.PosWeight
 	}
 
 	powProduction := ethash.GetPowProduction(chain, header, headers)
@@ -263,7 +268,7 @@ func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Heade
 	return weight32u
 }
 
-func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header) bool {
+func (ethash *Ethash) FindInHeaders(header *types.Header, headers []*types.Header) bool {
 	for _, v := range headers {
 		if header.Hash().String() == v.Hash().String() {
 			return true
@@ -272,16 +277,15 @@ func (ethash *Ethash)FindInHeaders(header *types.Header, headers []*types.Header
 	return false
 }
 
-
 // returns the total pow production in the previous mature cycle.
 func (ethash *Ethash) GetPowProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	for i := start; i < end; i++ {
-		h:=chain.GetHeaderByNumber(i)
+		h := chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
 			sumPow.Add(sumPow, foundHeader.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -295,10 +299,10 @@ func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *type
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
 	for i := start; i < end; i++ {
-		h:=chain.GetHeaderByNumber(i)
+		h := chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
 			sumPos.Add(sumPos, foundHeader.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -312,10 +316,10 @@ func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.BlockReader, heade
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
 	for i := uint64(0); i < end; i++ {
-		h:=chain.GetHeaderByNumber(i)
+		h := chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
 			sumPos.Add(sumPos, foundHeader.PosProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -329,10 +333,10 @@ func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.BlockReader, heade
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPow := big.NewInt(0)
 	for i := uint64(0); i < end; i++ {
-		h:=chain.GetHeaderByNumber(i)
+		h := chain.GetHeaderByNumber(i)
 		if h != nil {
 			sumPow.Add(sumPow, h.PowProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader!=nil {
+		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
 			sumPow.Add(sumPow, foundHeader.PowProduction)
 		} else {
 			log.Warn("cannot find header.", " header number:", i)
@@ -384,6 +388,6 @@ func (ethash *Ethash) APIs(chain consensus.BlockReader) []rpc.API {
 	return nil
 }
 
-func (ethash *Ethash)HashimotoforHeader(hash []byte, nonce uint64) ([]byte) {
+func (ethash *Ethash) HashimotoforHeader(hash []byte, nonce uint64) []byte {
 	return hashimoto(hash, nonce)
 }

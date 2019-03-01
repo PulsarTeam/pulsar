@@ -39,12 +39,12 @@ import (
 var (
 	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128), big.NewInt(1e18)) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18)                                   // Block reward in wei for successfully mining a block upward from Byzantium
-	maxUncles                       = 2                                                   // Maximum number of uncles allowed in a single block
-	allowedFutureBlockTime          = 15 * time.Second                                    // Max time from current time allowed for blocks, before they're considered future blocks
+	maxUncles                       = 20                                                  // Maximum number of uncles allowed in a single block
+	allowedFutureBlockTime          = 60 * time.Second                                    // Max time from current time allowed for blocks, before they're considered future blocks
 	//InterestRate           *big.Int = big.NewInt(100)
 	//InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision *big.Int = big.NewInt(1000000)
-	halveIntervalGoal uint64   = 128 // (60*60*24*365/PowTargetSpacing)*2 // every two years
+	halveIntervalGoal uint64   = (60 * 60 * 24 * 365 / PowTargetSpacing) * 2 // every two years
 
 	PosSupplyLimit          *big.Int = new(big.Int).Mul(new(big.Int).SetUint64(128*core.FixedHalveInterval(halveIntervalGoal)*2), big.NewInt(1e18)) // The PosSupplyLimit is equal to PowSupplyLimit
 	PosSupplyN              *big.Int = new(big.Int).SetUint64(core.FixedHalveInterval(halveIntervalGoal) * 10)                                      // doubled after about 20 years, so 5% every year
@@ -206,14 +206,14 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 		}
 		ancestors[ancestor.Hash()] = ancestor.Header()
 		for _, uncle := range ancestor.Uncles() {
-			if uncles[uncle.Hash()]==nil {
+			if uncles[uncle.Hash()] == nil {
 				uncles[uncle.Hash()] = uncle
 			}
 		}
 		parent, number = ancestor.ParentHash(), number-1
 	}
 	ancestors[block.Hash()] = block.Header()
-	if uncles[block.Hash()]==nil {
+	if uncles[block.Hash()] == nil {
 		uncles[block.Hash()] = block.Header()
 	}
 	// Verify each of the uncles that it's recent, but not an ancestor
@@ -222,7 +222,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 			return errors.New("uncle is too low")
 		}
 
-		if !ethash.isBackToPivot(chain,uncle,ancestors){
+		if !ethash.isBackToPivot(chain, uncle, ancestors) {
 			return errors.New("uncle's ancestor should in pivot chain")
 		}
 
@@ -239,13 +239,13 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 		}
 		var uncleParent *types.Header = ancestors[uncle.ParentHash]
 
-		if uncleParent==nil {
+		if uncleParent == nil {
 			uncleParent = uncles[uncle.ParentHash]
 		}
-		if uncleParent==nil {
+		if uncleParent == nil {
 			uncleParent = chain.GetHeaderByHash(uncle.ParentHash)
 		}
-		if uncleParent==nil {
+		if uncleParent == nil {
 			return errors.New("uncle's parent should be available")
 		}
 
@@ -255,7 +255,6 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 	}
 	return nil
 }
-
 
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
@@ -294,7 +293,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	//}
 	//w := new(big.Int).Div(pos, y)
 	//fmt.Printf("===header No.%d, Nonce:%x\n", header.Number, header.Nonce)
-	expectedPosWeight := ethash.PosWeight(chain, header, headers)
+	expectedPosWeight := ethash.PosWeight(chain, header, parent, headers)
 
 	if int64(header.PosWeight) > posWeightPrecision {
 		return fmt.Errorf("invalid pos weight: have %v, max  %v", header.PosWeight, posWeightPrecision)
@@ -328,7 +327,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	}
 	// Verify the engine specific seal securing the block
 	if seal {
-		if err := ethash.VerifySeal(chain, header, headers); err != nil {
+		if err := ethash.verifySeal(chain, header, parent, headers); err != nil {
 			return err
 		}
 	}
@@ -361,7 +360,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 	//ethash.powTargetSpacing = 15
 
 	var (
-		difficultyAdjustInterval int64 = ethash.powTargetTimespan / ethash.powTargetSpacing
+		difficultyAdjustInterval uint64 = uint64(core.BlocksInMatureCycle()) * ethash.difficultyAdjustCycles
 		h                        *types.Header
 	)
 	//var difficultyAdjustInterval int64 = 100
@@ -370,7 +369,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 		return parent.Difficulty
 	}
 
-	if (parent.Number.Int64() % difficultyAdjustInterval) != 0 {
+	if (parent.Number.Uint64() % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
 	}
 
@@ -394,22 +393,23 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 			}
 		}*/
 
+	var targetTimespan uint64 = difficultyAdjustInterval * ethash.powTargetSpacing
 	var actualTimespan uint64 = (uint64)(parent.Time.Int64() - (h.Time.Int64()))
 
-	if actualTimespan < (uint64)(ethash.powTargetTimespan/4) {
-		actualTimespan = (uint64)(ethash.powTargetTimespan / 4)
+	if actualTimespan < targetTimespan/4 {
+		actualTimespan = targetTimespan / 4
 	}
-	if actualTimespan > (uint64)(ethash.powTargetTimespan*4) {
-		actualTimespan = (uint64)(ethash.powTargetTimespan * 4)
+	if actualTimespan > targetTimespan*4 {
+		actualTimespan = targetTimespan * 4
 	}
-	var powLimit int64 = ethash.minDifficulty
+	var powLimit uint64 = ethash.minDifficulty
 	var newDifficulty *big.Int = parent.Difficulty
-	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() * new(big.Int).SetInt64(ethash.powTargetTimespan).Int64())
-	newDifficulty = new(big.Int).SetInt64(newDifficulty.Int64() / (int64)(actualTimespan))
-	if newDifficulty.Int64() < powLimit {
-		newDifficulty = new(big.Int).SetInt64(powLimit)
+	newDifficulty = new(big.Int).SetUint64(newDifficulty.Uint64() * new(big.Int).SetUint64(targetTimespan).Uint64())
+	newDifficulty = new(big.Int).SetUint64(newDifficulty.Uint64() / actualTimespan)
+	if newDifficulty.Uint64() < powLimit {
+		newDifficulty = new(big.Int).SetUint64(powLimit)
 	}
-	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Int64(), "newdifficulty", newDifficulty.Int64(), "old-difficulty", parent.Difficulty.Int64())
+	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Uint64(), "newdifficulty", newDifficulty.Uint64(), "old-difficulty", parent.Difficulty.Uint64())
 
 	return newDifficulty
 }
@@ -427,7 +427,16 @@ var (
 
 // VerifySeal implements consensus.Engine, checking whether the given block satisfies
 // the PoW difficulty requirements.
+
 func (ethash *Ethash) VerifySeal(chain consensus.BlockReader, header *types.Header, headers []*types.Header) error {
+	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	if parent == nil {
+		return fmt.Errorf("the parent(%s) of (%s) doesn't exist!", header.ParentHash.String(), header.Hash().String())
+	}
+	return ethash.verifySeal(chain, header, parent, headers)
+}
+
+func (ethash *Ethash) verifySeal(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) error {
 	// If we're running a fake PoW, accept any seal as valid
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		time.Sleep(ethash.fakeDelay)
@@ -438,14 +447,14 @@ func (ethash *Ethash) VerifySeal(chain consensus.BlockReader, header *types.Head
 	}
 	// If we're running a shared PoW, delegate verification to it
 	if ethash.shared != nil {
-		return ethash.shared.VerifySeal(chain, header, headers)
+		return ethash.shared.verifySeal(chain, header, parent, headers)
 	}
 	// Ensure that we have a valid difficulty for the block
 	if header.Difficulty.Sign() <= 0 {
 		return errInvalidDifficulty
 	}
 
-	w := big.NewInt(int64(ethash.PosWeight(chain, header, headers)))
+	w := big.NewInt(int64(ethash.PosWeight(chain, header, parent, headers)))
 
 	if w.Cmp(big.NewInt(int64(header.PosWeight))) != 0 {
 		return errInvalidPosWeight
@@ -473,7 +482,7 @@ func (ethash *Ethash) Prepare(chain consensus.BlockReader, header *types.Header)
 		return consensus.ErrUnknownAncestor
 	}
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, nil)
-	header.PosWeight = ethash.PosWeight(chain, header, nil)
+	header.PosWeight = ethash.PosWeight(chain, header, parent, nil)
 	return nil
 }
 
