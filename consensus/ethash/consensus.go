@@ -40,7 +40,7 @@ var (
 	FrontierBlockReward    *big.Int = new(big.Int).Mul(big.NewInt(128), big.NewInt(1e18)) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18)                                   // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 20                                                  // Maximum number of uncles allowed in a single block
-	allowedFutureBlockTime          = 60 * time.Second                                    // Max time from current time allowed for blocks, before they're considered future blocks
+	allowedFutureBlockTime          = 15 * time.Second                                    // Max time from current time allowed for blocks, before they're considered future blocks
 	//InterestRate           *big.Int = big.NewInt(100)
 	//InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision *big.Int = big.NewInt(1000000)
