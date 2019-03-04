@@ -486,6 +486,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		for i, body := range request {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
+			/*
+			for _, h := range body.Uncles{
+				p.MarkMaybeBlock(h.Hash())
+			}
+			*/
 		}
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
@@ -617,7 +622,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
-		p.MarkMaybeBlock(request.Block.Hash())
+		for _, u := range request.Block.Uncles(){
+			p.MarkMaybeBlock(u.Hash())
+		}
 
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
