@@ -617,6 +617,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
+		p.MarkMaybeBlock(request.Block.Hash())
+
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
@@ -827,8 +829,12 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			pendingHdrs[req.header.Hash()] = req.header
 			peers := pm.peers.PeersWithBlock(req.hash)
 			if len(peers) == 0 {
-				panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				peers = pm.peers.PeersMayWithBlock(req.hash)
+				if len(peers) == 0 {
+					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				}
 			}
+
 			for _, peer := range peers {
 				err := peer.RequestReferenceBody(req.header.Hash())
 				if err == nil {

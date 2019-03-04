@@ -87,6 +87,7 @@ type peer struct {
 
 	knownTxs    *set.Set                  // Set of transaction hashes known to be known by this peer
 	knownBlocks *set.Set                  // Set of block hashes known to be known by this peer
+	maybeBlocks *set.Set
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
@@ -181,6 +182,14 @@ func (p *peer) MarkBlock(hash common.Hash) {
 		p.knownBlocks.Pop()
 	}
 	p.knownBlocks.Add(hash)
+}
+
+func (p *peer) MarkMaybeBlock(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known block hash
+	for p.maybeBlocks.Size() >= maxKnownBlocks {
+		p.maybeBlocks.Pop()
+	}
+	p.maybeBlocks.Add(hash)
 }
 
 // MarkTransaction marks a transaction as known for the peer, ensuring that it
@@ -511,6 +520,19 @@ func (ps *peerSet) PeersWithBlock(hash common.Hash) []*peer {
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
 		if p.knownBlocks.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) PeersMayWithBlock(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.maybeBlocks.Has(hash) {
 			list = append(list, p)
 		}
 	}
