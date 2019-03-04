@@ -682,6 +682,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+		p.MarkBlock(resp.hash)
 		pm.refRespCh <- resp
 
 	case msg.Code == ReferenceBodiesMsg:
