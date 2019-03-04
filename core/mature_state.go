@@ -33,7 +33,7 @@ type matureStateSet struct {
 }
 
 const (
-	blocksInMatureCycle     uint64 = 32 // the mature cycle, for 15 seconds per block it's 1280 minutes, i.e., about 21.333 hours
+	blocksInMatureCycle     uint64 = 16 // the mature cycle, for 15 seconds per block it's 1280 minutes, i.e., about 21.333 hours
 	blocksInMatureCycleMask        = ^(blocksInMatureCycle - 1)
 	minMatureBlockNumber           = blocksInMatureCycle * 2
 )
