@@ -471,14 +471,14 @@ func (self *worker) commitNewWork() {
 	ancestors := make([]*types.Block, 0)
 	var farthestAncestor uint64
 	currentNumber := self.current.header.Number.Uint64()
-	if self.current.header.Number.Uint64() > 7 {
-		farthestAncestor = self.current.header.Number.Uint64() - 7
+	if self.current.header.Number.Uint64() > 6 {
+		farthestAncestor = self.current.header.Number.Uint64() - 6
 	} else {
 		farthestAncestor = 0
 	}
 
 	// get ancestors
-	for num := farthestAncestor; num < currentNumber; num++ {
+	for num := farthestAncestor; num <= currentNumber; num++ {
 		if block := self.chain.GetBlockByNumber(num); block != nil {
 			ancestors = append(ancestors, block)
 		}
@@ -507,16 +507,15 @@ func (self *worker) commitNewWork() {
 		header.GasLimit += h.GasLimit
 	}
 
-	// parent transactions
-	var parentTxs []*types.Transaction
-	parentTxs = append(parentTxs, parent.Transactions()...)
+	// ancestor's transactions
+	var ancestorTxs []*types.Transaction
+	for _, b := range ancestors {
+		ancestorTxs = append(ancestorTxs, b.Transactions()...)
+	}
 
-	// map of ref block's acc and txs
-	refAccTxsMp := make(map[common.Address]types.Transactions)
-	// ref block's txs
-	refTxs := make([]*types.Transaction, 0)
-	// temporary array for transactions
-	tmpTxs := make([]*types.Transaction, 0)
+	refAccTxsMp := make(map[common.Address]types.Transactions) // map of ref block's acc and txs
+	refTxs := make([]*types.Transaction, 0)                    // ref block's txs
+	tmpTxs := make([]*types.Transaction, 0)                    // temporary array for transactions
 
 	n := len(refBlocks)
 	if n > 0 {
@@ -525,13 +524,14 @@ func (self *worker) commitNewWork() {
 		}
 
 		for _, tx := range refTxs {
-			if !self.isContained(tx, parentTxs) {
+			if !self.isContained(tx, ancestorTxs) {
 				tmpTxs = append(tmpTxs, tx)
 				acc, _ := types.Sender(self.current.signer, tx)
 				refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
 			}
 		}
 	}
+
 	// pending transactions
 	pendingTxs := make([]*types.Transaction, 0)
 	for _, txs := range pending {
