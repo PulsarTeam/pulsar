@@ -18,7 +18,6 @@ package miner
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
 	"sort"
 	"sync"
@@ -613,10 +612,6 @@ func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction)
 		if t.Hash() == tx.Hash() {
 			return true
 		}
-	}
-
-	if t, _, _, _ := rawdb.ReadTransaction(self.chainDb, tx.Hash()); t != nil {
-		return true
 	}
 
 	return false
