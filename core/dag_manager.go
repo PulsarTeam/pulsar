@@ -1236,9 +1236,11 @@ func (dm *DAGManager) InsertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 //Based pivot block fetch uncles transactions
 func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.TransactionRefs {
 	var (
-		txRefs    types.TransactionRefs = make([]*types.TransactionRef, 0)
-		refTxsTmp types.Transactions    = make([]*types.Transaction, 0)
-		refTxs    types.Transactions    = make([]*types.Transaction, 0)
+		txRefs      types.TransactionRefs = make([]*types.TransactionRef, 0)
+		refTxsTmp   types.Transactions    = make([]*types.Transaction, 0)
+		refTxs      types.Transactions    = make([]*types.Transaction, 0)
+		ancestorTxs types.Transactions    = make([]*types.Transaction, 0)
+		index       uint64
 	)
 	for i := 0; i < len(block.Uncles()); i++ {
 
@@ -1248,18 +1250,26 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 			log.Warn("the block uncles is not complete, num:", block.Uncles()[i].Number.Uint64())
 		}
 	}
-	parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
-	if len(parentTxs) > 0 {
+	if len(block.Uncles()) > 0 {
+		for index = 1; index <= 7; index++ {
+			if block.Number().Uint64()-index >= 0 {
+				ancestorTxs = append(ancestorTxs, dm.GetBlockByNumber(block.Number().Uint64()-index).Transactions()...)
+			}
+		}
+	}
+
+	//parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
+	if len(ancestorTxs) > 0 {
 		for _, rtx := range refTxsTmp {
 			tx, _, _, _ := rawdb.ReadTransaction(dm.db, rtx.Hash())
 			if tx != nil {
 				continue
 			}
-			for i := len(parentTxs) - 1; i >= 0; i-- {
-				if rtx.Hash() == parentTxs[i].Hash() {
+			for i := len(ancestorTxs) - 1; i >= 0; i-- {
+				if rtx.Hash() == ancestorTxs[i].Hash() {
 					break
 				}
-				if i == 0 && rtx.Hash() != parentTxs[i].Hash() {
+				if i == 0 && rtx.Hash() != ancestorTxs[i].Hash() {
 					refTxs = append(refTxs, rtx)
 				}
 			}
