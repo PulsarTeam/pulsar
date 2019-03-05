@@ -489,6 +489,7 @@ func (self *worker) commitNewWork() {
 		if uncle.Number().Uint64() < farthestAncestor {
 			delete(self.possibleUncles, hash)
 		} else if self.canBackToPivot(uncle, ancestors) && !self.isReferenced(uncle, ancestors) && uncle.Number().Uint64() < currentNumber {
+			fmt.Println("+++++++++++++++++", uncle.Number().Uint64(), uncle.Hash().String())
 			refBlocks = append(refBlocks, uncle)
 			delete(self.possibleUncles, hash)
 		}
