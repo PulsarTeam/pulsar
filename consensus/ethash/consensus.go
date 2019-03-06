@@ -295,6 +295,8 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	//fmt.Printf("===header No.%d, Nonce:%x\n", header.Number, header.Nonce)
 	expectedPosWeight := ethash.PosWeight(chain, header, parent, headers)
 
+	log.Debug("verifyHeader-call-PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "PosWeight", header.PosWeight, "expectedPosWeight", expectedPosWeight)
+
 	if int64(header.PosWeight) > posWeightPrecision {
 		return fmt.Errorf("invalid pos weight: have %v, max  %v", header.PosWeight, posWeightPrecision)
 	} else if expectedPosWeight != header.PosWeight {

@@ -242,6 +242,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 // returns the pos weight in a certain cycle.
 func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) uint32 {
 	if header.Number.Uint64() < core.MinMatureBlockNumber() {
+		log.Debug("#1 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "initPosWeight", initPosWeight)
 		return uint32(initPosWeight)
 	}
 
@@ -252,8 +253,10 @@ func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Heade
 
 	powProduction := ethash.GetPowProduction(chain, header, headers)
 	posProduction := ethash.GetPosProduction(chain, header, headers)
+	log.Debug("#2 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "powProduction", powProduction.String(), "posProduction", posProduction.String())
 	t := big.NewInt(0)
 	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
+		log.Debug("#3 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "initPosWeight", initPosWeight)
 		return uint32(initPosWeight)
 	}
 
@@ -281,14 +284,26 @@ func (ethash *Ethash) FindInHeaders(header *types.Header, headers []*types.Heade
 func (ethash *Ethash) GetPowProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
-	for i := start; i < end; i++ {
-		h := chain.GetHeaderByNumber(i)
-		if h != nil {
-			sumPow.Add(sumPow, h.PowProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
-			sumPow.Add(sumPow, foundHeader.PowProduction)
+
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! GetPowProduction can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		log.Debug("#DEBUG# GetPowProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() <= start {
+			if start == 0 {
+				sumPow.Add(sumPow, h.PowProduction)
+			}
+			break
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			sumPow.Add(sumPow, h.PowProduction)
 		}
 	}
 	return sumPow
@@ -298,14 +313,26 @@ func (ethash *Ethash) GetPowProduction(chain consensus.BlockReader, header *type
 func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	start, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
-	for i := start; i < end; i++ {
-		h := chain.GetHeaderByNumber(i)
-		if h != nil {
-			sumPos.Add(sumPos, h.PosProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
-			sumPos.Add(sumPos, foundHeader.PosProduction)
+
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! GetPosProduction can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		log.Debug("#DEBUG# GetPosProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() <= start {
+			if start == 0 {
+				sumPos.Add(sumPos, h.PowProduction)
+			}
+			break
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			sumPos.Add(sumPos, h.PosProduction)
 		}
 	}
 	return sumPos
@@ -315,16 +342,26 @@ func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *type
 func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
-	for i := uint64(0); i < end; i++ {
-		h := chain.GetHeaderByNumber(i)
-		if h != nil {
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! GetPosMatureTotalSupply can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		log.Debug("#DEBUG# GetPosMatureTotalSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() == 0 {
 			sumPos.Add(sumPos, h.PosProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
-			sumPos.Add(sumPos, foundHeader.PosProduction)
+			break
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			sumPos.Add(sumPos, h.PosProduction)
 		}
 	}
+
 	return sumPos
 }
 
@@ -332,16 +369,26 @@ func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.BlockReader, heade
 func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
 	_, end := core.LastMatureCycleRange(header.Number.Uint64())
 	sumPow := big.NewInt(0)
-	for i := uint64(0); i < end; i++ {
-		h := chain.GetHeaderByNumber(i)
-		if h != nil {
-			sumPow.Add(sumPow, h.PowProduction)
-		} else if foundHeader := ethash.FindInHeadersByNum(i, headers); foundHeader != nil {
-			sumPow.Add(sumPow, foundHeader.PowProduction)
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! GetPowMatureTotalSupply can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		log.Debug("#DEBUG# GetPowMatureTotalSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() == 0 {
+			sumPow.Add(sumPow, h.PosProduction)
+			break
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			sumPow.Add(sumPow, h.PosProduction)
 		}
 	}
+
 	return sumPow
 }
 
