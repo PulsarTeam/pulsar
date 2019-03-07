@@ -1243,9 +1243,23 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 		index       uint64
 	)
 	for i := 0; i < len(block.Uncles()); i++ {
-
 		if dm.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
-			refTxsTmp = append(refTxsTmp, dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions()...)
+			if len(refTxsTmp) > 0 {
+				for _, txin := range dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions() {
+					for k := len(refTxsTmp) - 1; k >= 0; k-- {
+						if txin.Hash() == refTxsTmp[k].Hash() {
+							break
+						}
+						if k == 0 && txin.Hash() != refTxsTmp[k].Hash() {
+							refTxsTmp = append(refTxsTmp, txin)
+						}
+					}
+
+				}
+			} else {
+				refTxsTmp = append(refTxsTmp, dm.GetBlockByHash(block.Uncles()[i].Hash()).Transactions()...)
+			}
+
 		} else {
 			log.Warn("the block uncles is not complete, num:", block.Uncles()[i].Number.Uint64())
 		}
@@ -1261,10 +1275,6 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 	//parentTxs := dm.GetBlockByHash(block.ParentHash()).Transactions()
 	if len(ancestorTxs) > 0 {
 		for _, rtx := range refTxsTmp {
-			tx, _, _, _ := rawdb.ReadTransaction(dm.db, rtx.Hash())
-			if tx != nil {
-				continue
-			}
 			for i := len(ancestorTxs) - 1; i >= 0; i-- {
 				if rtx.Hash() == ancestorTxs[i].Hash() {
 					break
