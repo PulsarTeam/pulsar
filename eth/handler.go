@@ -825,11 +825,10 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 		case <-pm.quitSync:
 			return
 		case req := <-pm.refReqCh:
-			if _, exist := pendingHdrs[req.header.Hash()]; exist {
-				//if v, exist := pendingHdrs[req.header.Hash()]; exist {
-				//if v != req.header {
-				//	panic("logic error: reference block has been scheduled but the header is not same")
-				//}
+			if v, exist := pendingHdrs[req.header.Hash()]; exist {
+				if v.Hash() != req.header.Hash() {
+					panic("logic error: reference block has been scheduled but the header is not same")
+				}
 				log.Warn("reference block has been scheduled")
 				continue
 			}
