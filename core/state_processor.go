@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -92,6 +93,8 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 			receipts = append(receipts, receipt)
 			allLogs = append(allLogs, receipt.Logs...)
 			execTxs = append(execTxs, rtx)
+
+			fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), rtx.Hash().String())
 		}
 	}
 	// Iterate over and process the individual transactions
@@ -104,6 +107,8 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 		execTxs = append(execTxs, tx)
+
+		fmt.Printf("Process, block.number = %v, tx hash = %s\n", block.Number().Uint64(), tx.Hash().String())
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)

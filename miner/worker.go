@@ -761,7 +761,11 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.DAGManager, c
 	}
 	if !isRef {
 		env.txs = append(env.txs, tx)
+		fmt.Printf("commitTransaction, block.number = %v, tx hash = %s\n", env.header.Number.Uint64(), tx.Hash().String())
+	} else {
+		fmt.Printf("commitTransaction, block.number = %v, ref tx hash = %s\n", env.header.Number.Uint64(), tx.Hash().String())
 	}
+
 	env.receipts = append(env.receipts, receipt)
 
 	return nil, receipt.Logs
