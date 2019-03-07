@@ -518,7 +518,21 @@ func (self *worker) commitNewWork() {
 
 	if len(refBlocks) > 0 {
 		for _, rb := range refBlocks {
-			refTxs = append(refTxs, rb.Transactions()...)
+			if len(refTxs) > 0 {
+				for _, txin := range rb.Transactions() {
+					for k := len(refTxs) - 1; k >= 0; k-- {
+						if txin.Hash() == refTxs[k].Hash() {
+							break
+						}
+						if k == 0 && txin.Hash() != refTxs[k].Hash() {
+							refTxs = append(refTxs, txin)
+						}
+					}
+
+				}
+			} else {
+				refTxs = append(refTxs, rb.Transactions()...)
+			}
 		}
 
 		for _, tx := range refTxs {
