@@ -548,8 +548,16 @@ func (self *worker) commitNewWork() {
 		}
 	}
 
+	if self.current.gasPool == nil {
+		self.current.gasPool = new(core.GasPool).AddGas(self.current.header.GasLimit)
+	}
+
 	// refTxs are sorted and non-duplicated
 	for _, rt := range refTxs {
+		if self.current.gasPool.Gas() < params.TxGas {
+			log.Trace("Not enough gas for further transactions", "have", self.current.gasPool, "want", params.TxGas)
+			continue
+		}
 		if err, _ := self.current.commitTransaction(rt, self.chain, self.coinbase, self.current.gasPool, true); err == nil {
 			work.ExecutedTxs = append(work.ExecutedTxs, rt)
 		}
