@@ -512,9 +512,8 @@ func (self *worker) commitNewWork() {
 		ancestorTxs = append(ancestorTxs, b.Transactions()...)
 	}
 
-	refAccTxsMp := make(map[common.Address]types.Transactions) // map of ref block's acc and txs
-	refTxs := make([]*types.Transaction, 0)                    // ref block's txs
-	tmpTxs := make([]*types.Transaction, 0)                    // temporary array for transactions
+	refTxs := make([]*types.Transaction, 0) // ref block's txs
+	tmpTxs := make([]*types.Transaction, 0) // temporary array for transactions
 
 	if len(refBlocks) > 0 {
 		for _, rb := range refBlocks {
@@ -534,14 +533,6 @@ func (self *worker) commitNewWork() {
 				refTxs = append(refTxs, rb.Transactions()...)
 			}
 		}
-
-		for _, tx := range refTxs {
-			if !self.isContained(tx, ancestorTxs) {
-				tmpTxs = append(tmpTxs, tx)
-				acc, _ := types.Sender(self.current.signer, tx)
-				refAccTxsMp[acc] = append(refAccTxsMp[acc], tx)
-			}
-		}
 	}
 
 	// pending transactions
@@ -557,14 +548,16 @@ func (self *worker) commitNewWork() {
 		}
 	}
 
-	txsRef := types.NewTransactionsByPriceAndNonce(self.current.signer, refAccTxsMp, true)
+	// refTxs are sorted and non-duplicated
+	for _, rt := range refTxs {
+		if err, _ := self.current.commitTransaction(rt, self.chain, self.coinbase, self.current.gasPool, true); err == nil {
+			work.ExecutedTxs = append(work.ExecutedTxs, rt)
+		}
+	}
+
 	txsPending := types.NewTransactionsByPriceAndNonce(self.current.signer, pendingAccTxsMp, false)
-
-	executedTxs := work.commitTransactions(self.mux, txsRef, self.chain, self.coinbase)
-	executedTxs = append(executedTxs, work.commitTransactions(self.mux, txsPending, self.chain, self.coinbase)...)
-
+	work.ExecutedTxs = append(work.ExecutedTxs, work.commitTransactions(self.mux, txsPending, self.chain, self.coinbase)...)
 	work.RefBlocks = refBlocks
-	work.ExecutedTxs = executedTxs
 
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, unclesHeaders, work.receipts); err != nil {
