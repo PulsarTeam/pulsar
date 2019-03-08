@@ -17,6 +17,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -24,7 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -55,48 +55,25 @@ func NewStateProcessor(config *params.ChainConfig, bc *DAGManager, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions, txs types.TransactionRefs, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, types.Transactions, error) {
 	var (
-		receipts    types.Receipts
-		usedGas     = new(uint64)
-		header      = block.Header()
-		allLogs     []*types.Log
-		gp          = new(GasPool).AddGas(block.GasLimit())
-		execTxs     types.Transactions
-		errResult   error
-		signer      types.Signer                          = types.MakeSigner(p.config, block.Number())
-		txsAccTxsMp map[common.Address]types.Transactions = make(map[common.Address]types.Transactions, 0)
+		receipts  types.Receipts
+		usedGas   = new(uint64)
+		header    = block.Header()
+		allLogs   []*types.Log
+		gp        = new(GasPool).AddGas(block.GasLimit())
+		execTxs   types.Transactions
+		errResult error
 	)
 	for _, tx := range txs {
-		acc, _ := types.Sender(signer, tx.Tx)
-		txsAccTxsMp[acc] = append(txsAccTxsMp[acc], tx.Tx)
-	}
-	refTxs := types.NewTransactionsByPriceAndNonce(signer, txsAccTxsMp, true)
-	//first deal with reference txs
-	for {
-		rtx := refTxs.Peek()
-		if rtx == nil {
-			break
-		}
-		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, rtx, usedGas, cfg)
-		switch err {
-		case ErrGasLimitReached:
-			refTxs.Pop()
-		case ErrNonceTooLow:
-			refTxs.Shift()
-		case ErrNonceTooHigh:
-			refTxs.Pop()
-		case nil:
-			refTxs.Shift()
-		default:
-			refTxs.Shift()
-		}
+		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx.Tx, usedGas, cfg)
 		if err == nil {
 			receipts = append(receipts, receipt)
 			allLogs = append(allLogs, receipt.Logs...)
-			execTxs = append(execTxs, rtx)
+			execTxs = append(execTxs, tx.Tx)
 
-			fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), rtx.Hash().String())
+			fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), tx.Tx.Hash().String())
 		}
 	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range pivotTxs {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
