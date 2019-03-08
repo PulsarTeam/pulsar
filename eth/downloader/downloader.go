@@ -1598,6 +1598,17 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	return nil
 }
 
+func (d *Downloader) findblk(refHdrs *list.List, blk *types.Header) bool {
+	for e := refHdrs.Front(); e != nil; e = e.Next() {
+		h := e.Value.(*types.Header)
+		if blk.Hash() == h.Hash(){
+			return true
+		}
+	}
+
+	return false
+}
+
 func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *list.List, error) {
 	pivots := make(types.Blocks, len(results))
 	refHdrs := list.New()
@@ -1610,6 +1621,11 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 			if ret != nil{
 				continue
 			}
+
+			if refHdrs.Len() != 0 && d.findblk(refHdrs, refHdr) {
+				continue
+			}
+
 			refHdrs.PushBack(refHdr)
 		}
 	}
@@ -1639,6 +1655,15 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 					blk := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 					refBlocks.PushBack(blk)
 					for _, refHdr := range blk.Uncles() {
+
+						ret := d.blockchain.GetBlockByHash(refHdr.Hash())
+						if ret != nil{
+							continue
+						}
+
+						if refHdrs.Len() != 0 && d.findblk(refHdrs, refHdr) {
+							continue
+						}
 						refHdrs.PushBack(refHdr)
 					}
 				}

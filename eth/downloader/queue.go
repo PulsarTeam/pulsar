@@ -465,6 +465,7 @@ func (q *queue) ScheduleForReference(headers []*types.Header) int {
 
 	scheduled := 0
 	for _, header := range headers {
+		fmt.Printf("ScheduleForReference, header number : %v, header hash : %v\n", header.Number.Uint64(), header.Hash().String())
 		// Queue the header for content retrieval
 		hash := header.Hash()
 		if header.Number == nil {
@@ -569,7 +570,9 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 
 	// Count the number of reference items available for processing
 	nproc := q.countProcessableRefItems()
+	fmt.Printf("ReferenceResults, nproc: %v \n", nproc)
 	for nproc == 0 && !q.closed {
+		fmt.Printf("ReferenceResults nproc == 0 && !q.closed \n")
 		if !block {
 			return nil
 		}
@@ -579,8 +582,7 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 
 	}
 
-	log.Info("ReferenceResults get items"," nproc : ", nproc)
-
+	fmt.Printf("out ++++++++++ ReferenceResults wait signal returned, nproc : %v \n", nproc)
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	if nproc > maxResultsProcess {
 		nproc = maxResultsProcess
@@ -589,7 +591,7 @@ func (q *queue) ReferenceResults(block bool) []*fetchResult {
 	copy(results, q.resultRefCache[:nproc])
 
 	for _, fr := range results{
-		log.Info("ReferenceResults ok header, header ", "number : ", fr.Header.Number.Uint64(), ", header hash : ",  fr.Header.Hash().String())
+		fmt.Printf("ReferenceResults ok header, header number : %v, header hash : %v\n", fr.Header.Number.Uint64(), fr.Header.Hash().String())
 	}
 
 	if len(results) > 0 {

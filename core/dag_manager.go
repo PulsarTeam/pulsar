@@ -1314,6 +1314,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 		return 0, nil, nil, nil
 	}
 
+	fmt.Printf("insertBlocks block number : %v , block hash: %v\n", blocks[0].Number().String(), blocks[0].Hash().String())
 	for i := 1; i < len(blocks); i++ {
 		// Do a sanity check that the provided chain is actually ordered and linked
 		if blocks[i].NumberU64() != blocks[i-1].NumberU64()+1 || blocks[i].ParentHash() != blocks[i-1].Hash() {
@@ -1324,6 +1325,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 			return 0, nil, nil, fmt.Errorf("non contiguous insert: item %d is #%d [%x…], item %d is #%d [%x…] (parent [%x…])", i-1, blocks[i-1].NumberU64(),
 				blocks[i-1].Hash().Bytes()[:4], i, blocks[i].NumberU64(), blocks[i].Hash().Bytes()[:4], blocks[i].ParentHash().Bytes()[:4])
 		}
+		fmt.Printf("insertBlocks block number : %v , block hash: %v\n", blocks[i].Number().String(), blocks[i].Hash().String())
 	}
 
 	dm.wg.Add(1)
