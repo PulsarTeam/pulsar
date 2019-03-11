@@ -551,7 +551,7 @@ func (ethash *Ethash) accumulatePowRewards(config *params.ChainConfig, state *st
 	total := new(big.Int)
 	if uncleCnt.Sign() > 0 {
 		powRewardUncles := new(big.Int).Mul(curPowReward, PowRewardRatioUncles)
-		powRewardUncles.Div(curPowReward, PowRewardRatioPrecision)
+		powRewardUncles.Div(powRewardUncles, PowRewardRatioPrecision)
 		powRewardSelf := new(big.Int).Sub(curPowReward, powRewardUncles)
 		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
 		if powRewardPerUncle.Sign() > 0 {
@@ -586,7 +586,7 @@ func (ethash *Ethash) calculatePowRewards(config *params.ChainConfig, state *sta
 	total := new(big.Int)
 	if uncleCnt.Sign() > 0 {
 		powRewardUncles := new(big.Int).Mul(curPowReward, PowRewardRatioUncles)
-		powRewardUncles.Div(curPowReward, PowRewardRatioPrecision)
+		powRewardUncles.Div(powRewardUncles, PowRewardRatioPrecision)
 		powRewardSelf := new(big.Int).Sub(curPowReward, powRewardUncles)
 		powRewardPerUncle := powRewardUncles.Div(powRewardUncles, uncleCnt)
 		if powRewardPerUncle.Sign() > 0 {
