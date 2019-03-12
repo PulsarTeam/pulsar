@@ -466,6 +466,7 @@ func (self *worker) commitNewWork() {
 
 	// refBlocks = self.chain.GetTips()
 
+	nominees := make(RefBlocks, 0)
 	refBlocks := make(RefBlocks, 0)
 	ancestors := make([]*types.Block, 0)
 	var farthestAncestor uint64
@@ -487,15 +488,22 @@ func (self *worker) commitNewWork() {
 	for hash, uncle := range self.possibleUncles {
 		if uncle.Number().Uint64() < farthestAncestor {
 			delete(self.possibleUncles, hash)
-		} else if self.canBackToPivot(uncle, ancestors) && !self.isReferenced(uncle, ancestors) && uncle.Number().Uint64() < currentNumber {
-			fmt.Println("+++++++++++++++++", uncle.Number().Uint64(), uncle.Hash().String())
-			refBlocks = append(refBlocks, uncle)
-			delete(self.possibleUncles, hash)
+		} else {
+			nominees = append(nominees, uncle)
 		}
 	}
 
 	// sort reference blocks
-	sort.Sort(&refBlocks)
+	sort.Sort(&nominees)
+
+	for i := 0; i < len(nominees); i++ {
+		nominee := nominees[i]
+		if self.isTopoPrepared(nominee, ancestors, refBlocks) && !self.isReferenced(nominee, ancestors) && nominee.Number().Uint64() < currentNumber {
+			fmt.Println("+++++++++++++++++", nominee.Number().Uint64(), nominee.Hash().String())
+			refBlocks = append(refBlocks, nominee)
+			delete(self.possibleUncles, nominee.Hash())
+		}
+	}
 
 	for _, rb := range refBlocks {
 		h := rb.Header()
@@ -615,6 +623,49 @@ func (self *worker) canBackToPivot(block *types.Block, ancestors []*types.Block)
 func (self *worker) inAncestors(block *types.Block, ancestors []*types.Block) bool {
 	for _, act := range ancestors {
 		if block.Hash() == act.Hash() {
+			return true
+		}
+	}
+	return false
+}
+
+func (self *worker) isInPreEpoch(hash common.Hash, ancestors []*types.Block) bool {
+	for _, act := range ancestors {
+		if hash == act.Hash() {
+			return true
+		}
+		uncles := act.Uncles()
+		for _, uncle := range uncles {
+			if uncle.Hash() == hash {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (self *worker) isTopoPrepared(block *types.Block, ancestors []*types.Block, refBlocks []*types.Block) bool {
+
+	// parent
+	if !self.isInPreEpoch(block.ParentHash(), ancestors) &&
+		!self.isInBlocks(block.ParentHash(), refBlocks) {
+		return false
+	}
+
+	// references
+	uncles := block.Uncles()
+	for _, uncle := range uncles {
+		if !self.isInPreEpoch(uncle.Hash(), ancestors) &&
+			!self.isInBlocks(uncle.Hash(), refBlocks) {
+			return false
+		}
+	}
+	return true
+}
+
+func (self *worker) isInBlocks(hash common.Hash, blocks []*types.Block) bool {
+	for i := 0; i < len(blocks); i++ {
+		if hash == blocks[i].Hash() {
 			return true
 		}
 	}
