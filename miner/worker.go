@@ -523,7 +523,7 @@ func (self *worker) commitNewWork() {
 
 	refTxs := make([]*types.Transaction, 0) // ref block's txs
 	tmpTxs := make([]*types.Transaction, 0) // temporary array for transactions
-
+	noDuplicatedTxs := make([]*types.Transaction, 0)
 	if len(refBlocks) > 0 {
 		for _, rb := range refBlocks {
 			if len(refTxs) > 0 {
@@ -542,7 +542,14 @@ func (self *worker) commitNewWork() {
 				refTxs = append(refTxs, rb.Transactions()...)
 			}
 		}
+
+		for _, tx := range refTxs {
+			if !self.isContained(tx, ancestorTxs) {
+				noDuplicatedTxs = append(noDuplicatedTxs, tx)
+			}
+		}
 	}
+	refTxs = noDuplicatedTxs[:]
 
 	// pending transactions
 	pendingTxs := make([]*types.Transaction, 0)
