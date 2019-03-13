@@ -64,6 +64,7 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 		errResult error
 	)
 	for _, tx := range txs {
+		snap := statedb.Snapshot()
 		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx.Tx, usedGas, cfg)
 		if err == nil {
 			receipts = append(receipts, receipt)
@@ -71,6 +72,8 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 			execTxs = append(execTxs, tx.Tx)
 
 			fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), tx.Tx.Hash().String())
+		} else {
+			statedb.RevertToSnapshot(snap)
 		}
 	}
 
