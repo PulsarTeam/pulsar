@@ -18,6 +18,7 @@ package miner
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"math/big"
 	"sort"
 	"sync"
@@ -498,7 +499,7 @@ func (self *worker) commitNewWork() {
 
 	for i := 0; i < len(nominees); i++ {
 		nominee := nominees[i]
-		if self.isTopoPrepared(nominee, ancestors, refBlocks) && !self.isReferenced(nominee, ancestors) && nominee.Number().Uint64() < currentNumber {
+		if ethash.IsTopoPrepared(nominee, ancestors, refBlocks) && !self.isReferenced(nominee, ancestors) && nominee.Number().Uint64() < currentNumber {
 			fmt.Println("+++++++++++++++++", nominee.Number().Uint64(), nominee.Hash().String())
 			refBlocks = append(refBlocks, nominee)
 			delete(self.possibleUncles, nominee.Hash())
@@ -629,48 +630,48 @@ func (self *worker) inAncestors(block *types.Block, ancestors []*types.Block) bo
 	return false
 }
 
-func (self *worker) isInPreEpoch(hash common.Hash, ancestors []*types.Block) bool {
-	for _, act := range ancestors {
-		if hash == act.Hash() {
-			return true
-		}
-		uncles := act.Uncles()
-		for _, uncle := range uncles {
-			if uncle.Hash() == hash {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (self *worker) isTopoPrepared(block *types.Block, ancestors []*types.Block, refBlocks []*types.Block) bool {
-
-	// parent
-	if !self.isInPreEpoch(block.ParentHash(), ancestors) &&
-		!self.isInBlocks(block.ParentHash(), refBlocks) {
-		return false
-	}
-
-	// references
-	uncles := block.Uncles()
-	for _, uncle := range uncles {
-		if !self.isInPreEpoch(uncle.Hash(), ancestors) &&
-			!self.isInBlocks(uncle.Hash(), refBlocks) {
-			return false
-		}
-	}
-	return true
-}
-
-func (self *worker) isInBlocks(hash common.Hash, blocks []*types.Block) bool {
-	for i := 0; i < len(blocks); i++ {
-		if hash == blocks[i].Hash() {
-			return true
-		}
-	}
-	return false
-}
+//func IsInPreEpoch(hash common.Hash, ancestors []*types.Block) bool {
+//	for _, act := range ancestors {
+//		if hash == act.Hash() {
+//			return true
+//		}
+//		uncles := act.Uncles()
+//		for _, uncle := range uncles {
+//			if uncle.Hash() == hash {
+//				return true
+//			}
+//		}
+//	}
+//	return false
+//}
+//
+//func IsTopoPrepared(block *types.Block, ancestors []*types.Block, refBlocks []*types.Block) bool {
+//
+//	// parent
+//	if !IsInPreEpoch(block.ParentHash(), ancestors) &&
+//		!IsInBlocks(block.ParentHash(), refBlocks) {
+//		return false
+//	}
+//
+//	// references
+//	uncles := block.Uncles()
+//	for _, uncle := range uncles {
+//		if !IsInPreEpoch(uncle.Hash(), ancestors) &&
+//			!IsInBlocks(uncle.Hash(), refBlocks) {
+//			return false
+//		}
+//	}
+//	return true
+//}
+//
+//func IsInBlocks(hash common.Hash, blocks []*types.Block) bool {
+//	for i := 0; i < len(blocks); i++ {
+//		if hash == blocks[i].Hash() {
+//			return true
+//		}
+//	}
+//	return false
+//}
 
 //
 func (self *worker) isContained(tx *types.Transaction, txs []*types.Transaction) bool {

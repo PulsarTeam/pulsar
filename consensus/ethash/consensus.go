@@ -198,6 +198,8 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 	// Gather the set of past uncles and ancestors
 	uncles, ancestors := make(map[common.Hash]*types.Header), make(map[common.Hash]*types.Header)
 
+	ancestorslist := make([]*types.Block, 0)
+	refBlocks := make([]*types.Block, 0)
 	number, parent := block.NumberU64()-1, block.ParentHash()
 	for i := 0; i < 7; i++ {
 		ancestor := chain.GetBlock(parent, number)
@@ -205,6 +207,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 			break
 		}
 		ancestors[ancestor.Hash()] = ancestor.Header()
+		ancestorslist = append(ancestorslist, block)
 		for _, uncle := range ancestor.Uncles() {
 			if uncles[uncle.Hash()] == nil {
 				uncles[uncle.Hash()] = uncle
@@ -222,9 +225,15 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 			return errors.New("uncle is too low")
 		}
 
-		if !ethash.isBackToPivot(chain, uncle, ancestors) {
-			return errors.New("uncle's ancestor should in pivot chain")
+		uncleBlock := chain.GetBlock(uncle.Hash(), uncle.Number.Uint64())
+		if uncleBlock == nil {
+			return fmt.Errorf("cannot get uncle's block! block=[%d-%s],uncle=[%d-%s]", block.Number().Uint64(), block.Hash().String(), uncle.Number.Uint64(), uncle.Hash().String())
 		}
+
+		if !IsTopoPrepared(uncleBlock, ancestorslist, refBlocks) {
+			return fmt.Errorf("uncle's topo is not prepared! block=[%d-%s],uncle=[%d-%s]", block.Number().Uint64(), block.Hash().String(), uncle.Number.Uint64(), uncle.Hash().String())
+		}
+		refBlocks = append(refBlocks, uncleBlock)
 
 		// Make sure every uncle is rewarded only once
 		hash := uncle.Hash()
@@ -683,4 +692,47 @@ func (ethash *Ethash) calculatePosRewards(chain consensus.BlockReader, config *p
 		total.Add(total, rewardStakeRaw)
 	}
 	return total
+}
+
+func IsInPreEpoch(hash common.Hash, ancestors []*types.Block) bool {
+	for _, act := range ancestors {
+		if hash == act.Hash() {
+			return true
+		}
+		uncles := act.Uncles()
+		for _, uncle := range uncles {
+			if uncle.Hash() == hash {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func IsTopoPrepared(block *types.Block, ancestors []*types.Block, refBlocks []*types.Block) bool {
+
+	// parent
+	if !IsInPreEpoch(block.ParentHash(), ancestors) &&
+		!IsInBlocks(block.ParentHash(), refBlocks) {
+		return false
+	}
+
+	// references
+	uncles := block.Uncles()
+	for _, uncle := range uncles {
+		if !IsInPreEpoch(uncle.Hash(), ancestors) &&
+			!IsInBlocks(uncle.Hash(), refBlocks) {
+			return false
+		}
+	}
+	return true
+}
+
+func IsInBlocks(hash common.Hash, blocks []*types.Block) bool {
+	for i := 0; i < len(blocks); i++ {
+		if hash == blocks[i].Hash() {
+			return true
+		}
+	}
+	return false
 }
