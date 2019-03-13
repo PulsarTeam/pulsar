@@ -469,20 +469,13 @@ func (self *worker) commitNewWork() {
 
 	nominees := make(RefBlocks, 0)
 	refBlocks := make(RefBlocks, 0)
-	ancestors := make([]*types.Block, 0)
+	ancestors := self.chain.GetBlocksFromHash(parent.Hash(), 7)
+	currentNumber := header.Number.Uint64()
 	var farthestAncestor uint64
-	currentNumber := self.current.header.Number.Uint64()
-	if self.current.header.Number.Uint64() > 6 {
-		farthestAncestor = self.current.header.Number.Uint64() - 6
+	if header.Number.Uint64() > 7 {
+		farthestAncestor = header.Number.Uint64() - 7
 	} else {
 		farthestAncestor = 0
-	}
-
-	// get ancestors
-	for num := farthestAncestor; num <= currentNumber; num++ {
-		if block := self.chain.GetBlockByNumber(num); block != nil {
-			ancestors = append(ancestors, block)
-		}
 	}
 
 	// filter uncles
