@@ -516,6 +516,7 @@ func (self *worker) commitNewWork() {
 
 	refTxs := make([]*types.Transaction, 0) // ref block's txs
 	tmpTxs := make([]*types.Transaction, 0) // temporary array for transactions
+	noDuplicatedRefTxs := make([]*types.Transaction, 0)
 
 	if len(refBlocks) > 0 {
 		for _, rb := range refBlocks {
@@ -533,6 +534,12 @@ func (self *worker) commitNewWork() {
 				}
 			} else {
 				refTxs = append(refTxs, rb.Transactions()...)
+			}
+		}
+
+		for _, tx := range refTxs {
+			if !self.isContained(tx, ancestorTxs) {
+				noDuplicatedRefTxs = append(noDuplicatedRefTxs, tx)
 			}
 		}
 	}
@@ -555,7 +562,7 @@ func (self *worker) commitNewWork() {
 	}
 
 	// refTxs are sorted and non-duplicated
-	for _, rt := range refTxs {
+	for _, rt := range noDuplicatedRefTxs {
 		if self.current.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", self.current.gasPool, "want", params.TxGas)
 			continue
