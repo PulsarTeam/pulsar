@@ -207,7 +207,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 			break
 		}
 		ancestors[ancestor.Hash()] = ancestor.Header()
-		ancestorslist = append(ancestorslist, block)
+		ancestorslist = append(ancestorslist, ancestor)
 		for _, uncle := range ancestor.Uncles() {
 			if uncles[uncle.Hash()] == nil {
 				uncles[uncle.Hash()] = uncle
