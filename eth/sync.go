@@ -200,7 +200,6 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	if err := pm.downloader.Synchronise(peer.id, pHead, pTd, mode); err != nil {
 		return
 	}
-
 	if atomic.LoadUint32(&pm.fastSync) == 1 {
 		log.Info("Fast sync complete, auto disabling")
 		atomic.StoreUint32(&pm.fastSync, 0)
