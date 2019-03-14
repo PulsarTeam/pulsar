@@ -68,8 +68,8 @@ type refRequest struct {
 }
 
 type refResp struct {
-	hash common.Hash
-	body types.Body
+	Hash common.Hash
+	Body types.Body
 }
 
 type ProtocolManager struct {
@@ -689,14 +689,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Warn("Can not get the reference body", "Hash", req.String())
 			return errResp(ErrNoSuchData, "msg %v", msg)
 		}
-		return p.SendReferenceBody(refResp{req, *body})
+		return p.SendReferenceBody(&refResp{req, *body})
 
 	case msg.Code == ReferenceBodyMsg:
 		var resp refResp
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.MarkBlock(resp.hash)
+		p.MarkBlock(resp.Hash)
 		pm.refRespCh <- resp
 
 	case msg.Code == ReferenceBodiesMsg:
@@ -854,14 +854,14 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 				log.Warn("Request reference body failed", "peer", peer.String(), "error", err)
 			}
 		case resp := <-pm.refRespCh:
-			hdr, exist := pendingHdrs[resp.hash]
+			hdr, exist := pendingHdrs[resp.Hash]
 			if !exist {
-				log.Warn("Received reference block but not scheduled", "hash", resp.hash.String())
+				log.Warn("Received reference block but not scheduled", "hash", resp.Hash.String())
 				continue
 			}
 
-			delete(pendingHdrs, resp.hash)
-			blk := types.NewBlockWithHeader(hdr).WithBody(resp.body.Transactions, resp.body.Uncles)
+			delete(pendingHdrs, resp.Hash)
+			blk := types.NewBlockWithHeader(hdr).WithBody(resp.Body.Transactions, resp.Body.Uncles)
 			pm.processReferenceBlocks(blk)
 			pm.blockchain.InsertBlocks(types.Blocks{blk}, nil)
 		}

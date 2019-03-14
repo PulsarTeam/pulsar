@@ -291,7 +291,7 @@ func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
 }
 
 // SendBlockBodies sends a batch of block contents to the remote peer.
-func (p *peer) SendReferenceBody(resp refResp) error {
+func (p *peer) SendReferenceBody(resp *refResp) error {
 	return p2p.Send(p.rw, ReferenceBodyMsg, resp)
 }
 
