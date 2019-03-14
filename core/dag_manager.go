@@ -1265,9 +1265,11 @@ func (dm *DAGManager) getPivotBlockReferencesTxs(block *types.Block) types.Trans
 		}
 	}
 	if len(block.Uncles()) > 0 {
+		tmpParent := dm.GetBlockByHash(block.ParentHash())
 		for index = 1; index <= 7; index++ {
 			if block.Number().Uint64()-index >= 0 {
-				ancestorTxs = append(ancestorTxs, dm.GetBlockByNumber(block.Number().Uint64()-index).Transactions()...)
+				ancestorTxs = append(ancestorTxs, dm.GetBlockByHash(tmpParent.Hash()).Transactions()...)
+				tmpParent = dm.GetBlockByHash(tmpParent.Hash())
 			}
 		}
 	}
