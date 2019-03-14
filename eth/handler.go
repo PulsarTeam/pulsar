@@ -492,6 +492,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			*/
 		}
+		fmt.Printf("BlockBodiesMsg \n")
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
@@ -627,6 +628,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkBlock(request.Block.Hash())
 		pm.fetcher.Enqueue(p.id, request.Block)
 
+		fmt.Printf("NewBlockMsg \n")
 		for _, u := range request.Block.Uncles(){
 			p.MarkMaybeBlock(u.Hash())
 		}
@@ -766,6 +768,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			peer.AsyncSendNewBlock(block, td)
+			fmt.Printf("AsyncSendNewBlock  hash = %s  peer = %v \n",hash.String(),peer.id)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
@@ -774,6 +777,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	if pm.blockchain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
+			fmt.Printf("AsyncSendNewBlockHash  hash = %s  peer = %v \n",hash.String(),peer.id)
 		}
 		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}
@@ -839,8 +843,16 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			}
 			pendingHdrs[req.header.Hash()] = req.header
 			peers := pm.peers.PeersWithBlock(req.hash)
+			fmt.Printf("pm.peers.PeersWithBlock   %v\n",pm.peers)
+			for name,peer := range pm.peers.peers{
+				fmt.Printf("pm.peers.PeersWithBlock  %v %v\n",name,peer.knownBlocks.String())
+			}
 			if len(peers) == 0 {
 				peers = pm.peers.PeersMayWithBlock(req.hash)
+				fmt.Printf("pm.peers.PeersMayWithBlock   %v\n",pm.peers)
+				for name,peer := range pm.peers.peers{
+					fmt.Printf("pm.peers.PeersWithBlock   %v\n",name,peer.maybeBlocks.String())
+				}
 				if len(peers) == 0 {
 					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
 				}

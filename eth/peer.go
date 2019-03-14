@@ -180,16 +180,20 @@ func (p *peer) SetHead(hash common.Hash, td *big.Int) {
 func (p *peer) MarkBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	for p.knownBlocks.Size() >= maxKnownBlocks {
+		fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
 		p.knownBlocks.Pop()
 	}
+	fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
 	p.knownBlocks.Add(hash)
 }
 
 func (p *peer) MarkMaybeBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	for p.maybeBlocks.Size() >= maxKnownBlocks {
+		fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
 		p.maybeBlocks.Pop()
 	}
+	fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
 	p.maybeBlocks.Add(hash)
 }
 
@@ -455,6 +459,8 @@ func (ps *peerSet) Register(p *peer) error {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
 
+	fmt.Printf("Regist %v %v\n",p,p.id)
+
 	if ps.closed {
 		return errClosed
 	}
@@ -475,8 +481,11 @@ func (ps *peerSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
+		fmt.Printf("not Unregister %v %v\n",id,ps.peers)
 		return errNotRegistered
 	}
+	fmt.Printf("Unregister %v %v\n",p,p.id)
+
 	delete(ps.peers, id)
 	p.close()
 
