@@ -173,7 +173,7 @@ func (st *StateTransition) preCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
 		nonce := st.state.GetNonce(st.msg.From())
-		fmt.Printf("msg.hash = %s, nonce = %v, st.msg.Nonce()\n", st.msg.From().String(), nonce, st.msg.Nonce())
+		fmt.Printf("msg.hash = %s, nonce = %v, st.msg.Nonce() = %v\n", st.msg.From().String(), nonce, st.msg.Nonce())
 		if nonce < st.msg.Nonce() {
 			fmt.Printf("ErrNonceTooHigh\n")
 			return ErrNonceTooHigh
