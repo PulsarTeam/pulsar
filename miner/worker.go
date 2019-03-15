@@ -469,7 +469,8 @@ func (self *worker) commitNewWork() {
 
 	nominees := make(RefBlocks, 0)
 	refBlocks := make(RefBlocks, 0)
-	ancestors := self.chain.GetBlocksFromHash(parent.Hash(), 7)
+	// the furthest acceptable number of a refer block is n-7, whose furthest refer number is (n-7)-7, i.e., n-14
+	ancestors := self.chain.GetBlocksFromHash(parent.Hash(), 14)
 	currentNumber := header.Number.Uint64()
 	var farthestAncestor uint64
 	if header.Number.Uint64() > 7 {

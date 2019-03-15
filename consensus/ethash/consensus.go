@@ -201,7 +201,8 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 	ancestorslist := make([]*types.Block, 0)
 	refBlocks := make([]*types.Block, 0)
 	number, parent := block.NumberU64()-1, block.ParentHash()
-	for i := 0; i < 7; i++ {
+	// the furthest acceptable number of a refer block is n-7, whose furthest refer number is (n-7)-7, i.e., n-14
+	for i := 0; i < 14; i++ {
 		ancestor := chain.GetBlock(parent, number)
 		if ancestor == nil {
 			break
@@ -221,7 +222,13 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 	}
 	// Verify each of the uncles that it's recent, but not an ancestor
 	for _, uncle := range block.Uncles() {
-		if uncle.Number.Uint64() < (block.Number().Uint64() - (uint64)(len(ancestors))) {
+		var farthestAncestor uint64
+		if block.NumberU64() > 7 {
+			farthestAncestor = block.NumberU64() - 7
+		} else {
+			farthestAncestor = 0
+		}
+		if uncle.Number.Uint64() < farthestAncestor {
 			return errors.New("uncle is too low")
 		}
 
@@ -252,10 +259,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.BlockReader, block *types.Blo
 			uncleParent = uncles[uncle.ParentHash]
 		}
 		if uncleParent == nil {
-			uncleParent = chain.GetHeaderByHash(uncle.ParentHash)
-		}
-		if uncleParent == nil {
-			return errors.New("uncle's parent should be available")
+			return errors.New("uncle's parent should be available within 14 generations")
 		}
 
 		if err := ethash.verifyHeader(chain, uncle, uncleParent, true, true, nil); err != nil {
