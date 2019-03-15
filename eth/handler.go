@@ -89,11 +89,11 @@ type ProtocolManager struct {
 
 	SubProtocols []p2p.Protocol
 
-	eventMux      *event.TypeMux
-	txsCh         chan core.NewTxsEvent
-	txsSub        event.Subscription
-	refReqChMu    sync.RWMutex
-	refReqCh      chan refRequest
+	eventMux   *event.TypeMux
+	txsCh      chan core.NewTxsEvent
+	txsSub     event.Subscription
+	refReqChMu sync.RWMutex
+	refReqCh   chan refRequest
 
 	refRespCh     chan refResp
 	minedBlockSub *event.TypeMuxSubscription
@@ -487,22 +487,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			transactions[i] = body.Transactions
 			uncles[i] = body.Uncles
 			/*
-			for _, h := range body.Uncles{
-				p.MarkMaybeBlock(h.Hash())
-			}
+				for _, h := range body.Uncles{
+					p.MarkMaybeBlock(h.Hash())
+				}
 			*/
 		}
 		fmt.Printf("BlockBodiesMsg \n")
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
 		filter := len(transactions) > 0 || len(uncles) > 0
+
 		if filter {
-			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
-			for _, ucs := range uncles{
-				for _, u := range ucs{
+			fmt.Println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+			for _, ucs := range uncles {
+				for _, u := range ucs {
 					p.MarkMaybeBlock(u.Hash())
 				}
 			}
+
+			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 		}
+
 		if len(transactions) > 0 || len(uncles) > 0 || !filter {
 			err := pm.downloader.DeliverBodies(p.id, transactions, uncles)
 			if err != nil {
@@ -629,7 +633,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.fetcher.Enqueue(p.id, request.Block)
 
 		fmt.Printf("NewBlockMsg \n")
-		for _, u := range request.Block.Uncles(){
+		for _, u := range request.Block.Uncles() {
 			p.MarkMaybeBlock(u.Hash())
 		}
 
@@ -768,7 +772,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			peer.AsyncSendNewBlock(block, td)
-			fmt.Printf("AsyncSendNewBlock  hash = %s  peer = %v \n",hash.String(),peer.id)
+			fmt.Printf("AsyncSendNewBlock  hash = %s  peer = %v \n", hash.String(), peer.id)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
@@ -777,7 +781,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	if pm.blockchain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
-			fmt.Printf("AsyncSendNewBlockHash  hash = %s  peer = %v \n",hash.String(),peer.id)
+			fmt.Printf("AsyncSendNewBlockHash  hash = %s  peer = %v \n", hash.String(), peer.id)
 		}
 		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}
@@ -843,15 +847,15 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			}
 			pendingHdrs[req.header.Hash()] = req.header
 			peers := pm.peers.PeersWithBlock(req.hash)
-			fmt.Printf("pm.peers.PeersWithBlock   %v\n",pm.peers)
-			for name,peer := range pm.peers.peers{
-				fmt.Printf("pm.peers.PeersWithBlock  %v %v\n",name,peer.knownBlocks.String())
+			fmt.Printf("pm.peers.PeersWithBlock   %v\n", pm.peers)
+			for name, peer := range pm.peers.peers {
+				fmt.Printf("pm.peers.PeersWithBlock  %v %v\n", name, peer.knownBlocks.String())
 			}
 			if len(peers) == 0 {
 				peers = pm.peers.PeersMayWithBlock(req.hash)
-				fmt.Printf("pm.peers.PeersMayWithBlock   %v\n",pm.peers)
-				for name,peer := range pm.peers.peers{
-					fmt.Printf("pm.peers.PeersWithBlock   %v\n",name,peer.maybeBlocks.String())
+				fmt.Printf("pm.peers.PeersMayWithBlock   %v\n", pm.peers)
+				for name, peer := range pm.peers.peers {
+					fmt.Printf("pm.peers.PeersWithBlock   %v\n", name, peer.maybeBlocks.String())
 				}
 				if len(peers) == 0 {
 					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
