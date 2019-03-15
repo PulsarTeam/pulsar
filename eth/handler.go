@@ -609,6 +609,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkBlock(block.Hash)
 		}
 
+		fmt.Printf("NewBlockHashesMsg \n")
+
 		// Schedule all the unknown hashes for retrieval
 		unknown := make(newBlockHashesData, 0, len(announces))
 		for _, block := range announces {
@@ -630,12 +632,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		request.Block.ReceivedFrom = p
 		// Mark the peer as owning the block and schedule it for import
 		p.MarkBlock(request.Block.Hash())
-		pm.fetcher.Enqueue(p.id, request.Block)
-
 		fmt.Printf("NewBlockMsg \n")
 		for _, u := range request.Block.Uncles() {
 			p.MarkMaybeBlock(u.Hash())
 		}
+		pm.fetcher.Enqueue(p.id, request.Block)
+
 
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
