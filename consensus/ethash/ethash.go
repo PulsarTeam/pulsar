@@ -322,7 +322,7 @@ func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *type
 			log.Error("FATAL ERROR! GetPosProduction can not get header", "hash", hash)
 			panic("Logical error.\n")
 		}
-		log.Debug("#DEBUG# GetPosProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		//log.Debug("#DEBUG# GetPosProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
 		hash = h.ParentHash
 		if h.Number.Uint64() >= end {
 			continue

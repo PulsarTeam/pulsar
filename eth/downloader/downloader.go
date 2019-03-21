@@ -227,7 +227,7 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain DAGMan
 		referenceCh:     make(chan dataPack, 1),
 		bodyWakeCh:      make(chan bool, 1),
 		receiptWakeCh:   make(chan bool, 1),
-		referenceWakeCh: make(chan bool, 1),
+		referenceWakeCh: make(chan bool, 2),
 		//bodiesFinisedCh:make(chan bool, 1),
 		headerProcCh:   make(chan []*types.Header, 1),
 		quitCh:         make(chan struct{}),
@@ -1564,6 +1564,13 @@ func (d *Downloader) processFullSyncContent() error {
 	}
 
 	log.Info("Notify reference body fetcher terminated")
+	if len(d.referenceWakeCh) > 1 {
+		select {
+		case <-d.referenceWakeCh:
+		default:
+		}
+	}
+
 	d.referenceWakeCh <- false
 	log.Info("Notify reference body fetcher terminated DONE")
 
