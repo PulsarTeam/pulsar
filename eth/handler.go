@@ -849,16 +849,8 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			}
 			pendingHdrs[req.header.Hash()] = req.header
 			peers := pm.peers.PeersWithBlock(req.hash)
-			fmt.Printf("pm.peers.PeersWithBlock   %v\n", pm.peers)
-			for name, peer := range pm.peers.peers {
-				fmt.Printf("pm.peers.PeersWithBlock  %v %v\n", name, peer.knownBlocks.String())
-			}
 			if len(peers) == 0 {
 				peers = pm.peers.PeersMayWithBlock(req.hash)
-				fmt.Printf("pm.peers.PeersMayWithBlock   %v\n", pm.peers)
-				for name, peer := range pm.peers.peers {
-					fmt.Printf("pm.peers.PeersWithBlock   %v\n", name, peer.maybeBlocks.String())
-				}
 				if len(peers) == 0 {
 					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
 				}
