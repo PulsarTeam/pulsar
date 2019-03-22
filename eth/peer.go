@@ -180,20 +180,20 @@ func (p *peer) SetHead(hash common.Hash, td *big.Int) {
 func (p *peer) MarkBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	for p.knownBlocks.Size() >= maxKnownBlocks {
-		fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
+		//fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
 		p.knownBlocks.Pop()
 	}
-	fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
+	//fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
 	p.knownBlocks.Add(hash)
 }
 
 func (p *peer) MarkMaybeBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	for p.maybeBlocks.Size() >= maxKnownBlocks {
-		fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
+		//fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
 		p.maybeBlocks.Pop()
 	}
-	fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
+	//fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
 	p.maybeBlocks.Add(hash)
 }
 

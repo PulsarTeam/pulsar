@@ -1200,7 +1200,7 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 	idle func() ([]*peerConnection, int), setIdle func(*peerConnection, int), kind string) error {
 
 	// Create a ticker to detect expired retrieval tasks
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	defer ticker.Stop()
 
 	update := make(chan struct{}, 1)
@@ -1247,6 +1247,7 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			}
 
 		case cont := <-wakeCh:
+			fmt.Println("cont := <-wakeCh: +++++++++ ")
 			// The header fetcher sent a continuation flag, check if it's done
 			if !cont {
 				finished = true
