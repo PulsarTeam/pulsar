@@ -246,10 +246,10 @@ func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Heade
 		return uint32(initPosWeight)
 	}
 
-	//weightAdjustInterval := uint64(core.BlocksInMatureCycle()) * ethash.difficultyAdjustCycles
-	//if (parent.Number.Uint64() % weightAdjustInterval) != 0 {
-	//	return parent.PosWeight
-	//}
+	weightAdjustInterval := uint64(core.BlocksInMatureCycle()) * ethash.difficultyAdjustCycles
+	if (parent.Number.Uint64() % weightAdjustInterval) != 0 {
+		return parent.PosWeight
+	}
 
 	powProduction := ethash.GetPowProduction(chain, header, headers)
 	posProduction := ethash.GetPosProduction(chain, header, headers)
