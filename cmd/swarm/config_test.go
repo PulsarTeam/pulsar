@@ -472,7 +472,7 @@ func TestValidateConfig(t *testing.T) {
 	}{
 		{
 			cfg: &api.Config{EnsAPIs: []string{
-				"/data/testnet/giga.ipc",
+				"/data/testnet/pulsar.ipc",
 			}},
 		},
 		{
@@ -487,7 +487,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			cfg: &api.Config{EnsAPIs: []string{
-				"test:/data/testnet/giga.ipc",
+				"test:/data/testnet/pulsar.ipc",
 			}},
 		},
 		{
@@ -497,7 +497,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			cfg: &api.Config{EnsAPIs: []string{
-				"314159265dD8dbb310642f98f50C066173C1259b@/data/testnet/giga.ipc",
+				"314159265dD8dbb310642f98f50C066173C1259b@/data/testnet/pulsar.ipc",
 			}},
 		},
 		{
@@ -512,7 +512,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			cfg: &api.Config{EnsAPIs: []string{
-				"test:314159265dD8dbb310642f98f50C066173C1259b@/data/testnet/giga.ipc",
+				"test:314159265dD8dbb310642f98f50C066173C1259b@/data/testnet/pulsar.ipc",
 			}},
 		},
 		{
@@ -545,9 +545,9 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			cfg: &api.Config{EnsAPIs: []string{
-				"@/data/testnet/giga.ipc",
+				"@/data/testnet/pulsar.ipc",
 			}},
-			err: "invalid format [tld:][contract-addr@]url for ENS API endpoint configuration \"@/data/testnet/giga.ipc\": missing contract address",
+			err: "invalid format [tld:][contract-addr@]url for ENS API endpoint configuration \"@/data/testnet/pulsar.ipc\": missing contract address",
 		},
 	} {
 		err := validateConfig(c.cfg)

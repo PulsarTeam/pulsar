@@ -1,3 +1,3 @@
 #!/bin/bash
 
-bin/giga --datadir ~/data init genesis-private.json
+bin/pulsar --datadir ~/data init genesis-private.json
