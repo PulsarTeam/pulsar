@@ -183,7 +183,7 @@ func (p *peer) MarkBlock(hash common.Hash) {
 		//fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
 		p.knownBlocks.Pop()
 	}
-	//fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
+	fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
 	p.knownBlocks.Add(hash)
 }
 
@@ -193,7 +193,7 @@ func (p *peer) MarkMaybeBlock(hash common.Hash) {
 		//fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
 		p.maybeBlocks.Pop()
 	}
-	//fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
+	fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
 	p.maybeBlocks.Add(hash)
 }
 

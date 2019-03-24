@@ -609,7 +609,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkBlock(block.Hash)
 		}
 
-		fmt.Printf("NewBlockHashesMsg \n")
+		fmt.Printf("NewBlockHashesMsg\n")
 
 		// Schedule all the unknown hashes for retrieval
 		unknown := make(newBlockHashesData, 0, len(announces))
@@ -632,7 +632,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		request.Block.ReceivedFrom = p
 		// Mark the peer as owning the block and schedule it for import
 		p.MarkBlock(request.Block.Hash())
-		fmt.Printf("NewBlockMsg \n")
+		fmt.Printf("NewBlockMsg, number = %v, block.hash = %s\n", request.Block.Number().Uint64(), request.Block.Hash().String())
 		for _, u := range request.Block.Uncles() {
 			p.MarkMaybeBlock(u.Hash())
 		}
@@ -826,7 +826,9 @@ func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, erro
 			//pm.refReqCh <- refRequest{block.Hash(), hdr}
 			pm.refReqChMu.Lock()
 			pm.refReqCh <- refRequest{hdr.Hash(), hdr}
+			fmt.Printf("block.hash = %s, hdr.hash = %s\n", block. Hash().String(), hdr.Hash().String())
 			pm.refReqChMu.Unlock()
+
 		}
 	}
 	return 0, nil

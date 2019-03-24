@@ -17,7 +17,6 @@
 package core
 
 import (
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -71,7 +70,7 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 			allLogs = append(allLogs, receipt.Logs...)
 			execTxs = append(execTxs, tx.Tx)
 
-			fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), tx.Tx.Hash().String())
+			//fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), tx.Tx.Hash().String())
 		} else {
 			statedb.RevertToSnapshot(snap)
 		}
@@ -88,7 +87,7 @@ func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions
 		allLogs = append(allLogs, receipt.Logs...)
 		execTxs = append(execTxs, tx)
 
-		fmt.Printf("Process, block.number = %v, tx hash = %s\n", block.Number().Uint64(), tx.Hash().String())
+		//fmt.Printf("Process, block.number = %v, tx hash = %s\n", block.Number().Uint64(), tx.Hash().String())
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
