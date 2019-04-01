@@ -638,7 +638,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.fetcher.Enqueue(p.id, request.Block)
 
-
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
@@ -826,7 +825,7 @@ func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, erro
 			//pm.refReqCh <- refRequest{block.Hash(), hdr}
 			pm.refReqChMu.Lock()
 			pm.refReqCh <- refRequest{hdr.Hash(), hdr}
-			fmt.Printf("block.hash = %s, hdr.hash = %s\n", block. Hash().String(), hdr.Hash().String())
+			fmt.Printf("block.hash = %s, hdr.hash = %s\n", block.Hash().String(), hdr.Hash().String())
 			pm.refReqChMu.Unlock()
 
 		}
@@ -853,8 +852,12 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			peers := pm.peers.PeersWithBlock(req.hash)
 			if len(peers) == 0 {
 				peers = pm.peers.PeersMayWithBlock(req.hash)
-				if len(peers) == 0 {
-					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				if len(peers) == 0 && pm.peers.BestPeer() != nil {
+					pm.peers.BestPeer().RequestReferenceBody(req.header.Hash())
+					break
+					//panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				} else {
+					log.Warn("local pees length is zero", "peerLength: ", len(pm.peers.peers))
 				}
 			}
 
