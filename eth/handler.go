@@ -885,8 +885,12 @@ func (pm *ProtocolManager) syncReferenceBlockLoop() {
 			peers := pm.peers.PeersWithBlock(req.hash)
 			if len(peers) == 0 {
 				peers = pm.peers.PeersMayWithBlock(req.hash)
-				if len(peers) == 0 {
-					panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				if len(peers) == 0 && pm.peers.BestPeer() != nil {
+					pm.peers.BestPeer().RequestReferenceBody(req.header.Hash())
+					break
+					//panic(fmt.Sprintf("logic error: no peer knows %s but we download it", req.hash.String()))
+				} else {
+					log.Warn("local pees length is zero", "peerLength: ", len(pm.peers.peers))
 				}
 			}
 
