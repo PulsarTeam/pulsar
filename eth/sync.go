@@ -29,6 +29,7 @@ import (
 )
 
 const (
+	peersUpdateCycle    = 10 * time.Second // Time interval to peers update
 	forceSyncCycle      = 10 * time.Second // Time interval to force syncs, even if few peers are available
 	minDesiredPeerCount = 5                // Amount of peers desired to start syncing
 
@@ -155,6 +156,23 @@ func (pm *ProtocolManager) syncer() {
 			go pm.synchronise(pm.peers.BestPeer())
 
 		case <-pm.noMorePeers:
+			return
+		}
+	}
+}
+
+// update peers' header and td periodically
+func (pm *ProtocolManager) updatePeers() {
+
+	timer := time.NewTicker(peersUpdateCycle)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			currentBlock := pm.blockchain.CurrentBlock()
+			pm.peers.NotifyHeadAndTd(currentBlock.Hash(), currentBlock.ParentHash(), pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64()), currentBlock.Difficulty())
+		case <-pm.quitUpdatePeers:
 			return
 		}
 	}

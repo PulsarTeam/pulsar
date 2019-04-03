@@ -99,10 +99,11 @@ type ProtocolManager struct {
 	minedBlockSub *event.TypeMuxSubscription
 
 	// channels for fetcher, syncer, txsyncLoop
-	newPeerCh   chan *peer
-	txsyncCh    chan *txsync
-	quitSync    chan struct{}
-	noMorePeers chan struct{}
+	newPeerCh       chan *peer
+	txsyncCh        chan *txsync
+	quitSync        chan struct{}
+	noMorePeers     chan struct{}
+	quitUpdatePeers chan struct{}
 
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
@@ -114,16 +115,17 @@ type ProtocolManager struct {
 func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, networkID uint64, mux *event.TypeMux, txpool txPool, engine consensus.Engine, blockchain *core.DAGManager, chaindb ethdb.Database) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
-		networkID:   networkID,
-		eventMux:    mux,
-		txpool:      txpool,
-		blockchain:  blockchain,
-		chainconfig: config,
-		peers:       newPeerSet(),
-		newPeerCh:   make(chan *peer),
-		noMorePeers: make(chan struct{}),
-		txsyncCh:    make(chan *txsync),
-		quitSync:    make(chan struct{}),
+		networkID:       networkID,
+		eventMux:        mux,
+		txpool:          txpool,
+		blockchain:      blockchain,
+		chainconfig:     config,
+		peers:           newPeerSet(),
+		newPeerCh:       make(chan *peer),
+		noMorePeers:     make(chan struct{}),
+		txsyncCh:        make(chan *txsync),
+		quitSync:        make(chan struct{}),
+		quitUpdatePeers: make(chan struct{}),
 	}
 	//\\if FastSync, then force to the FullSync
 	if mode == downloader.FastSync {
@@ -241,10 +243,15 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
+
+	// start updating peers
+	go pm.updatePeers()
 }
 
 func (pm *ProtocolManager) Stop() {
 	log.Info("Stopping Ethereum protocol")
+
+	close(pm.quitUpdatePeers)
 
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
@@ -638,7 +645,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.fetcher.Enqueue(p.id, request.Block)
 
-
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
 		var (
@@ -657,6 +663,32 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())) > 0 {
 				go pm.synchronise(p)
 			}
+		}
+
+	case msg.Code == NotifyHeadAndTdMsg:
+		// Retrieve and decode the propagated block
+		var data headHashData
+		if err := msg.Decode(&data); err != nil {
+			return errResp(ErrDecode, "%v: %v", msg, err)
+		}
+		// Mark the peer as owning the block and schedule it for import
+		p.MarkBlock(data.Hash)
+		log.Info("NotifyHeaderAndTdMsg", "frompeer", p.id, "head", data.Hash.String(), "parent", data.Parent.String(), "difficulty", data.Difficulty.String(), "td", data.TD.String())
+
+		// Assuming the block is importable by the peer, but possibly not yet done so,
+		// calculate the head hash and TD that the peer truly must have.
+		var (
+			trueHead = data.Parent
+			trueTD   = new(big.Int).Sub(data.TD, data.Difficulty)
+		)
+
+		// Update the peers total difficulty if better than the previous
+		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
+			fmt.Printf("NotifyHeaderAndTdMsg, from peer %s, headhash=%s, parenthash=%s, difficulty=%s, td=%s\n", p.id, data.Hash.String(), data.Parent.String(), data.Difficulty.String(), data.TD.String())
+			log.Info("update peer head", "peer", p.id, "trueHead", trueHead.String(), "trueTD", trueTD.String())
+			p.SetHead(trueHead, trueTD)
+		} else if trueTD.Cmp(td) < 0 {
+			log.Warn("received peer td is less to previous td!", "peer", p.id, "trueHead", trueHead.String(), "trueTD", trueTD.String(), "previousHead", p.head.String(), "previousTD", p.td.String())
 		}
 
 	case msg.Code == GetReferenceBodiesMsg:
@@ -826,7 +858,7 @@ func (pm *ProtocolManager) processReferenceBlocks(block *types.Block) (int, erro
 			//pm.refReqCh <- refRequest{block.Hash(), hdr}
 			pm.refReqChMu.Lock()
 			pm.refReqCh <- refRequest{hdr.Hash(), hdr}
-			fmt.Printf("block.hash = %s, hdr.hash = %s\n", block. Hash().String(), hdr.Hash().String())
+			fmt.Printf("block.hash = %s, hdr.hash = %s\n", block.Hash().String(), hdr.Hash().String())
 			pm.refReqChMu.Unlock()
 
 		}

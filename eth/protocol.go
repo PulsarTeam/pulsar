@@ -65,9 +65,10 @@ const (
 
 	//Protocol messages belonging to conflux
 	GetReferenceBodiesMsg = 0x08
-	ReferenceBodiesMsg = 0x09
-	GetReferenceBodyMsg = 0x0a
-	ReferenceBodyMsg = 0x0b
+	ReferenceBodiesMsg    = 0x09
+	GetReferenceBodyMsg   = 0x0a
+	ReferenceBodyMsg      = 0x0b
+	NotifyHeadAndTdMsg    = 0x0c
 )
 
 type errCode int
@@ -184,6 +185,14 @@ type newBlockData struct {
 type blockBody struct {
 	Transactions []*types.Transaction // Transactions contained within a block
 	Uncles       []*types.Header      // Uncles contained within a block
+}
+
+// headHashData is the network packet for the announcements of head hash and its total difficulty
+type headHashData struct {
+	Hash       common.Hash // Hash of the head block being announced
+	Parent     common.Hash // Parent block hash of the head block being announced
+	Difficulty *big.Int    // difficulty of the head block being announced
+	TD         *big.Int    // total difficulty of the head block being announced
 }
 
 // blockBodiesData is the network packet for block content distribution.

@@ -26,8 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
-	"gopkg.in/fatih/set.v0"
 	"github.com/ethereum/go-ethereum/rlp"
+	"gopkg.in/fatih/set.v0"
 )
 
 var (
@@ -85,8 +85,8 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    *set.Set                  // Set of transaction hashes known to be known by this peer
-	knownBlocks *set.Set                  // Set of block hashes known to be known by this peer
+	knownTxs    *set.Set // Set of transaction hashes known to be known by this peer
+	knownBlocks *set.Set // Set of block hashes known to be known by this peer
 	maybeBlocks *set.Set
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
@@ -183,7 +183,7 @@ func (p *peer) MarkBlock(hash common.Hash) {
 		//fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
 		p.knownBlocks.Pop()
 	}
-	fmt.Printf("MarkBlock %s %v\n",hash.String(),p.id)
+	fmt.Printf("MarkBlock %s %v\n", hash.String(), p.id)
 	p.knownBlocks.Add(hash)
 }
 
@@ -193,7 +193,7 @@ func (p *peer) MarkMaybeBlock(hash common.Hash) {
 		//fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
 		p.maybeBlocks.Pop()
 	}
-	fmt.Printf("MarkMaybeBlock %s %v\n",hash.String(),p.id)
+	fmt.Printf("MarkMaybeBlock %s %v\n", hash.String(), p.id)
 	p.maybeBlocks.Add(hash)
 }
 
@@ -255,6 +255,13 @@ func (p *peer) AsyncSendNewBlockHash(block *types.Block) {
 	}
 }
 
+// NotifyHeaderAndTd announces the header hash and td through
+// a hash notification.
+func (p *peer) NotifyHeadAndTd(head common.Hash, parent common.Hash, difficulty *big.Int, td *big.Int) error {
+	p.knownBlocks.Add(head)
+	return p2p.Send(p.rw, NotifyHeadAndTdMsg, []interface{}{head, parent, difficulty, td})
+}
+
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	p.knownBlocks.Add(block.Hash())
@@ -298,7 +305,6 @@ func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
 func (p *peer) SendReferenceBody(resp *refResp) error {
 	return p2p.Send(p.rw, ReferenceBodyMsg, resp)
 }
-
 
 // SendNodeDataRLP sends a batch of arbitrary internal data, corresponding to the
 // hashes requested.
@@ -459,7 +465,7 @@ func (ps *peerSet) Register(p *peer) error {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
 
-	fmt.Printf("Regist %v %v\n",p,p.id)
+	fmt.Printf("Regist %v %v\n", p, p.id)
 
 	if ps.closed {
 		return errClosed
@@ -481,10 +487,10 @@ func (ps *peerSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
-		fmt.Printf("not Unregister %v %v\n",id,ps.peers)
+		fmt.Printf("not Unregister %v %v\n", id, ps.peers)
 		return errNotRegistered
 	}
-	fmt.Printf("Unregister %v %v\n",p,p.id)
+	fmt.Printf("Unregister %v %v\n", p, p.id)
 
 	delete(ps.peers, id)
 	p.close()
@@ -579,6 +585,13 @@ func (ps *peerSet) BestPeer() *peer {
 		}
 	}
 	return bestPeer
+}
+
+// Notify the current header and td to each peer
+func (ps *peerSet) NotifyHeadAndTd(head common.Hash, parent common.Hash, difficulty *big.Int, td *big.Int) {
+	for _, p := range ps.peers {
+		p.NotifyHeadAndTd(head, parent, difficulty, td)
+	}
 }
 
 // Close disconnects all peers.
