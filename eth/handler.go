@@ -684,7 +684,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
-			fmt.Printf("NotifyHeaderAndTdMsg, from peer %s, headhash=%s, parenthash=%s, difficulty=%s, td=%s\n", p.id, data.Hash.String(), data.Parent.String(), data.Difficulty.String(), data.TD.String())
 			log.Info("update peer head", "peer", p.id, "trueHead", trueHead.String(), "trueTD", trueTD.String())
 			p.SetHead(trueHead, trueTD)
 		} else if trueTD.Cmp(td) < 0 {
