@@ -171,7 +171,7 @@ func (pm *ProtocolManager) updatePeers() {
 		select {
 		case <-timer.C:
 			currentBlock := pm.blockchain.CurrentBlock()
-			pm.peers.NotifyHeadAndTd(currentBlock.Hash(), currentBlock.ParentHash(), pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64()), currentBlock.Difficulty())
+			pm.peers.NotifyHeadAndTd(currentBlock.Hash(), currentBlock.ParentHash(), currentBlock.Difficulty(), pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64()))
 		case <-pm.quitUpdatePeers:
 			return
 		}
