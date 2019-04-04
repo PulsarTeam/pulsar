@@ -63,12 +63,12 @@ const (
 	GetReceiptsMsg = 0x0f
 	ReceiptsMsg    = 0x10
 
-	//Protocol messages belonging to conflux
-	GetReferenceBodiesMsg = 0x08
-	ReferenceBodiesMsg    = 0x09
-	GetReferenceBodyMsg   = 0x0a
-	ReferenceBodyMsg      = 0x0b
-	NotifyHeadAndTdMsg    = 0x0c
+	//Protocol messages belonging to pulsar dag
+	GetReferenceBodiesMsg = 0x11
+	ReferenceBodiesMsg    = 0x12
+	GetReferenceBodyMsg   = 0x13
+	ReferenceBodyMsg      = 0x14
+	NotifyHeadAndTdMsg    = 0x15
 )
 
 type errCode int
