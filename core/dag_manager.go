@@ -158,7 +158,7 @@ func newPendingBlocksManager() *pendingBlocksManager {
 	}
 }
 
-func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
+func (pbm *pendingBlocksManager) addBlock(dm *DAGManager, block *types.Block) {
 	if _, exist := pbm.pendingBlocks[block.Hash()]; exist {
 		return
 	}
@@ -173,6 +173,10 @@ func (pbm *pendingBlocksManager) addBlock(block *types.Block) {
 		waitedHash: make(map[common.Hash]struct{}, len(refs)),
 	}
 	for _, ref := range refs {
+		if dm.HasBlock(ref.Hash(), ref.Number.Uint64()) {
+			continue
+		}
+
 		data.waitedHash[ref.Hash()] = struct{}{}
 		waitedBlock, exist := pbm.waitedBlocks[ref.Hash()]
 		if exist {
@@ -1446,7 +1450,7 @@ func (dm *DAGManager) insertBlocks(blocks types.Blocks, refBlocks *list.List) (i
 				if len(blocks) != 1 {
 					panic("logic error, can not handle list of block without reference downloaded")
 				}
-				dm.pbm.addBlock(block)
+				dm.pbm.addBlock(dm, block)
 				continue
 			}
 			tmp := make(types.Blocks, 1)
