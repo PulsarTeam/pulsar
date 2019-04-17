@@ -368,9 +368,11 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	d.finishCh = make(chan struct{})
 
 	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
-		select {
-		case <-ch:
-		default:
+		for len(ch) > 0 {
+			select {
+			case <-ch:
+			default:
+			}
 		}
 	}
 
@@ -1251,9 +1253,6 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 			// The header fetcher sent a continuation flag, check if it's done
 			if !cont {
 				finished = true
-			}
-			for len(wakeCh) > 0 {
-				<-wakeCh
 			}
 			// Headers arrive, try to update the progress
 			select {
