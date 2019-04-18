@@ -252,19 +252,19 @@ func (ethash *Ethash) CheckSupplies(chain consensus.BlockReader, header *types.H
 			log.Error("the PowLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastMatureCycleSupply, "want", parent.PowLastMatureCycleSupply)
 			return false
 		}
-		if header.PowLastCycleSupply.Cmp(parent.PowLastCycleSupply) == 0 {
+		if header.PowLastCycleSupply.Cmp(parent.PowLastCycleSupply) != 0 {
 			log.Error("the PowLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastCycleSupply, "want", parent.PowLastCycleSupply)
 			return false
 		}
-		if header.PosOldMatureSupply.Cmp(parent.PosOldMatureSupply) == 0 {
+		if header.PosOldMatureSupply.Cmp(parent.PosOldMatureSupply) != 0 {
 			log.Error("the PosOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PosOldMatureSupply, "want", parent.PosOldMatureSupply)
 			return false
 		}
-		if header.PosLastMatureCycleSupply.Cmp(parent.PosLastMatureCycleSupply) == 0 {
+		if header.PosLastMatureCycleSupply.Cmp(parent.PosLastMatureCycleSupply) != 0 {
 			log.Error("the PosLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastMatureCycleSupply, "want", parent.PosLastMatureCycleSupply)
 			return false
 		}
-		if header.PosLastCycleSupply.Cmp(parent.PosLastCycleSupply) == 0 {
+		if header.PosLastCycleSupply.Cmp(parent.PosLastCycleSupply) != 0 {
 			log.Error("the PosLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastCycleSupply, "want", parent.PosLastCycleSupply)
 			return false
 		}
@@ -273,32 +273,32 @@ func (ethash *Ethash) CheckSupplies(chain consensus.BlockReader, header *types.H
 
 	// otherwise, calculate the new values
 	PowOldMatureSupply := new(big.Int).Add(parent.PowOldMatureSupply, parent.PowLastMatureCycleSupply)
-	if header.PowOldMatureSupply.Cmp(PowOldMatureSupply) == 0 {
+	if header.PowOldMatureSupply.Cmp(PowOldMatureSupply) != 0 {
 		log.Error("the PowOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PowOldMatureSupply, "want", PowOldMatureSupply)
 		return false
 	}
 	PowLastMatureCycleSupply := parent.PowLastCycleSupply
-	if header.PowLastMatureCycleSupply.Cmp(PowLastMatureCycleSupply) == 0 {
+	if header.PowLastMatureCycleSupply.Cmp(PowLastMatureCycleSupply) != 0 {
 		log.Error("the PowLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastMatureCycleSupply, "want", PowLastMatureCycleSupply)
 		return false
 	}
 	PowLastCycleSupply := ethash.CalcLastCyclePowSupply(chain, header, parent, headers)
-	if header.PowLastCycleSupply.Cmp(PowLastCycleSupply) == 0 {
+	if header.PowLastCycleSupply.Cmp(PowLastCycleSupply) != 0 {
 		log.Error("the PowLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastCycleSupply, "want", PowLastCycleSupply)
 		return false
 	}
 	PosOldMatureSupply := new(big.Int).Add(parent.PosOldMatureSupply, parent.PosLastMatureCycleSupply)
-	if header.PosOldMatureSupply.Cmp(PosOldMatureSupply) == 0 {
+	if header.PosOldMatureSupply.Cmp(PosOldMatureSupply) != 0 {
 		log.Error("the PosOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PosOldMatureSupply, "want", PosOldMatureSupply)
 		return false
 	}
 	PosLastMatureCycleSupply := parent.PosLastCycleSupply
-	if header.PosLastMatureCycleSupply.Cmp(PosLastMatureCycleSupply) == 0 {
+	if header.PosLastMatureCycleSupply.Cmp(PosLastMatureCycleSupply) != 0 {
 		log.Error("the PosLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastMatureCycleSupply, "want", PosLastMatureCycleSupply)
 		return false
 	}
 	PosLastCycleSupply := ethash.CalcLastCyclePosSupply(chain, header, parent, headers)
-	if header.PosLastCycleSupply.Cmp(PosLastCycleSupply) == 0 {
+	if header.PosLastCycleSupply.Cmp(PosLastCycleSupply) != 0 {
 		log.Error("the PosLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastCycleSupply, "want", parent.PosLastCycleSupply)
 		return false
 	}

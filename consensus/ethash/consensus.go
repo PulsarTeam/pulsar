@@ -298,7 +298,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 	}
 
 	if !ethash.CheckSupplies(chain, header, parent, headers) {
-		return fmt.Errorf("invalid supplies in blockheader %s: number %v, parent num %v", header.Hash(), header.Number, parent.Number)
+		return fmt.Errorf("invalid supplies in blockheader %s: number %v, parent num %v", header.Hash().String(), header.Number, parent.Number)
 	}
 
 	// Verify the pos weight
