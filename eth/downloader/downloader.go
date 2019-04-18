@@ -368,9 +368,11 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	d.finishCh = make(chan struct{})
 
 	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh, d.referenceWakeCh} {
-		select {
-		case <-ch:
-		default:
+		for len(ch) > 0 {
+			select {
+			case <-ch:
+			default:
+			}
 		}
 	}
 
@@ -1302,12 +1304,12 @@ func (d *Downloader) fetchParts2(errCancel error, deliveryCh chan dataPack, deli
 					return nil
 				}
 				/*
-				timeOutCnt++
-				if timeOutCnt >= 300{
-					fmt.Printf("fetchPart2 time out, and the fetches of this time is over!\n")
-					d.queue.Close()
-					return errors.New("fetchPart2 time out!\n")
-				}
+					timeOutCnt++
+					if timeOutCnt >= 300{
+						fmt.Printf("fetchPart2 time out, and the fetches of this time is over!\n")
+						d.queue.Close()
+						return errors.New("fetchPart2 time out!\n")
+					}
 				*/
 				break
 			}
@@ -1397,7 +1399,6 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 				"block", fmt.Sprintf("%d->%d", lastBlock, curBlock))
 		}
 	}()
-
 
 	// Wait for batches of headers to process
 	gotHeaders := false
@@ -1609,7 +1610,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 func (d *Downloader) findblk(refHdrs *list.List, blk *types.Header) bool {
 	for e := refHdrs.Front(); e != nil; e = e.Next() {
 		h := e.Value.(*types.Header)
-		if blk.Hash() == h.Hash(){
+		if blk.Hash() == h.Hash() {
 			return true
 		}
 	}
@@ -1626,7 +1627,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 		pivots[i] = blk
 		for _, refHdr := range blk.Uncles() {
 			ret := d.blockchain.GetBlockByHash(refHdr.Hash())
-			if ret != nil{
+			if ret != nil {
 				continue
 			}
 
@@ -1665,7 +1666,7 @@ func (d *Downloader) processPivotBlocks(results []*fetchResult) (types.Blocks, *
 					for _, refHdr := range blk.Uncles() {
 
 						ret := d.blockchain.GetBlockByHash(refHdr.Hash())
-						if ret != nil{
+						if ret != nil {
 							continue
 						}
 
