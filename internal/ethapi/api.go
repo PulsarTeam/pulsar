@@ -72,7 +72,7 @@ func (s *PublicEthereumAPI) ProtocolVersion() hexutil.Uint {
 }
 
 //get address tx nonce
-func (s *PublicBlockChainAPI) GetAccountNonce(ctx context.Context, address common.Address, blockNr rpc.BlockNumber) (hexutil.Uint64, error){
+func (s *PublicBlockChainAPI) GetAccountNonce(ctx context.Context, address common.Address, blockNr rpc.BlockNumber) (hexutil.Uint64, error) {
 	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return 0, err
@@ -920,27 +920,33 @@ func FormatLogs(logs []vm.StructLog) []StructLogRes {
 func RPCMarshalBlock(b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
 	head := b.Header() // copies the header once
 	fields := map[string]interface{}{
-		"number":           (*hexutil.Big)(head.Number),
-		"hash":             b.Hash(),
-		"parentHash":       head.ParentHash,
-		"nonce":            head.Nonce,
-		"mixHash":          head.MixDigest,
-		"sha3Uncles":       head.UncleHash,
-		"logsBloom":        head.Bloom,
-		"stateRoot":        head.Root,
-		"miner":            head.Coinbase,
-		"difficulty":       (*hexutil.Big)(head.Difficulty),
-		"posWeight":        head.PosWeight,
-		"posProduction":    (*hexutil.Big)(head.PosProduction),
-		"powProduction":    (*hexutil.Big)(head.PowProduction),
-		"extraData":        hexutil.Bytes(head.Extra),
-		"size":             hexutil.Uint64(b.Size()),
-		"gasLimit":         hexutil.Uint64(head.GasLimit),
-		"gasLimitPivot":    hexutil.Uint64(head.GasLimitPivot),
-		"gasUsed":          hexutil.Uint64(head.GasUsed),
-		"timestamp":        (*hexutil.Big)(head.Time),
-		"transactionsRoot": head.TxHash,
-		"receiptsRoot":     head.ReceiptHash,
+		"number":                   (*hexutil.Big)(head.Number),
+		"hash":                     b.Hash(),
+		"parentHash":               head.ParentHash,
+		"nonce":                    head.Nonce,
+		"mixHash":                  head.MixDigest,
+		"sha3Uncles":               head.UncleHash,
+		"logsBloom":                head.Bloom,
+		"stateRoot":                head.Root,
+		"miner":                    head.Coinbase,
+		"difficulty":               (*hexutil.Big)(head.Difficulty),
+		"posWeight":                head.PosWeight,
+		"posOldMatureSupply":       (*hexutil.Big)(head.PosOldMatureSupply),
+		"posLastMatureCycleSupply": (*hexutil.Big)(head.PosLastMatureCycleSupply),
+		"posLastCycleSupply":       (*hexutil.Big)(head.PosLastCycleSupply),
+		"powOldMatureSupply":       (*hexutil.Big)(head.PowOldMatureSupply),
+		"powLastMatureCycleSupply": (*hexutil.Big)(head.PowLastMatureCycleSupply),
+		"powLastCycleSupply":       (*hexutil.Big)(head.PowLastCycleSupply),
+		"posProduction":            (*hexutil.Big)(head.PosProduction),
+		"powProduction":            (*hexutil.Big)(head.PowProduction),
+		"extraData":                hexutil.Bytes(head.Extra),
+		"size":                     hexutil.Uint64(b.Size()),
+		"gasLimit":                 hexutil.Uint64(head.GasLimit),
+		"gasLimitPivot":            hexutil.Uint64(head.GasLimitPivot),
+		"gasUsed":                  hexutil.Uint64(head.GasUsed),
+		"timestamp":                (*hexutil.Big)(head.Time),
+		"transactionsRoot":         head.TxHash,
+		"receiptsRoot":             head.ReceiptHash,
 	}
 
 	if inclTx {

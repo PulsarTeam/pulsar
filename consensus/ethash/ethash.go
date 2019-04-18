@@ -239,6 +239,152 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 	return new(big.Int).Add(powTarget, posTarget)
 }
 
+// sanity check the supplies in this header
+func (ethash *Ethash) CheckSupplies(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) bool {
+
+	// if not the start of a cycle, just use the parent values
+	if header.Number.Uint64() < core.BlocksInMatureCycle() || (header.Number.Uint64()%core.BlocksInMatureCycle()) != 0 {
+		if header.PowOldMatureSupply.Cmp(parent.PowOldMatureSupply) != 0 {
+			log.Error("the PowOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PowOldMatureSupply, "want", parent.PowOldMatureSupply)
+			return false
+		}
+		if header.PowLastMatureCycleSupply.Cmp(parent.PowLastMatureCycleSupply) != 0 {
+			log.Error("the PowLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastMatureCycleSupply, "want", parent.PowLastMatureCycleSupply)
+			return false
+		}
+		if header.PowLastCycleSupply.Cmp(parent.PowLastCycleSupply) == 0 {
+			log.Error("the PowLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastCycleSupply, "want", parent.PowLastCycleSupply)
+			return false
+		}
+		if header.PosOldMatureSupply.Cmp(parent.PosOldMatureSupply) == 0 {
+			log.Error("the PosOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PosOldMatureSupply, "want", parent.PosOldMatureSupply)
+			return false
+		}
+		if header.PosLastMatureCycleSupply.Cmp(parent.PosLastMatureCycleSupply) == 0 {
+			log.Error("the PosLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastMatureCycleSupply, "want", parent.PosLastMatureCycleSupply)
+			return false
+		}
+		if header.PosLastCycleSupply.Cmp(parent.PosLastCycleSupply) == 0 {
+			log.Error("the PosLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastCycleSupply, "want", parent.PosLastCycleSupply)
+			return false
+		}
+		return true
+	}
+
+	// otherwise, calculate the new values
+	PowOldMatureSupply := new(big.Int).Add(parent.PowOldMatureSupply, parent.PowLastMatureCycleSupply)
+	if header.PowOldMatureSupply.Cmp(PowOldMatureSupply) == 0 {
+		log.Error("the PowOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PowOldMatureSupply, "want", PowOldMatureSupply)
+		return false
+	}
+	PowLastMatureCycleSupply := parent.PowLastCycleSupply
+	if header.PowLastMatureCycleSupply.Cmp(PowLastMatureCycleSupply) == 0 {
+		log.Error("the PowLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastMatureCycleSupply, "want", PowLastMatureCycleSupply)
+		return false
+	}
+	PowLastCycleSupply := ethash.CalcLastCyclePowSupply(chain, header, parent, headers)
+	if header.PowLastCycleSupply.Cmp(PowLastCycleSupply) == 0 {
+		log.Error("the PowLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PowLastCycleSupply, "want", PowLastCycleSupply)
+		return false
+	}
+	PosOldMatureSupply := new(big.Int).Add(parent.PosOldMatureSupply, parent.PosLastMatureCycleSupply)
+	if header.PosOldMatureSupply.Cmp(PosOldMatureSupply) == 0 {
+		log.Error("the PosOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PosOldMatureSupply, "want", PosOldMatureSupply)
+		return false
+	}
+	PosLastMatureCycleSupply := parent.PosLastCycleSupply
+	if header.PosLastMatureCycleSupply.Cmp(PosLastMatureCycleSupply) == 0 {
+		log.Error("the PosLastMatureCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastMatureCycleSupply, "want", PosLastMatureCycleSupply)
+		return false
+	}
+	PosLastCycleSupply := ethash.CalcLastCyclePosSupply(chain, header, parent, headers)
+	if header.PosLastCycleSupply.Cmp(PosLastCycleSupply) == 0 {
+		log.Error("the PosLastCycleSupply not valid!", "hash", header.Hash(), "have", header.PosLastCycleSupply, "want", parent.PosLastCycleSupply)
+		return false
+	}
+	return true
+}
+
+// update the supplies
+func (ethash *Ethash) UpdateSupplies(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) {
+
+	if header.Number.Uint64() < core.BlocksInMatureCycle() || (header.Number.Uint64()%core.BlocksInMatureCycle()) != 0 {
+		header.PowOldMatureSupply = parent.PowOldMatureSupply
+		header.PowLastMatureCycleSupply = parent.PowLastMatureCycleSupply
+		header.PowLastCycleSupply = parent.PowLastCycleSupply
+
+		header.PosOldMatureSupply = parent.PosOldMatureSupply
+		header.PosLastMatureCycleSupply = parent.PosLastMatureCycleSupply
+		header.PosLastCycleSupply = parent.PosLastCycleSupply
+		return
+	}
+
+	header.PowOldMatureSupply = new(big.Int).Add(parent.PowOldMatureSupply, parent.PowLastMatureCycleSupply)
+	header.PowLastMatureCycleSupply = parent.PowLastCycleSupply
+	header.PowLastCycleSupply = ethash.CalcLastCyclePowSupply(chain, header, parent, nil)
+
+	header.PosOldMatureSupply = new(big.Int).Add(parent.PosOldMatureSupply, parent.PosLastMatureCycleSupply)
+	header.PosLastMatureCycleSupply = parent.PosLastCycleSupply
+	header.PosLastCycleSupply = ethash.CalcLastCyclePosSupply(chain, header, parent, nil)
+
+}
+
+func (ethash *Ethash) CalcLastCyclePosSupply(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) *big.Int {
+	start, end := core.LastCycleRange(header.Number.Uint64())
+	sumPos := big.NewInt(0)
+
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! CalcLastCyclePosSupply can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		//log.Debug("#DEBUG# CalcLastCyclePosSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() <= start {
+			if start == h.Number.Uint64() {
+				sumPos.Add(sumPos, h.PosProduction)
+			}
+			break
+		} else {
+			sumPos.Add(sumPos, h.PosProduction)
+		}
+	}
+	return sumPos
+}
+
+func (ethash *Ethash) CalcLastCyclePowSupply(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) *big.Int {
+	sumPow := big.NewInt(0)
+	start, end := core.LastCycleRange(header.Number.Uint64())
+
+	hash := header.ParentHash
+	var h *types.Header = nil
+	for {
+		h = chain.GetHeaderByHash(hash)
+		if h == nil {
+			log.Error("FATAL ERROR! CalcLastCyclePowSupply can not get header", "hash", hash)
+			panic("Logical error.\n")
+		}
+		//log.Debug("#DEBUG# CalcLastCyclePowSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
+		hash = h.ParentHash
+		if h.Number.Uint64() >= end {
+			continue
+		} else if h.Number.Uint64() <= start {
+			if start == h.Number.Uint64() {
+				sumPow.Add(sumPow, h.PowProduction)
+			}
+			break
+		} else {
+			sumPow.Add(sumPow, h.PowProduction)
+		}
+	}
+	return sumPow
+}
+
 // returns the pos weight in a certain cycle.
 func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) uint32 {
 	if header.Number.Uint64() < core.MinMatureBlockNumber() {
@@ -247,21 +393,21 @@ func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Heade
 	}
 
 	weightAdjustInterval := uint64(core.BlocksInMatureCycle()) * ethash.difficultyAdjustCycles
-	if (parent.Number.Uint64() % weightAdjustInterval) != 0 {
+	if (header.Number.Uint64() % weightAdjustInterval) != 0 {
 		return parent.PosWeight
 	}
 
-	powProduction := ethash.GetPowProduction(chain, header, headers)
-	posProduction := ethash.GetPosProduction(chain, header, headers)
-	log.Debug("#2 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "powProduction", powProduction.String(), "posProduction", posProduction.String())
+	powLastMatureCycleSupply := header.PowLastMatureCycleSupply // ethash.GetPowProduction(chain, header, headers)
+	posLastMatureCycleSupply := header.PosLastMatureCycleSupply // ethash.GetPosProduction(chain, header, headers)
+	log.Debug("#2 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "powLastMatureCycleSupply", powLastMatureCycleSupply.String(), "posProduction", posLastMatureCycleSupply.String())
 	t := big.NewInt(0)
-	if powProduction.Cmp(t) == 0 && posProduction.Cmp(t) == 0 {
+	if powLastMatureCycleSupply.Cmp(t) == 0 && posLastMatureCycleSupply.Cmp(t) == 0 {
 		log.Debug("#3 PosWeight", "no:", header.Number.String(), "hash", header.Hash().String(), "initPosWeight", initPosWeight)
 		return uint32(initPosWeight)
 	}
 
-	x := new(big.Int).Mul(powProduction, big.NewInt(int64(posWeightPrecision)))
-	weight := new(big.Int).Div(x, new(big.Int).Add(powProduction, posProduction))
+	x := new(big.Int).Mul(powLastMatureCycleSupply, big.NewInt(int64(posWeightPrecision)))
+	weight := new(big.Int).Div(x, new(big.Int).Add(powLastMatureCycleSupply, posLastMatureCycleSupply))
 	weight32u := uint32(weight.Uint64())
 	if weight32u > posWeightMax {
 		weight32u = posWeightMax
@@ -280,116 +426,16 @@ func (ethash *Ethash) FindInHeaders(header *types.Header, headers []*types.Heade
 	return false
 }
 
-// returns the total pow production in the previous mature cycle.
-func (ethash *Ethash) GetPowProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
-	sumPow := big.NewInt(0)
-	start, end := core.LastMatureCycleRange(header.Number.Uint64())
-
-	hash := header.ParentHash
-	var h *types.Header = nil
-	for {
-		h = chain.GetHeaderByHash(hash)
-		if h == nil {
-			log.Error("FATAL ERROR! GetPowProduction can not get header", "hash", hash)
-			panic("Logical error.\n")
-		}
-		//log.Debug("#DEBUG# GetPowProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
-		hash = h.ParentHash
-		if h.Number.Uint64() >= end {
-			continue
-		} else if h.Number.Uint64() <= start {
-			if start == 0 {
-				sumPow.Add(sumPow, h.PowProduction)
-			}
-			break
-		} else {
-			sumPow.Add(sumPow, h.PowProduction)
-		}
-	}
-	return sumPow
-}
-
-// returns the total pos production in the previous mature cycle.
-func (ethash *Ethash) GetPosProduction(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
-	start, end := core.LastMatureCycleRange(header.Number.Uint64())
-	sumPos := big.NewInt(0)
-
-	hash := header.ParentHash
-	var h *types.Header = nil
-	for {
-		h = chain.GetHeaderByHash(hash)
-		if h == nil {
-			log.Error("FATAL ERROR! GetPosProduction can not get header", "hash", hash)
-			panic("Logical error.\n")
-		}
-		//log.Debug("#DEBUG# GetPosProduction get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
-		hash = h.ParentHash
-		if h.Number.Uint64() >= end {
-			continue
-		} else if h.Number.Uint64() <= start {
-			if start == 0 {
-				sumPos.Add(sumPos, h.PowProduction)
-			}
-			break
-		} else {
-			sumPos.Add(sumPos, h.PosProduction)
-		}
-	}
-	return sumPos
-}
-
 // returns the total supply of pos in all previous mature cycles.
 func (ethash *Ethash) GetPosMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
-	_, end := core.LastMatureCycleRange(header.Number.Uint64())
-	sumPos := big.NewInt(0)
-	hash := header.ParentHash
-	var h *types.Header = nil
-	for {
-		h = chain.GetHeaderByHash(hash)
-		if h == nil {
-			log.Error("FATAL ERROR! GetPosMatureTotalSupply can not get header", "hash", hash)
-			panic("Logical error.\n")
-		}
-		log.Debug("#DEBUG# GetPosMatureTotalSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
-		hash = h.ParentHash
-		if h.Number.Uint64() >= end {
-			continue
-		} else if h.Number.Uint64() == 0 {
-			sumPos.Add(sumPos, h.PosProduction)
-			break
-		} else {
-			sumPos.Add(sumPos, h.PosProduction)
-		}
-	}
 
-	return sumPos
+	return big.NewInt(0).Add(header.PosOldMatureSupply, header.PosLastMatureCycleSupply)
 }
 
 // returns the total supply of pow in all previous mature cycles.
 func (ethash *Ethash) GetPowMatureTotalSupply(chain consensus.BlockReader, header *types.Header, headers []*types.Header) *big.Int {
-	_, end := core.LastMatureCycleRange(header.Number.Uint64())
-	sumPow := big.NewInt(0)
-	hash := header.ParentHash
-	var h *types.Header = nil
-	for {
-		h = chain.GetHeaderByHash(hash)
-		if h == nil {
-			log.Error("FATAL ERROR! GetPowMatureTotalSupply can not get header", "hash", hash)
-			panic("Logical error.\n")
-		}
-		log.Debug("#DEBUG# GetPowMatureTotalSupply get header", "h.Number", h.Number.String(), "h.Hash", h.Hash().String(), "h.ParentHash", h.ParentHash.String())
-		hash = h.ParentHash
-		if h.Number.Uint64() >= end {
-			continue
-		} else if h.Number.Uint64() == 0 {
-			sumPow.Add(sumPow, h.PosProduction)
-			break
-		} else {
-			sumPow.Add(sumPow, h.PosProduction)
-		}
-	}
 
-	return sumPow
+	return big.NewInt(0).Add(header.PowOldMatureSupply, header.PowLastMatureCycleSupply)
 }
 
 // Threads returns the number of mining threads currently enabled. This doesn't

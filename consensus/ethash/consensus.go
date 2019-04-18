@@ -297,6 +297,10 @@ func (ethash *Ethash) verifyHeader(chain consensus.BlockReader, header, parent *
 		return fmt.Errorf("invalid difficulty: have %v, want %v, number %v, parent num %v", header.Difficulty, expected, header.Number, parent.Number)
 	}
 
+	if !ethash.CheckSupplies(chain, header, parent, headers) {
+		return fmt.Errorf("invalid supplies in blockheader %s: number %v, parent num %v", header.Hash(), header.Number, parent.Number)
+	}
+
 	// Verify the pos weight
 	//pos := ethash.GetPosProduction(chain, header)
 	//pow := ethash.GetPowProduction(chain, header)
@@ -497,6 +501,10 @@ func (ethash *Ethash) Prepare(chain consensus.BlockReader, header *types.Header)
 		return consensus.ErrUnknownAncestor
 	}
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent, nil)
+
+	// update the supplies
+	ethash.UpdateSupplies(chain, header, parent, nil)
+
 	header.PosWeight = ethash.PosWeight(chain, header, parent, nil)
 	return nil
 }
