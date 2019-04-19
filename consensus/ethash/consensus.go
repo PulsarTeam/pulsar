@@ -388,7 +388,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 		return parent.Difficulty
 	}
 
-	if ((parent.Number.Uint64() - 1) % difficultyAdjustInterval) != 0 {
+	if ((parent.Number.Uint64()) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
 	}
 
@@ -396,7 +396,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 	for i := 0; i < (int)(difficultyAdjustInterval); i++ {
 		h = chain.GetHeaderByHash(hash)
 		if h == nil {
-			log.Error("FATAL ERROR", "CalcDifficulty can not get header", "hash", hash)
+			log.Error("FATAL ERROR! CalcDifficulty can not get header", "hash", hash.String())
 			panic("Logical error.\n")
 		}
 		hash = h.ParentHash
