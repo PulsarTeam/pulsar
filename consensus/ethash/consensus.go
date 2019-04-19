@@ -44,7 +44,7 @@ var (
 	//InterestRate           *big.Int = big.NewInt(100)
 	//InterestRatePrecision  *big.Int = big.NewInt(10000000000)
 	FeeRatioPrecision *big.Int = big.NewInt(1000000)
-	halveIntervalGoal uint64   = 8 // (60 * 60 * 24 * 365 / PowTargetSpacing) * 2 // every two years
+	halveIntervalGoal uint64   = 32 // (60 * 60 * 24 * 365 / PowTargetSpacing) * 2 // every two years
 
 	PosSupplyLimit          *big.Int = new(big.Int).Mul(new(big.Int).SetUint64(128*core.FixedHalveInterval(halveIntervalGoal)*2), big.NewInt(1e18)) // The PosSupplyLimit is equal to PowSupplyLimit
 	PosSupplyN              *big.Int = new(big.Int).SetUint64(core.FixedHalveInterval(halveIntervalGoal) * 10)                                      // doubled after about 20 years, so 5% every year
