@@ -43,17 +43,16 @@ func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 func BlocksInMatureCycle() uint64 { return uint64(blocksInMatureCycle) }
 
 func LastCycleRange(cur uint64) (uint64, uint64) {
-	if cur >= blocksInMatureCycle {
-		end := cur & blocksInMatureCycleMask
-		return end - blocksInMatureCycle, end
+	if cur > blocksInMatureCycle {
+		start := (cur - 1) & blocksInMatureCycleMask
+		return start, start + blocksInMatureCycle
 	}
 	return 0, 0
 }
 
 func LastMatureCycleRange(cur uint64) (uint64, uint64) {
-	if cur >= minMatureBlockNumber {
-		end := (cur & blocksInMatureCycleMask) - blocksInMatureCycle
-		return end - blocksInMatureCycle, end
+	if cur > minMatureBlockNumber {
+		return LastCycleRange(cur - blocksInMatureCycle)
 	}
 	return 0, 0
 }

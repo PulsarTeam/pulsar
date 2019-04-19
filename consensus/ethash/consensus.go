@@ -388,7 +388,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 		return parent.Difficulty
 	}
 
-	if (parent.Number.Uint64() % difficultyAdjustInterval) != 0 {
+	if ((parent.Number.Uint64() - 1) % difficultyAdjustInterval) != 0 {
 		return parent.Difficulty
 	}
 

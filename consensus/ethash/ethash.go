@@ -243,7 +243,7 @@ func (ethash *Ethash) CalcTarget(chain consensus.BlockReader, header *types.Head
 func (ethash *Ethash) CheckSupplies(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) bool {
 
 	// if not the start of a cycle, just use the parent values
-	if header.Number.Uint64() < core.BlocksInMatureCycle() || (header.Number.Uint64()%core.BlocksInMatureCycle()) != 0 {
+	if header.Number.Uint64() <= core.BlocksInMatureCycle() || ((header.Number.Uint64()-1)%core.BlocksInMatureCycle()) != 0 {
 		if header.PowOldMatureSupply.Cmp(parent.PowOldMatureSupply) != 0 {
 			log.Error("the PowOldMatureSupply not valid!", "hash", header.Hash(), "have", header.PowOldMatureSupply, "want", parent.PowOldMatureSupply)
 			return false
@@ -308,7 +308,7 @@ func (ethash *Ethash) CheckSupplies(chain consensus.BlockReader, header *types.H
 // update the supplies
 func (ethash *Ethash) UpdateSupplies(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) {
 
-	if header.Number.Uint64() < core.BlocksInMatureCycle() || (header.Number.Uint64()%core.BlocksInMatureCycle()) != 0 {
+	if header.Number.Uint64() < core.BlocksInMatureCycle() || ((header.Number.Uint64()-1)%core.BlocksInMatureCycle()) != 0 {
 		header.PowOldMatureSupply = parent.PowOldMatureSupply
 		header.PowLastMatureCycleSupply = parent.PowLastMatureCycleSupply
 		header.PowLastCycleSupply = parent.PowLastCycleSupply
@@ -393,7 +393,7 @@ func (ethash *Ethash) PosWeight(chain consensus.BlockReader, header *types.Heade
 	}
 
 	weightAdjustInterval := uint64(core.BlocksInMatureCycle()) * ethash.difficultyAdjustCycles
-	if (header.Number.Uint64() % weightAdjustInterval) != 0 {
+	if ((header.Number.Uint64() - 1) % weightAdjustInterval) != 0 {
 		return parent.PosWeight
 	}
 
