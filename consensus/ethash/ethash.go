@@ -333,6 +333,8 @@ func (ethash *Ethash) CalcLastCyclePosSupply(chain consensus.BlockReader, header
 	start, end := core.LastCycleRange(header.Number.Uint64())
 	sumPos := big.NewInt(0)
 
+	log.Debug("#DEBUG#  CalcLastCyclePosSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "start", start, "end", end)
+
 	hash := header.ParentHash
 	var h *types.Header = nil
 	for {
@@ -360,6 +362,8 @@ func (ethash *Ethash) CalcLastCyclePosSupply(chain consensus.BlockReader, header
 func (ethash *Ethash) CalcLastCyclePowSupply(chain consensus.BlockReader, header *types.Header, parent *types.Header, headers []*types.Header) *big.Int {
 	sumPow := big.NewInt(0)
 	start, end := core.LastCycleRange(header.Number.Uint64())
+
+	log.Debug("#DEBUG#  CalcLastCyclePowSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "start", start, "end", end)
 
 	hash := header.ParentHash
 	var h *types.Header = nil

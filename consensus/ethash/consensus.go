@@ -428,7 +428,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.BlockReader, time uint64, p
 	if newDifficulty.Uint64() < powLimit {
 		newDifficulty = new(big.Int).SetUint64(powLimit)
 	}
-	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Uint64(), "newdifficulty", newDifficulty.Uint64(), "old-difficulty", parent.Difficulty.Uint64())
+	log.Info("adjust difficulty", "actualtime", actualTimespan, "number", parent.Number.Uint64()+1, "newdifficulty", newDifficulty.Uint64(), "old-difficulty", parent.Difficulty.Uint64())
 
 	return newDifficulty
 }

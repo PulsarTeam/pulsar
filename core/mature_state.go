@@ -42,19 +42,20 @@ func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 
 func BlocksInMatureCycle() uint64 { return uint64(blocksInMatureCycle) }
 
-func LastCycleRange(cur uint64) (uint64, uint64) {
+// return the last cycle range [start, end)
+func LastCycleRange(cur uint64) (start uint64, end uint64) {
 	if cur > blocksInMatureCycle {
-		start := (cur - 1) & blocksInMatureCycleMask
-		return start, start + blocksInMatureCycle
+		end = (cur-1)&blocksInMatureCycleMask + 1
+		return end - blocksInMatureCycle, end
 	}
-	return 0, 0
+	return 0, 1
 }
 
 func LastMatureCycleRange(cur uint64) (uint64, uint64) {
 	if cur > minMatureBlockNumber {
 		return LastCycleRange(cur - blocksInMatureCycle)
 	}
-	return 0, 0
+	return 0, 1
 }
 
 func FixedHalveInterval(rawHalveInterval uint64) uint64 {
