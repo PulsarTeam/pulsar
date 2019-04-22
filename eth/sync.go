@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	peersUpdateCycle    = 10 * time.Second // Time interval to peers update
+	peersUpdateCycle    = 60 * time.Second // Time interval to peers update
 	forceSyncCycle      = 10 * time.Second // Time interval to force syncs, even if few peers are available
 	minDesiredPeerCount = 5                // Amount of peers desired to start syncing
 

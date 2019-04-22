@@ -99,7 +99,7 @@ const (
 	//\\PowTargetTimespan = 75
 
 	PowTargetSpacing       = 5
-	DifficultyAdjustCycles = 2 // how many cycles to adjust
+	DifficultyAdjustCycles = 1 // how many cycles to adjust
 	MinDifficulty          = 131072
 )
 
