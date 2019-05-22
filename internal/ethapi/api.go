@@ -104,20 +104,28 @@ func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.B
 	if header == nil || err != nil {
 		return nil, err
 	}
-	headerNumber := header.Number.Uint64()
 	sumPow := big.NewInt(0)
-	for i := uint64(0); i <= headerNumber; i++ {
-		h, InternalErr := s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
-		if h == nil || InternalErr != nil {
-			return nil, InternalErr
+	sumPow.Add(sumPow, header.PowProduction)
+	_, end := core.LastCycleRange(header.Number.Uint64())
+	log.Debug("#DEBUG#  GetPowTotalSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "LastCycleEnd", end)
+	hash := header.ParentHash
+	var b *types.Block = nil
+	for {
+		b, _ = s.b.GetBlock(ctx, hash)
+		if b == nil {
+			return (*hexutil.Big)(sumPow), fmt.Errorf("ERROR! GetPowTotalSupply can not get block", "hash", hash)
 		}
-		if h != nil {
-			fmt.Println("block[", h.Number, "],sumPow:", sumPow.String(), " + ", h.PowProduction.String())
-			sumPow.Add(sumPow, h.PowProduction)
+		hash = b.ParentHash()
+		if b.NumberU64() >= end {
+			sumPow.Add(sumPow, b.Header().PowProduction)
+			continue
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			break
 		}
 	}
+	sumPow.Add(sumPow, header.PowLastCycleSupply)
+	sumPow.Add(sumPow, header.PowLastMatureCycleSupply)
+	sumPow.Add(sumPow, header.PowOldMatureSupply)
 	return (*hexutil.Big)(sumPow), nil
 }
 
@@ -127,20 +135,28 @@ func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.B
 	if header == nil || err != nil {
 		return nil, err
 	}
-	headerNumber := header.Number.Uint64()
 	sumPos := big.NewInt(0)
-	for i := uint64(0); i <= headerNumber; i++ {
-		h, InternalErr := s.b.HeaderByNumber(ctx, rpc.BlockNumber(i))
-		if h == nil || InternalErr != nil {
-			return nil, InternalErr
+	sumPos.Add(sumPos, header.PosProduction)
+	_, end := core.LastCycleRange(header.Number.Uint64())
+	log.Debug("#DEBUG#  GetPosTotalSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "LastCycleEnd", end)
+	hash := header.ParentHash
+	var b *types.Block = nil
+	for {
+		b, _ = s.b.GetBlock(ctx, hash)
+		if b == nil {
+			return (*hexutil.Big)(sumPos), fmt.Errorf("ERROR! GetPosTotalSupply can not get block", "hash", hash)
 		}
-		if h != nil {
-			fmt.Println("block[", h.Number, "],sumPos:", sumPos.String(), " + ", h.PosProduction.String())
-			sumPos.Add(sumPos, h.PosProduction)
+		hash = b.ParentHash()
+		if b.NumberU64() >= end {
+			sumPos.Add(sumPos, b.Header().PosProduction)
+			continue
 		} else {
-			log.Warn("cannot find header.", " header number:", i)
+			break
 		}
 	}
+	sumPos.Add(sumPos, header.PosLastCycleSupply)
+	sumPos.Add(sumPos, header.PosLastMatureCycleSupply)
+	sumPos.Add(sumPos, header.PosOldMatureSupply)
 	return (*hexutil.Big)(sumPos), nil
 }
 
