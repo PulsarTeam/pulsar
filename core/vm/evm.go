@@ -27,7 +27,11 @@ import (
 	//"github.com/ethereum/go-ethereum/core"
 	"errors"
 )
+
 // Message represents a message sent to a contract.
+
+var delegateMinnerMinBalance = new(big.Int).SetBytes([]byte("100000000000000000000000"))
+
 type Message interface {
 	From() common.Address
 	//FromFrontier() (common.Address, error)
@@ -443,9 +447,14 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 		snapshot = evm.StateDB.Snapshot()
 	)
 
-	switch msg.TxType(){
+	switch msg.TxType() {
 	case params.DelegateMinerRegisterTx:
 		//register to be a delegateMiner
+		accoutBalance := evm.StateDB.GetBalance(msg.From())
+		if accoutBalance.Cmp(delegateMinnerMinBalance) < 0 {
+			return nil, gas, ErrNotEnoughBalanceRegisterDelegateMiner
+		}
+
 		fee, _ := msg.Fee()
 		err = evm.StateDB.SetAccountType(msg.From(), common.DelegateMiner, fee)
 	case params.DelegateStakesTx:

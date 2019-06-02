@@ -49,6 +49,8 @@ const (
 	defaultGasPrice = 50 * params.Shannon
 )
 
+var delegateMinnerMinBalance = new(big.Int).SetBytes([]byte("100000000000000000000000"))
+
 // PublicEthereumAPI provides an API to access Ethereum related information.
 // It offers only methods that operate on public data that is freely available to anyone.
 type PublicEthereumAPI struct {
@@ -1372,6 +1374,19 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
+	if args.TxType == 1 {
+		//look up account balance is accord with condition
+		header, _ := s.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
+		state, _, err := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(header.Number.Int64()))
+		if state == nil || err != nil {
+			return common.Hash{}, err
+		}
+		accoutBalance := state.GetBalance(args.From)
+
+		if accoutBalance.Cmp(delegateMinnerMinBalance) < 0 {
+			return common.Hash{}, errors.New("the accout balance is not enough, the minimum balance must greater than 100000")
+		}
+	}
 
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}

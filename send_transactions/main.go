@@ -94,7 +94,7 @@ func main() {
 
 //send transaction init
 func send(count int, ip string) {
-	//dial pulsar
+	//dial bcw
 	client, err := rpc.Dial("http://" + ip)
 
 	defer client.Close()

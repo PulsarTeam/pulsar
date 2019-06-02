@@ -2,19 +2,19 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: pulsar android ios pulsar-cross swarm evm all test clean
-.PHONY: pulsar-linux pulsar-linux-386 pulsar-linux-amd64 pulsar-linux-mips64 pulsar-linux-mips64le
-.PHONY: pulsar-linux-arm pulsar-linux-arm-5 pulsar-linux-arm-6 pulsar-linux-arm-7 pulsar-linux-arm64
-.PHONY: pulsar-darwin pulsar-darwin-386 pulsar-darwin-amd64
-.PHONY: pulsar-windows pulsar-windows-386 pulsar-windows-amd64
+.PHONY: bcw android ios bcw-cross swarm evm all test clean
+.PHONY: bcw-linux bcw-linux-386 bcw-linux-amd64 bcw-linux-mips64 bcw-linux-mips64le
+.PHONY: bcw-linux-arm bcw-linux-arm-5 bcw-linux-arm-6 bcw-linux-arm-7 bcw-linux-arm64
+.PHONY: bcw-darwin bcw-darwin-386 bcw-darwin-amd64
+.PHONY: bcw-windows bcw-windows-386 bcw-windows-amd64
 
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
-pulsar:
-	build/env.sh go run build/ci.go install ./cmd/pulsar
+bcw:
+	build/env.sh go run build/ci.go install ./cmd/bcw
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/pulsar\" to launch pulsar."
+	@echo "Run \"$(GOBIN)/bcw\" to launch bcw."
 
 swarm:
 	build/env.sh go run build/ci.go install ./cmd/swarm
@@ -27,12 +27,12 @@ all:
 android:
 	build/env.sh go run build/ci.go aar --local
 	@echo "Done building."
-	@echo "Import \"$(GOBIN)/pulsar.aar\" to use the library."
+	@echo "Import \"$(GOBIN)/bcw.aar\" to use the library."
 
 ios:
 	build/env.sh go run build/ci.go xcode --local
 	@echo "Done building."
-	@echo "Import \"$(GOBIN)/pulsar.framework\" to use the library."
+	@echo "Import \"$(GOBIN)/bcw.framework\" to use the library."
 
 test: all
 	build/env.sh go run build/ci.go test
@@ -58,92 +58,92 @@ devtools:
 
 # Cross Compilation Targets (xgo)
 
-pulsar-cross: pulsar-linux pulsar-darwin pulsar-windows pulsar-android pulsar-ios
+bcw-cross: bcw-linux bcw-darwin bcw-windows bcw-android bcw-ios
 	@echo "Full cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-*
+	@ls -ld $(GOBIN)/bcw-*
 
-pulsar-linux: pulsar-linux-386 pulsar-linux-amd64 pulsar-linux-arm pulsar-linux-mips64 pulsar-linux-mips64le
+bcw-linux: bcw-linux-386 bcw-linux-amd64 bcw-linux-arm bcw-linux-mips64 bcw-linux-mips64le
 	@echo "Linux cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-*
+	@ls -ld $(GOBIN)/bcw-linux-*
 
-pulsar-linux-386:
+bcw-linux-386:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/geth
 	@echo "Linux 386 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep 386
+	@ls -ld $(GOBIN)/bcw-linux-* | grep 386
 
-pulsar-linux-amd64:
+bcw-linux-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/geth
 	@echo "Linux amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep amd64
+	@ls -ld $(GOBIN)/bcw-linux-* | grep amd64
 
-pulsar-linux-arm: pulsar-linux-arm-5 pulsar-linux-arm-6 pulsar-linux-arm-7 pulsar-linux-arm64
+bcw-linux-arm: bcw-linux-arm-5 bcw-linux-arm-6 bcw-linux-arm-7 bcw-linux-arm64
 	@echo "Linux ARM cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep arm
+	@ls -ld $(GOBIN)/bcw-linux-* | grep arm
 
-pulsar-linux-arm-5:
+bcw-linux-arm-5:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-5 -v ./cmd/geth
 	@echo "Linux ARMv5 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep arm-5
+	@ls -ld $(GOBIN)/bcw-linux-* | grep arm-5
 
-pulsar-linux-arm-6:
+bcw-linux-arm-6:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-6 -v ./cmd/geth
 	@echo "Linux ARMv6 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep arm-6
+	@ls -ld $(GOBIN)/bcw-linux-* | grep arm-6
 
-pulsar-linux-arm-7:
+bcw-linux-arm-7:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-7 -v ./cmd/geth
 	@echo "Linux ARMv7 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep arm-7
+	@ls -ld $(GOBIN)/bcw-linux-* | grep arm-7
 
-pulsar-linux-arm64:
+bcw-linux-arm64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm64 -v ./cmd/geth
 	@echo "Linux ARM64 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep arm64
+	@ls -ld $(GOBIN)/bcw-linux-* | grep arm64
 
-pulsar-linux-mips:
+bcw-linux-mips:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep mips
+	@ls -ld $(GOBIN)/bcw-linux-* | grep mips
 
-pulsar-linux-mipsle:
+bcw-linux-mipsle:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPSle cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep mipsle
+	@ls -ld $(GOBIN)/bcw-linux-* | grep mipsle
 
-pulsar-linux-mips64:
+bcw-linux-mips64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS64 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep mips64
+	@ls -ld $(GOBIN)/bcw-linux-* | grep mips64
 
-pulsar-linux-mips64le:
+bcw-linux-mips64le:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS64le cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-linux-* | grep mips64le
+	@ls -ld $(GOBIN)/bcw-linux-* | grep mips64le
 
-pulsar-darwin: pulsar-darwin-386 pulsar-darwin-amd64
+bcw-darwin: bcw-darwin-386 bcw-darwin-amd64
 	@echo "Darwin cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-darwin-*
+	@ls -ld $(GOBIN)/bcw-darwin-*
 
-pulsar-darwin-386:
+bcw-darwin-386:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/geth
 	@echo "Darwin 386 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-darwin-* | grep 386
+	@ls -ld $(GOBIN)/bcw-darwin-* | grep 386
 
-pulsar-darwin-amd64:
+bcw-darwin-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/geth
 	@echo "Darwin amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-darwin-* | grep amd64
+	@ls -ld $(GOBIN)/bcw-darwin-* | grep amd64
 
-pulsar-windows: pulsar-windows-386 pulsar-windows-amd64
+bcw-windows: bcw-windows-386 bcw-windows-amd64
 	@echo "Windows cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-windows-*
+	@ls -ld $(GOBIN)/bcw-windows-*
 
-pulsar-windows-386:
+bcw-windows-386:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/386 -v ./cmd/geth
 	@echo "Windows 386 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-windows-* | grep 386
+	@ls -ld $(GOBIN)/bcw-windows-* | grep 386
 
-pulsar-windows-amd64:
+bcw-windows-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
 	@echo "Windows amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/pulsar-windows-* | grep amd64
+	@ls -ld $(GOBIN)/bcw-windows-* | grep amd64
