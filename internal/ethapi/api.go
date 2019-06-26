@@ -49,7 +49,7 @@ const (
 	defaultGasPrice = 50 * params.Shannon
 )
 
-var delegateMinnerMinBalance = new(big.Int).SetBytes([]byte("100000000000000000000000"))
+var delegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
 
 // PublicEthereumAPI provides an API to access Ethereum related information.
 // It offers only methods that operate on public data that is freely available to anyone.
