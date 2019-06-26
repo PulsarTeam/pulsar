@@ -49,8 +49,6 @@ const (
 	defaultGasPrice = 50 * params.Shannon
 )
 
-var delegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
-
 // PublicEthereumAPI provides an API to access Ethereum related information.
 // It offers only methods that operate on public data that is freely available to anyone.
 type PublicEthereumAPI struct {
@@ -1383,8 +1381,8 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 		}
 		accoutBalance := state.GetBalance(args.From)
 
-		if accoutBalance.Cmp(delegateMinnerMinBalance) < 0 {
-			return common.Hash{}, errors.New("the accout balance is not enough, the minimum balance must greater than 100000")
+		if accoutBalance.Cmp(vm.DelegateMinnerMinBalance) < 0 {
+			return common.Hash{}, vm.ErrNotEnoughBalanceRegisterDelegateMiner
 		}
 	}
 

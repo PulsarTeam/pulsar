@@ -21,16 +21,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"errors"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	//"github.com/ethereum/go-ethereum/core"
-	"errors"
 )
 
-// Message represents a message sent to a contract.
+var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
 
-var delegateMinnerMinBalance = new(big.Int).SetBytes([]byte("100000000000000000000000"))
+// Message represents a message sent to a contract.
 
 type Message interface {
 	From() common.Address
@@ -451,7 +450,7 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 	case params.DelegateMinerRegisterTx:
 		//register to be a delegateMiner
 		accoutBalance := evm.StateDB.GetBalance(msg.From())
-		if accoutBalance.Cmp(delegateMinnerMinBalance) < 0 {
+		if accoutBalance.Cmp(DelegateMinnerMinBalance) < 0 {
 			return nil, gas, ErrNotEnoughBalanceRegisterDelegateMiner
 		}
 
