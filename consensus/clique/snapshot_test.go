@@ -70,7 +70,7 @@ func (ap *testerAccountPool) address(account string) common.Address {
 	return crypto.PubkeyToAddress(ap.accounts[account].PublicKey)
 }
 
-// testerChainReader implements consensus.ChainReader to access the genesis
+// testerChainReader implements consensus.BlockReader to access the genesis
 // block. All other methods and requests will panic.
 type testerChainReader struct {
 	db ethdb.Database

@@ -139,10 +139,10 @@ func (s *Service) loop() {
 	var blockchain blockChain
 	var txpool txPool
 	if s.eth != nil {
-		blockchain = s.eth.BlockChain()
+		blockchain = s.eth.DAGManager()
 		txpool = s.eth.TxPool()
 	} else {
-		blockchain = s.les.BlockChain()
+		blockchain = s.les.DAGManager()
 		txpool = s.les.TxPool()
 	}
 
@@ -530,10 +530,10 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 	if s.eth != nil {
 		// Full nodes have all needed information available
 		if block == nil {
-			block = s.eth.BlockChain().CurrentBlock()
+			block = s.eth.DAGManager().CurrentBlock()
 		}
 		header = block.Header()
-		td = s.eth.BlockChain().GetTd(header.Hash(), header.Number.Uint64())
+		td = s.eth.DAGManager().GetTd(header.Hash(), header.Number.Uint64())
 
 		txs = make([]txStats, len(block.Transactions()))
 		for i, tx := range block.Transactions() {
@@ -545,9 +545,9 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		if block != nil {
 			header = block.Header()
 		} else {
-			header = s.les.BlockChain().CurrentHeader()
+			header = s.les.DAGManager().CurrentHeader()
 		}
-		td = s.les.BlockChain().GetTd(header.Hash(), header.Number.Uint64())
+		td = s.les.DAGManager().GetTd(header.Hash(), header.Number.Uint64())
 		txs = []txStats{}
 	}
 	// Assemble and return the block stats
@@ -582,9 +582,9 @@ func (s *Service) reportHistory(conn *websocket.Conn, list []uint64) error {
 		// No indexes requested, send back the top ones
 		var head int64
 		if s.eth != nil {
-			head = s.eth.BlockChain().CurrentHeader().Number.Int64()
+			head = s.eth.DAGManager().CurrentHeader().Number.Int64()
 		} else {
-			head = s.les.BlockChain().CurrentHeader().Number.Int64()
+			head = s.les.DAGManager().CurrentHeader().Number.Int64()
 		}
 		start := head - historyUpdateRange + 1
 		if start < 0 {
@@ -600,9 +600,9 @@ func (s *Service) reportHistory(conn *websocket.Conn, list []uint64) error {
 		// Retrieve the next block if it's known to us
 		var block *types.Block
 		if s.eth != nil {
-			block = s.eth.BlockChain().GetBlockByNumber(number)
+			block = s.eth.DAGManager().GetBlockByNumber(number)
 		} else {
-			if header := s.les.BlockChain().GetHeaderByNumber(number); header != nil {
+			if header := s.les.DAGManager().GetHeaderByNumber(number); header != nil {
 				block = types.NewBlockWithHeader(header)
 			}
 		}
@@ -687,13 +687,13 @@ func (s *Service) reportStats(conn *websocket.Conn) error {
 		hashrate = int(s.eth.Miner().HashRate())
 
 		sync := s.eth.Downloader().Progress()
-		syncing = s.eth.BlockChain().CurrentHeader().Number.Uint64() >= sync.HighestBlock
+		syncing = s.eth.DAGManager().CurrentHeader().Number.Uint64() >= sync.HighestBlock
 
 		price, _ := s.eth.APIBackend.SuggestPrice(context.Background())
 		gasprice = int(price.Uint64())
 	} else {
 		sync := s.les.Downloader().Progress()
-		syncing = s.les.BlockChain().CurrentHeader().Number.Uint64() >= sync.HighestBlock
+		syncing = s.les.DAGManager().CurrentHeader().Number.Uint64() >= sync.HighestBlock
 	}
 	// Assemble the node stats and send it to the server
 	log.Trace("Sending node details to ethstats")

@@ -33,7 +33,7 @@ type Validator interface {
 	// ValidateState validates the given statedb and optionally the receipts and
 	// gas used.
 	ValidateState(block, parent *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
-    //ValidateHeader(block *types.Block, statedb *state.StateDB) error
+	//ValidateHeader(block *types.Block, statedb *state.StateDB) error
 }
 
 // Processor is an interface for processing blocks using a given initial state.
@@ -43,5 +43,13 @@ type Validator interface {
 // of gas used in the process and return an error if any of the internal rules
 // failed.
 type Processor interface {
-	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error)
+	Process(block *types.Block, pivotTxs types.Transactions, txs types.TransactionRefs, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, types.Transactions, error)
+}
+
+type DagState interface {
+	IsReorg(epochHeaders []*types.Header) (isReorg bool, oldPivotChain []*types.Header, newPivotChain []*types.Header, err error)
+	InsertBlocks(epochHeaders []*types.Header)
+	GetFutureReferenceBlock() (blocks []*types.Block, err error)
+	CurrentBlock() (block *types.Block, err error)
+	GetEpochHeaders(epochNumber uint64) (epochHeaders []*types.Header, err error)
 }

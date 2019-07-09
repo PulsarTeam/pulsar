@@ -265,7 +265,7 @@ func TestInvalidTransactions(t *testing.T) {
 
 	//max fee
 	local, _ := crypto.GenerateKey()
-	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, common.MaxFeeRatio())
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
 	if err := pool.AddRemote(tx); err != ErrFeeLimit{
 		t.Error("expected", ErrFeeLimit, "got", err)
 	}
@@ -274,7 +274,7 @@ func TestInvalidTransactions(t *testing.T) {
 	}
 
 	//type error
-	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, common.MaxFeeRatio())
+	tx = specialTransaction(2, 100000, big.NewInt(1), local, params.DelegateMinerRegisterTx, params.MaxDelegateFeeLimit)
 	from, _ = deriveSender(tx)
 	pool.currentState.SetBalance(from, big.NewInt(0))
 	if err := pool.AddRemote(tx); err != ErrBalanceForRegister{

@@ -52,7 +52,7 @@ func TestGetBlockHeadersLes2(t *testing.T) { testGetBlockHeaders(t, 2) }
 
 func testGetBlockHeaders(t *testing.T, protocol int) {
 	pm := newTestProtocolManagerMust(t, false, downloader.MaxHashFetch+15, nil, nil, nil, ethdb.NewMemDatabase())
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -181,7 +181,7 @@ func TestGetBlockBodiesLes2(t *testing.T) { testGetBlockBodies(t, 2) }
 
 func testGetBlockBodies(t *testing.T, protocol int) {
 	pm := newTestProtocolManagerMust(t, false, downloader.MaxBlockFetch+15, nil, nil, nil, ethdb.NewMemDatabase())
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -258,7 +258,7 @@ func TestGetCodeLes2(t *testing.T) { testGetCode(t, 2) }
 func testGetCode(t *testing.T, protocol int) {
 	// Assemble the test environment
 	pm := newTestProtocolManagerMust(t, false, 4, testChainGen, nil, nil, ethdb.NewMemDatabase())
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -292,7 +292,7 @@ func testGetReceipt(t *testing.T, protocol int) {
 	// Assemble the test environment
 	db := ethdb.NewMemDatabase()
 	pm := newTestProtocolManagerMust(t, false, 4, testChainGen, nil, nil, db)
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -320,7 +320,7 @@ func testGetProofs(t *testing.T, protocol int) {
 	// Assemble the test environment
 	db := ethdb.NewMemDatabase()
 	pm := newTestProtocolManagerMust(t, false, 4, testChainGen, nil, nil, db)
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -383,7 +383,7 @@ func testGetCHTProofs(t *testing.T, protocol int) {
 	// Assemble the test environment
 	db := ethdb.NewMemDatabase()
 	pm := newTestProtocolManagerMust(t, false, int(frequency)+light.HelperTrieProcessConfirmations, testChainGen, nil, nil, db)
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", protocol, pm, true)
 	defer peer.close()
 
@@ -451,7 +451,7 @@ func TestGetBloombitsProofs(t *testing.T) {
 	// Assemble the test environment
 	db := ethdb.NewMemDatabase()
 	pm := newTestProtocolManagerMust(t, false, light.BloomTrieFrequency+256, testChainGen, nil, nil, db)
-	bc := pm.blockchain.(*core.BlockChain)
+	bc := pm.blockchain.(*core.DAGManager)
 	peer, _ := newTestPeer(t, "peer", 2, pm, true)
 	defer peer.close()
 
@@ -490,7 +490,7 @@ func TestGetBloombitsProofs(t *testing.T) {
 func TestTransactionStatusLes2(t *testing.T) {
 	db := ethdb.NewMemDatabase()
 	pm := newTestProtocolManagerMust(t, false, 0, nil, nil, nil, db)
-	chain := pm.blockchain.(*core.BlockChain)
+	chain := pm.blockchain.(*core.DAGManager)
 	config := core.DefaultTxPoolConfig
 	config.Journal = ""
 	txpool := core.NewTxPool(config, params.TestChainConfig, chain)
@@ -538,7 +538,7 @@ func TestTransactionStatusLes2(t *testing.T) {
 		block.AddTx(tx1)
 		block.AddTx(tx2)
 	})
-	if _, err := chain.InsertChain(gchain); err != nil {
+	if _, err := chain.InsertBlocks(gchain); err != nil {
 		panic(err)
 	}
 	// wait until TxPool processes the inserted block
@@ -559,7 +559,7 @@ func TestTransactionStatusLes2(t *testing.T) {
 
 	// create a reorg that rolls them back
 	gchain, _ = core.GenerateChain(params.TestChainConfig, chain.GetBlockByNumber(0), ethash.NewFaker(), db, 2, func(i int, block *core.BlockGen) {})
-	if _, err := chain.InsertChain(gchain); err != nil {
+	if _, err := chain.InsertBlocks(gchain); err != nil {
 		panic(err)
 	}
 	// wait until TxPool processes the reorg

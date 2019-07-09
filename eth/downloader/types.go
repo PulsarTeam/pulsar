@@ -77,3 +77,16 @@ type statePack struct {
 func (p *statePack) PeerId() string { return p.peerID }
 func (p *statePack) Items() int     { return len(p.states) }
 func (p *statePack) Stats() string  { return fmt.Sprintf("%d", len(p.states)) }
+
+
+/*
+//referenceBlocks is a batch of reference blocks returned by a peer.
+type referencesPack struct{
+	peerID string
+	blocks [][]*types.Block
+}
+
+func (p *referencesPack) PeerId() string { return p.peerID }
+func (p *referencesPack) Items() int     { return len(p.blocks) }
+func (p *referencesPack) Stats() string  { return fmt.Sprintf("%d", len(p.blocks)) }
+*/

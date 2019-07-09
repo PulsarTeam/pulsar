@@ -242,7 +242,7 @@ func (dl *downloadTester) GetBlockByHash(hash common.Hash) *types.Block {
 	return dl.ownBlocks[hash]
 }
 
-// CurrentHeader retrieves the current head header from the canonical chain.
+// CurrentHeader() retrieves the current head header from the canonical chain.
 func (dl *downloadTester) CurrentHeader() *types.Header {
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
@@ -255,7 +255,7 @@ func (dl *downloadTester) CurrentHeader() *types.Header {
 	return dl.genesis.Header()
 }
 
-// CurrentBlock retrieves the current head block from the canonical chain.
+// CurrentPivotBlock retrieves the current head block from the canonical chain.
 func (dl *downloadTester) CurrentBlock() *types.Block {
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
@@ -331,7 +331,7 @@ func (dl *downloadTester) InsertHeaderChain(headers []*types.Header, checkFreq i
 }
 
 // InsertChain injects a new batch of blocks into the simulated chain.
-func (dl *downloadTester) InsertChain(blocks types.Blocks) (int, error) {
+func (dl *downloadTester) InsertBlocks(blocks types.Blocks) (int, error) {
 	dl.lock.Lock()
 	defer dl.lock.Unlock()
 

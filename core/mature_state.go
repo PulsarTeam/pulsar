@@ -1,88 +1,96 @@
 package core
 
 import (
-	"math/big"
-	"sync"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
+	"math/big"
+	"sync"
 )
 
 type dmAttr struct {
-	feeRatio uint32
+	feeRatio          uint32
 	depositBalanceSum *big.Int
-	users map[common.Address]common.DepositData
+	users             map[common.Address]common.DepositData
 }
 
 type MatureState struct {
 	state *state.StateDB
 
 	// caches
-	miners map[common.Address]*dmAttr
-	depositBalanceSum *big.Int	// Sum of all miner deposit
-	dmCount uint32
+	miners            map[common.Address]*dmAttr
+	depositBalanceSum *big.Int // Sum of all miner deposit
+	dmCount           uint32
 }
 
 type matureStateSet struct {
-	current *MatureState
-	prev *MatureState
+	current  *MatureState
+	prev     *MatureState
 	minBlock uint64
-	cs sync.Mutex
+	cs       sync.Mutex
 }
 
 const (
-	blocksInMatureCycle uint64 = 16
-	blocksInMatureCycleMask = ^(blocksInMatureCycle - 1)
-	minMatureBlockNumber = blocksInMatureCycle * 2
+	blocksInMatureCycle     uint64 = 8192 // the mature cycle, for 15 seconds per block it's 1280 minutes, i.e., about 21.333 hours
+	blocksInMatureCycleMask        = ^(blocksInMatureCycle - 1)
+	minMatureBlockNumber           = blocksInMatureCycle * 2
 )
 
 func MinMatureBlockNumber() uint64 { return minMatureBlockNumber }
 
-func BlocksInMatureCycle() int64 { return int64(blocksInMatureCycle) }
+func BlocksInMatureCycle() uint64 { return uint64(blocksInMatureCycle) }
 
-func LastMatureCycleRange(cur uint64) (uint64, uint64) {
-	if cur >= minMatureBlockNumber {
-		end := (cur & blocksInMatureCycleMask) - blocksInMatureCycle
+// return the last cycle range [start, end)
+func LastCycleRange(cur uint64) (start uint64, end uint64) {
+	if cur > blocksInMatureCycle {
+		end = (cur-1)&blocksInMatureCycleMask + 1
 		return end - blocksInMatureCycle, end
 	}
-	return 0, 0
+	return 0, 1
 }
 
-func FixedHalveInterval( rawHalveInterval uint64) uint64 {
+func LastMatureCycleRange(cur uint64) (uint64, uint64) {
+	if cur > minMatureBlockNumber {
+		return LastCycleRange(cur - blocksInMatureCycle)
+	}
+	return 0, 1
+}
+
+func FixedHalveInterval(rawHalveInterval uint64) uint64 {
 	return rawHalveInterval & blocksInMatureCycleMask
 }
 
 var cachedStates = matureStateSet{
-	current: nil,
-	prev: nil,
+	current:  nil,
+	prev:     nil,
 	minBlock: 0,
 }
 
-func GetMatureState(chain consensus.ChainReader,  blockNum uint64, backup []*types.Header) *MatureState {
+func GetMatureState(chain consensus.BlockReader, blockNum uint64, backup []*types.Header) *MatureState {
 	cachedStates.cs.Lock()
 	defer cachedStates.cs.Unlock()
 	if cachedStates.current != nil {
-		if blockNum >= cachedStates.minBlock && blockNum < cachedStates.minBlock + blocksInMatureCycle {
+		if blockNum >= cachedStates.minBlock && blockNum < cachedStates.minBlock+blocksInMatureCycle {
 			// Current cycle
 			return cachedStates.current
 		}
-		if blockNum >= cachedStates.minBlock - blocksInMatureCycle && blockNum < cachedStates.minBlock {
+		if blockNum >= cachedStates.minBlock-blocksInMatureCycle && blockNum < cachedStates.minBlock {
 			// Previous cycle
 			if cachedStates.prev != nil || blockNum < minMatureBlockNumber {
 				return cachedStates.prev
 			}
 			// update previous cycle.
-			cachedStates.prev = newMatureState(chain, backup, cachedStates.minBlock - minMatureBlockNumber - 1)
+			cachedStates.prev = newMatureState(chain, backup, cachedStates.minBlock-minMatureBlockNumber-1)
 			return cachedStates.prev
 		}
 
 		nextCycleBlock := cachedStates.minBlock + blocksInMatureCycle
-		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock + blocksInMatureCycle {
+		if blockNum >= nextCycleBlock && blockNum < nextCycleBlock+blocksInMatureCycle {
 			// Next cycle
 			cachedStates.prev = cachedStates.current
-			cachedStates.current = newMatureState(chain, backup, cachedStates.minBlock - 1)
+			cachedStates.current = newMatureState(chain, backup, cachedStates.minBlock-1)
 			cachedStates.minBlock = nextCycleBlock
 			return cachedStates.current
 		}
@@ -91,7 +99,7 @@ func GetMatureState(chain consensus.ChainReader,  blockNum uint64, backup []*typ
 	var mState *MatureState
 	if blockNum >= minMatureBlockNumber {
 		startBlock := blockNum & blocksInMatureCycleMask
-		mState = newMatureState(chain, backup, startBlock - blocksInMatureCycle - 1)
+		mState = newMatureState(chain, backup, startBlock-blocksInMatureCycle-1)
 		if cachedStates.current == nil {
 			// First calling
 			cachedStates.current = mState
@@ -143,7 +151,7 @@ func getHeaderFromBuffer(buf []*types.Header, blockNum uint64) *types.Header {
 	return nil
 }
 
-func newMatureState(chain consensus.ChainReader, backup []*types.Header, blockNum uint64) *MatureState {
+func newMatureState(chain consensus.BlockReader, backup []*types.Header, blockNum uint64) *MatureState {
 	// get the state
 	header := chain.GetHeaderByNumber(blockNum)
 	if header == nil {

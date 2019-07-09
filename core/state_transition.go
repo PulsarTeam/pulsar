@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"fmt"
 )
 
 var (
@@ -172,9 +173,12 @@ func (st *StateTransition) preCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
 		nonce := st.state.GetNonce(st.msg.From())
+		fmt.Printf("msg.hash = %s, nonce = %v, st.msg.Nonce() = %v\n", st.msg.From().String(), nonce, st.msg.Nonce())
 		if nonce < st.msg.Nonce() {
+			fmt.Printf("ErrNonceTooHigh\n")
 			return ErrNonceTooHigh
 		} else if nonce > st.msg.Nonce() {
+			fmt.Printf("ErrNonceTooLow\n")
 			return ErrNonceTooLow
 		}
 	}

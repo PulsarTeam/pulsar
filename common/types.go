@@ -133,6 +133,36 @@ func (h UnprefixedHash) MarshalText() ([]byte, error) {
 	return []byte(hex.EncodeToString(h[:])), nil
 }
 
+
+func HashArrayToBytes(hashes []Hash) []byte {
+	length := uint16(len(hashes))
+	lowbyte := byte(length & 0x00ff)
+	highbyte := byte(length & 0xff00)
+
+	bytes := make([]byte, 2 + HashLength*length)
+	bytes[0] = lowbyte
+	bytes[1] = highbyte
+
+	// TODO optimism
+	for i:= 0; i< int(length); i++ {
+		for j:=0; j<HashLength; j++ {
+			bytes[2+HashLength*i + j] = hashes[i].Bytes()[j]
+		}
+	}
+	return bytes
+}
+
+func BytesToHashArray(bytes []byte) []Hash {
+	lowbyte := bytes[0]
+	highbyte := bytes[1]
+	var length uint16 = uint16(lowbyte) | ( uint16(highbyte) << 8)
+	hashes := make([]Hash, length)
+	for i:=0; i<int(length); i++ {
+		hashes[i].SetBytes( bytes[(2+HashLength*i):(2+HashLength*(i+1))])
+	}
+	return hashes
+}
+
 /////////// Address
 
 // Address represents the 20 byte address of an Ethereum account.

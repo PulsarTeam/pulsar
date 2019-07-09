@@ -48,7 +48,7 @@ func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 }
 
 func (b *LesApiBackend) CurrentBlock() *types.Block {
-	return types.NewBlockWithHeader(b.eth.BlockChain().CurrentHeader())
+	return types.NewBlockWithHeader(b.eth.DAGManager().CurrentHeader())
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {
@@ -182,6 +182,11 @@ func (b *LesApiBackend) EventMux() *event.TypeMux {
 
 func (b *LesApiBackend) AccountManager() *accounts.Manager {
 	return b.eth.accountManager
+}
+
+func (b *LesApiBackend) DAGManager() *core.DAGManager {
+	// TODO: impl
+	return nil
 }
 
 func (b *LesApiBackend) BloomStatus() (uint64, uint64) {

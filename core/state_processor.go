@@ -32,12 +32,12 @@ import (
 // StateProcessor implements Processor.
 type StateProcessor struct {
 	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical block chain
+	bc     *DAGManager         // Canonical block chain
 	engine consensus.Engine    // Consensus engine used for block rewards
 }
 
 // NewStateProcessor initialises a new StateProcessor.
-func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *StateProcessor {
+func NewStateProcessor(config *params.ChainConfig, bc *DAGManager, engine consensus.Engine) *StateProcessor {
 	return &StateProcessor{
 		config: config,
 		bc:     bc,
@@ -52,29 +52,47 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, pivotTxs types.Transactions, txs types.TransactionRefs, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, types.Transactions, error) {
 	var (
-		receipts types.Receipts
-		usedGas  = new(uint64)
-		header   = block.Header()
-		allLogs  []*types.Log
-		gp       = new(GasPool).AddGas(block.GasLimit())
+		receipts  types.Receipts
+		usedGas   = new(uint64)
+		header    = block.Header()
+		allLogs   []*types.Log
+		gp        = new(GasPool).AddGas(block.GasLimit())
+		execTxs   types.Transactions
+		errResult error
 	)
+	for _, tx := range txs {
+		snap := statedb.Snapshot()
+		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx.Tx, usedGas, cfg)
+		if err == nil {
+			receipts = append(receipts, receipt)
+			allLogs = append(allLogs, receipt.Logs...)
+			execTxs = append(execTxs, tx.Tx)
+
+			//fmt.Printf("Process, block.number = %v, ref tx hash = %s\n", block.Number().Uint64(), tx.Tx.Hash().String())
+		} else {
+			statedb.RevertToSnapshot(snap)
+		}
+	}
+
 	// Iterate over and process the individual transactions
-	for i, tx := range block.Transactions() {
+	for i, tx := range pivotTxs {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
 		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
-
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, 0, nil, err
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+		execTxs = append(execTxs, tx)
+
+		//fmt.Printf("Process, block.number = %v, tx hash = %s\n", block.Number().Uint64(), tx.Hash().String())
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
 
-	return receipts, allLogs, *usedGas, nil
+	return receipts, allLogs, *usedGas, execTxs, errResult
 }
 
 // ApplyTransaction attempts to apply a transaction to the given state database

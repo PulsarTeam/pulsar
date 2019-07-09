@@ -159,3 +159,11 @@ func (p *FakePeer) RequestNodeData(hashes []common.Hash) error {
 	p.dl.DeliverNodeData(p.id, data)
 	return nil
 }
+
+
+// RequestReferenceBodies implements downloader.Peer, returning a batch of state trie
+// nodes corresponding to the specified trie hashes.
+func (p *FakePeer) RequestReferenceBodies([]common.Hash) error {
+	//do nothing
+	return nil
+}

@@ -607,7 +607,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
-	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should be valid
+	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should not larger than params.MaxDelegateFeeLimit
 	//notice: at first stage, wo not check times of this op, at the second stage, this op should happen one time for a miner
 	if tx.TxType() == params.DelegateMinerRegisterTx{
 		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
@@ -626,7 +626,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		if err != nil{
 			return ErrTxTypematch
 		}
-		if !common.FeeRatioValidity(fee) {
+		if !common.FeeRatioValidity(fee){
 			return ErrFeeLimit
 		}
 	}

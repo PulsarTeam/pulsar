@@ -38,6 +38,11 @@ var (
 	receiptDropMeter    = metrics.NewRegisteredMeter("eth/downloader/receipts/drop", nil)
 	receiptTimeoutMeter = metrics.NewRegisteredMeter("eth/downloader/receipts/timeout", nil)
 
+	referenceBodyInMeter      = metrics.NewRegisteredMeter("eth/downloader/referenceBodies/in", nil)
+	referenceBodyReqTimer     = metrics.NewRegisteredTimer("eth/downloader/referenceBodies/req", nil)
+	referenceBodyDropMeter    = metrics.NewRegisteredMeter("eth/downloader/referenceBodies/drop", nil)
+	referenceBodyTimeoutMeter = metrics.NewRegisteredMeter("eth/downloader/referenceBodies/timeout", nil)
+
 	stateInMeter   = metrics.NewRegisteredMeter("eth/downloader/states/in", nil)
 	stateDropMeter = metrics.NewRegisteredMeter("eth/downloader/states/drop", nil)
 )

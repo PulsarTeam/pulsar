@@ -37,7 +37,7 @@ import (
 // Backend wraps all methods required for mining.
 type Backend interface {
 	AccountManager() *accounts.Manager
-	BlockChain() *core.BlockChain
+	DAGManager() *core.DAGManager
 	TxPool() *core.TxPool
 	ChainDb() ethdb.Database
 }
@@ -65,7 +65,7 @@ func New(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine con
 		worker:   newWorker(config, engine, common.Address{}, eth, mux),
 		canStart: 1,
 	}
-	miner.Register(NewCpuAgent(eth.BlockChain(), engine))
+	miner.Register(NewCpuAgent(eth.DAGManager(), engine))
 	go miner.update()
 
 	return miner
@@ -77,6 +77,7 @@ func New(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine con
 // and halt your mining operation for as long as the DOS continues.
 func (self *Miner) update() {
 	events := self.mux.Subscribe(downloader.StartEvent{}, downloader.DoneEvent{}, downloader.FailedEvent{})
+
 out:
 	for ev := range events.Chan() {
 		switch ev.Data.(type) {
@@ -87,7 +88,9 @@ out:
 				atomic.StoreInt32(&self.shouldStart, 1)
 				log.Info("Mining aborted due to sync")
 			}
+
 		case downloader.DoneEvent, downloader.FailedEvent:
+
 			shouldStart := atomic.LoadInt32(&self.shouldStart) == 1
 
 			atomic.StoreInt32(&self.canStart, 1)

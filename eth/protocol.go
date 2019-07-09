@@ -30,18 +30,19 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
-	eth62 = 62
-	eth63 = 63
+	bcw62 = 62
+	bcw63 = 63
+	bcw64 = 64
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
-var ProtocolName = "eth"
+var ProtocolName = "bcw"
 
 // ProtocolVersions are the upported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth63, eth62}
+var ProtocolVersions = []uint{bcw64, bcw63, bcw62}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = []uint64{17, 8}
+var ProtocolLengths = []uint64{22, 17, 8}
 
 const ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -62,6 +63,13 @@ const (
 	NodeDataMsg    = 0x0e
 	GetReceiptsMsg = 0x0f
 	ReceiptsMsg    = 0x10
+
+	//Protocol messages belonging to conflux
+	GetReferenceBodiesMsg = 0x11
+	ReferenceBodiesMsg    = 0x12
+	GetReferenceBodyMsg   = 0x13
+	ReferenceBodyMsg      = 0x14
+	NotifyHeadAndTdMsg    = 0x15
 )
 
 type errCode int
@@ -76,6 +84,7 @@ const (
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
 	ErrSuspendedPeer
+	ErrNoSuchData
 )
 
 func (e errCode) String() string {
@@ -177,6 +186,14 @@ type newBlockData struct {
 type blockBody struct {
 	Transactions []*types.Transaction // Transactions contained within a block
 	Uncles       []*types.Header      // Uncles contained within a block
+}
+
+// headHashData is the network packet for the announcements of head hash and its total difficulty
+type headHashData struct {
+	Hash       common.Hash // Hash of the head block being announced
+	Parent     common.Hash // Parent block hash of the head block being announced
+	Difficulty *big.Int    // difficulty of the head block being announced
+	TD         *big.Int    // total difficulty of the head block being announced
 }
 
 // blockBodiesData is the network packet for block content distribution.
