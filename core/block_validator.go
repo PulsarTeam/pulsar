@@ -18,7 +18,6 @@ package core
 
 import (
 	"fmt"
-
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -31,12 +30,12 @@ import (
 // BlockValidator implements Validator.
 type BlockValidator struct {
 	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical block chain
+	bc     *DAGManager         // Blocks
 	engine consensus.Engine    // Consensus engine used for validating
 }
 
 // NewBlockValidator returns a new block validator which is safe for re-use
-func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
+func NewBlockValidator(config *params.ChainConfig, blockchain *DAGManager, engine consensus.Engine) *BlockValidator {
 	validator := &BlockValidator{
 		config: config,
 		engine: engine,
@@ -58,6 +57,11 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 			return consensus.ErrUnknownAncestor
 		}
 		return consensus.ErrPrunedAncestor
+	}
+	for i := 0; i < len(block.Uncles()); i++ {
+		if !v.bc.HasBlock(block.Uncles()[i].Hash(), block.Uncles()[i].Number.Uint64()) {
+			return ErrUnclesNotCompletely
+		}
 	}
 	// Header validity is known at this point, check the uncles and transactions
 	header := block.Header()
@@ -98,8 +102,41 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
+
 	return nil
 }
+
+/*
+func (v *BlockValidator) ValidateHeader(block *types.Block, statedb *state.StateDB) error {
+	result := v.engine.HashimotoforHeader(block.Header().HashNoNonce().Bytes(), block.Header().Nonce.Uint64())
+
+	target := new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), block.Header().Difficulty)
+	posTargetAvg := new(big.Int).Mul(target, big.NewInt(int64(block.Header().PosWeight)))
+	posTargetAvg.Div(posTargetAvg, big.NewInt(10000))
+	powTarget := new(big.Int).Sub(target, posTargetAvg)
+
+	matureState := GetMatureState(v.bc, block.Number().Uint64(), nil)
+	if matureState == nil || matureState.DelegateMinersCount() == 0 || matureState.DepositBalanceSum().Sign() == 0 {
+		target = powTarget
+	} else {
+		_, localSum, _ := matureState.GetDelegateMiner(block.Header().Coinbase)
+		if localSum == nil || localSum.Sign() == 0 {
+			target = powTarget
+		} else {
+			// notice that the posTargetLocal = posTargetAvg*dmCounts * (posLocalSum/posNetworkSum)
+			tmp := new(big.Int).Mul(posTargetAvg, big.NewInt(int64(matureState.DelegateMinersCount())))
+			tmp.Div(tmp, matureState.DepositBalanceSum())
+			posTarget := new(big.Int).Mul(tmp, localSum)
+			target = new(big.Int).Add(powTarget, posTarget)
+		}
+	}
+
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errors.New("block target error")
+	}
+	return nil
+}
+*/
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.
@@ -108,7 +145,7 @@ func CalcGasLimit(parent *types.Block) uint64 {
 	contrib := (parent.GasUsed() + parent.GasUsed()/2) / params.GasLimitBoundDivisor
 
 	// decay = parentGasLimit / 1024 -1
-	decay := parent.GasLimit()/params.GasLimitBoundDivisor - 1
+	decay := parent.GasLimitPivot()/params.GasLimitBoundDivisor - 1
 
 	/*
 		strategy: gasLimit of block-to-mine is set based on parent's
@@ -117,14 +154,17 @@ func CalcGasLimit(parent *types.Block) uint64 {
 		at that usage) the amount increased/decreased depends on how far away
 		from parentGasLimit * (2/3) parentGasUsed is.
 	*/
-	limit := parent.GasLimit() - decay + contrib
+	limit := parent.GasLimitPivot() - decay + contrib
 	if limit < params.MinGasLimit {
 		limit = params.MinGasLimit
 	}
 	// however, if we're now below the target (TargetGasLimit) we increase the
 	// limit as much as we can (parentGasLimit / 1024 -1)
+	if limit > params.TargetGasLimit {
+		return params.TargetGasLimit
+	}
 	if limit < params.TargetGasLimit {
-		limit = parent.GasLimit() + decay
+		limit = parent.GasLimitPivot() + decay
 		if limit > params.TargetGasLimit {
 			limit = params.TargetGasLimit
 		}

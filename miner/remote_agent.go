@@ -25,7 +25,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -42,7 +41,7 @@ type RemoteAgent struct {
 	workCh   chan *Work
 	returnCh chan<- *Result
 
-	chain       consensus.ChainReader
+	chain       consensus.BlockReader
 	engine      consensus.Engine
 	currentWork *Work
 	work        map[common.Hash]*Work
@@ -53,7 +52,7 @@ type RemoteAgent struct {
 	running int32 // running indicates whether the agent is active. Call atomically
 }
 
-func NewRemoteAgent(chain consensus.ChainReader, engine consensus.Engine) *RemoteAgent {
+func NewRemoteAgent(chain consensus.BlockReader, engine consensus.Engine) *RemoteAgent {
 	return &RemoteAgent{
 		chain:    chain,
 		engine:   engine,
@@ -116,8 +115,8 @@ func (a *RemoteAgent) GetWork() ([3]string, error) {
 		block := a.currentWork.Block
 
 		res[0] = block.HashNoNonce().Hex()
-		seedHash := ethash.SeedHash(block.NumberU64())
-		res[1] = common.BytesToHash(seedHash).Hex()
+		// seedHash := ethash.SeedHash(block.NumberU64())
+		// res[1] = common.BytesToHash(seedHash).Hex()
 		// Calculate the "target" to be returned to the external miner
 		n := big.NewInt(1)
 		n.Lsh(n, 255)
@@ -149,7 +148,7 @@ func (a *RemoteAgent) SubmitWork(nonce types.BlockNonce, mixDigest, hash common.
 	result.Nonce = nonce
 	result.MixDigest = mixDigest
 
-	if err := a.engine.VerifySeal(a.chain, result); err != nil {
+	if err := a.engine.VerifySeal(a.chain, result, nil); err != nil {
 		log.Warn("Invalid proof-of-work submitted", "hash", hash, "err", err)
 		return false
 	}

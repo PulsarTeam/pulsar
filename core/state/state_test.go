@@ -36,54 +36,104 @@ var _ = checker.Suite(&StateSuite{})
 
 var toAddr = common.BytesToAddress
 
-func (s *StateSuite) TestDump(c *checker.C) {
+func (s *StateSuite) TestBasic(c *checker.C) {
 	// generate a few entries
-	obj1 := s.state.GetOrNewStateObject(toAddr([]byte{0x01}))
+	objAddr1 := toAddr([]byte{0x01})
+	obj1 := s.state.GetOrNewStateObject(objAddr1)
 	obj1.AddBalance(big.NewInt(22))
+
 	obj2 := s.state.GetOrNewStateObject(toAddr([]byte{0x01, 0x02}))
 	obj2.SetCode(crypto.Keccak256Hash([]byte{3, 3, 3, 3, 3, 3, 3}), []byte{3, 3, 3, 3, 3, 3, 3})
-	obj3 := s.state.GetOrNewStateObject(toAddr([]byte{0x02}))
+
+	objAddr3 := toAddr([]byte{0x02})
+	obj3 := s.state.GetOrNewStateObject(objAddr3)
 	obj3.SetBalance(big.NewInt(44))
 
+	dMap1 := s.state.GetDepositUsers(objAddr1)
+	c.Assert(len(dMap1), checker.Equals, 0)
+	s.state.SetAccountType(objAddr1, common.DelegateMiner, 1000)
+
 	// write some of them to the trie
+	s.state.Deposit(objAddr3, objAddr1, new(big.Int).SetUint64(10), new(big.Int).SetUint64(100))
+
 	s.state.updateStateObject(obj1)
 	s.state.updateStateObject(obj2)
+	s.state.updateStateObject(obj3)
 	s.state.Commit(false)
+
+	dMap1 = s.state.GetDepositUsers(objAddr1)
+	c.Assert(len(dMap1), checker.Equals, 1)
+	c.Assert(dMap1[objAddr3], checker.DeepEquals, common.DepositData{new(big.Int).SetUint64(10), new(big.Int).SetUint64(100)})
+
+	dMiners := s.state.GetAllDelegateMiners()
+	c.Assert(len(dMiners), checker.Equals, 1)
+	c.Assert(dMiners[objAddr1], checker.DeepEquals, common.DMView{1000, new(big.Int).SetUint64(10)})
+
+	type1 := s.state.GetAccountType(objAddr1)
+	type3 := s.state.GetAccountType(objAddr3)
+	c.Assert(int(type1), checker.Equals, common.DelegateMiner)
+	c.Assert(int(type3), checker.Equals, common.DefaultAccount)
 
 	// check that dump contains the state objects that are in trie
 	got := string(s.state.Dump())
 	want := `{
-    "root": "71edff0130dd2385947095001c73d9e28d862fc286fca2b922ca6f6f3cddfdd2",
+    "root": "7ff376947ec570de6b4385225090f49934695d253df0b5027c30aa069376abe7",
     "accounts": {
         "0000000000000000000000000000000000000001": {
             "balance": "22",
             "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "storageRoot": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
             "code": "",
-            "storage": {}
+            "storage": {},
+            "type": "DelegateMiner",
+            "depositBalance": "10",
+            "feeRatio": 1000,
+            "stakeRoot": "0980ac2c05cda6b0a36f45c06539379bd6aae5369928be45c797ac229afa4c12"
         },
         "0000000000000000000000000000000000000002": {
-            "balance": "44",
+            "balance": "34",
             "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "storageRoot": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
             "code": "",
-            "storage": {}
+            "storage": {},
+            "type": "DefaultAccount",
+            "depositBalance": "10",
+            "feeRatio": 0,
+            "stakeRoot": "0000000000000000000000000000000000000000000000000000000000000000"
         },
         "0000000000000000000000000000000000000102": {
             "balance": "0",
             "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "storageRoot": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "87874902497a5bb968da31a2998d8f22e949d1ef6214bcdedd8bae24cca4b9e3",
             "code": "03030303030303",
-            "storage": {}
+            "storage": {},
+            "type": "DefaultAccount",
+            "depositBalance": "0",
+            "feeRatio": 0,
+            "stakeRoot": "0000000000000000000000000000000000000000000000000000000000000000"
         }
     }
 }`
 	if got != want {
 		c.Errorf("dump mismatch:\ngot: %s\nwant: %s\n", got, want)
 	}
+
+	s.state.Withdraw(objAddr3, objAddr1)
+	s.state.updateStateObject(obj1)
+	s.state.updateStateObject(obj3)
+	s.state.Commit(false)
+
+	dMap1 = s.state.GetDepositUsers(objAddr1)
+	c.Assert(len(dMap1), checker.Equals, 0)
+
+	dMiners = s.state.GetAllDelegateMiners()
+	c.Assert(len(dMiners), checker.Equals, 1)
+	dmView := dMiners[objAddr1]
+	c.Assert(dmView.FeeRatio, checker.Equals, uint32(1000))
+	c.Assert(dmView.DepositBalance.Cmp(new(big.Int).SetUint64(0)), checker.Equals, 0)
 }
 
 func (s *StateSuite) SetUpTest(c *checker.C) {
@@ -198,8 +248,11 @@ func compareStateObjects(so0, so1 *stateObject, t *testing.T) {
 	if so0.Nonce() != so1.Nonce() {
 		t.Fatalf("Nonce mismatch: have %v, want %v", so0.Nonce(), so1.Nonce())
 	}
-	if so0.data.Root != so1.data.Root {
-		t.Errorf("Root mismatch: have %x, want %x", so0.data.Root[:], so1.data.Root[:])
+	if so0.data.StorageRoot != so1.data.StorageRoot {
+		t.Errorf("Storage Root mismatch: have %x, want %x", so0.data.StorageRoot[:], so1.data.StorageRoot[:])
+	}
+	if so0.data.StakeRoot != so1.data.StakeRoot {
+		t.Errorf("Stake Root mismatch: have %x, want %x", so0.data.StakeRoot[:], so1.data.StakeRoot[:])
 	}
 	if !bytes.Equal(so0.CodeHash(), so1.CodeHash()) {
 		t.Fatalf("CodeHash mismatch: have %v, want %v", so0.CodeHash(), so1.CodeHash())

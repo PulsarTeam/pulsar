@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/signer/core"
 	"github.com/ethereum/go-ethereum/signer/storage"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 const JS = `
@@ -464,7 +465,7 @@ func dummySigned(value *big.Int) *types.Transaction {
 	gas := uint64(21000)
 	gasPrice := big.NewInt(2000000)
 	data := make([]byte, 0)
-	return types.NewTransaction(3, to, value, gas, gasPrice, data)
+	return types.NewTransaction(3, to, value, gas, gasPrice, data, params.NormalTx, 0)
 
 }
 func TestLimitWindow(t *testing.T) {

@@ -21,10 +21,33 @@ import (
 	"sync/atomic"
 	"time"
 
+	"errors"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
+
+// Message represents a message sent to a contract.
+
+type Message interface {
+	From() common.Address
+	//FromFrontier() (common.Address, error)
+	To() *common.Address
+
+	GasPrice() *big.Int
+	Gas() uint64
+	Value() *big.Int
+
+	Nonce() uint64
+	CheckNonce() bool
+	Data() []byte
+
+	//for ds-pow
+	TxType() uint8
+	Fee() (uint32, error)
+}
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
 // deployed contract addresses (relevant after the account abstraction).
@@ -403,3 +426,83 @@ func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
 
 // Interpreter returns the EVM interpreter
 func (evm *EVM) Interpreter() *Interpreter { return evm.interpreter }
+
+func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, msg Message) (ret []byte, leftOverGas uint64, err error) {
+	if evm.vmConfig.NoRecursion && evm.depth > 0 {
+		return nil, gas, nil
+	}
+
+	// Fail if we're trying to execute above the call depth limit
+	if evm.depth > int(params.CallCreateDepth) {
+		return nil, gas, ErrDepth
+	}
+	// Fail if we're trying to transfer more than the available balance
+	if !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
+		return nil, gas, ErrInsufficientBalance
+	}
+
+	var (
+		//to       = AccountRef(addr)
+		snapshot = evm.StateDB.Snapshot()
+	)
+
+	switch msg.TxType() {
+	case params.DelegateMinerRegisterTx:
+		//register to be a delegateMiner
+		accoutBalance := evm.StateDB.GetBalance(msg.From())
+		if accoutBalance.Cmp(DelegateMinnerMinBalance) < 0 {
+			return nil, gas, ErrNotEnoughBalanceRegisterDelegateMiner
+		}
+
+		fee, _ := msg.Fee()
+		err = evm.StateDB.SetAccountType(msg.From(), common.DelegateMiner, fee)
+	case params.DelegateStakesTx:
+		//delegate stakes to miner
+		if !evm.StateDB.Exist(addr) {
+			precompiles := PrecompiledContractsHomestead
+			if evm.ChainConfig().IsByzantium(evm.BlockNumber) {
+				precompiles = PrecompiledContractsByzantium
+			}
+			if precompiles[addr] == nil && evm.ChainConfig().IsEIP158(evm.BlockNumber) && value.Sign() == 0 {
+				// Calling a non existing account, don't do antything, but ping the tracer
+				if evm.vmConfig.Debug && evm.depth == 0 {
+					evm.vmConfig.Tracer.CaptureStart(caller.Address(), addr, false, input, gas, value)
+					evm.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+				}
+				return nil, gas, nil
+			}
+			evm.StateDB.CreateAccount(addr)
+		}
+		//deposit stakes to a delegateMiner
+		//evm.StateDB.SetAccountType(msg.From(), common.DefaultAccount, 0)
+		err = evm.StateDB.Deposit(msg.From(), *(msg.To()), msg.Value(), evm.Context.BlockNumber)
+	case params.DelegateStakesCancel:
+		if !evm.StateDB.Exist(addr) {
+			precompiles := PrecompiledContractsHomestead
+			if evm.ChainConfig().IsByzantium(evm.BlockNumber) {
+				precompiles = PrecompiledContractsByzantium
+			}
+			if precompiles[addr] == nil && evm.ChainConfig().IsEIP158(evm.BlockNumber) && value.Sign() == 0 {
+				// Calling a non existing account, don't do antything, but ping the tracer
+				if evm.vmConfig.Debug && evm.depth == 0 {
+					evm.vmConfig.Tracer.CaptureStart(caller.Address(), addr, false, input, gas, value)
+					evm.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+				}
+				return nil, gas, nil
+			}
+			evm.StateDB.CreateAccount(addr)
+		}
+
+		err = evm.StateDB.Withdraw(msg.From(), *(msg.To()))
+	default:
+		return nil, gas, errors.New("normal transaction should not come here")
+	}
+
+	// When an error was returned by the EVM or when setting the creation code
+	// above we revert to the snapshot and consume any gas remaining. Additionally
+	// when we're in homestead this also counts for code storage gas errors.
+	if err != nil {
+		evm.StateDB.RevertToSnapshot(snapshot)
+	}
+	return ret, gas, err
+}

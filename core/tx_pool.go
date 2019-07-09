@@ -76,6 +76,42 @@ var (
 	// than some meaningful limit a user might use. This is not a consensus error
 	// making the transaction invalid, rather a DOS protection.
 	ErrOversizedData = errors.New("oversized data")
+
+	//ErrFeeLimit is returned if a DelegateMinerRegisterTx requested too large fee.
+	ErrFeeLimit = errors.New("fee too large")
+
+	//ErrTxTypematch is return if a op get fee from a tx which is not a DelegateMinerRegisterTx
+	ErrTxTypematch = errors.New("transaction is not a DelegateMinerRegisterTx")
+
+	//ErrBalanceForRegister is return if a miner want to be a delegate miner but it's balance is 0
+	ErrBalanceForRegister = errors.New("balance should not zero if want to be a delegate miner")
+
+	//ErrToDelegateType is return if one try to delegate to a normal account
+	ErrToDelegateType = errors.New("should not delegate to a normal account")
+
+	//ErrMinerDelegate is return if a delegate miner try to delegate to another mine
+	ErrMinerDelegate = errors.New("delegate miner should not delegate to another miner")
+
+	//ErrDelegateValue is return if delegate stake value is 0
+	ErrDelegateValue = errors.New("delegate value should not zero")
+
+    //ErrWithdrawFromType is return if from is not a normal account
+	ErrWithdrawFromType = errors.New("from is not a normal account")
+
+	//ErrWithdrawToType is return if to it not a delegate miner
+	ErrWithdrawToType = errors.New("to address is not a delegate miner")
+
+	//ErrWithdrawValue is return if value is not zero
+	ErrWithdrawValue = errors.New("this operation should not with value")
+
+	//ErrDelegatedMinerRegister return if a delegate miner send a register transaction again
+	ErrDelegatedMinerRegister = errors.New("delegate miner should not register again")
+
+	//ErrWithdrawFromUncorrelatedMiner return if with draw from a  uncorrelated miner
+	ErrWithdrawFromUncorrelatedMiner = errors.New("you should not with draw from a  uncorrelated miner")
+
+	//ErrDelegatedMinerRegisterWithDeposit return if a account delegate with some deposit
+	ErrDelegatedMinerRegisterWithDeposit = errors.New("you should not register to be a delegate miner with deposit balance")
 )
 
 var (
@@ -570,6 +606,71 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
 		return ErrInvalidSender
+	}
+	//For Ds-pow: if this is a DelegateMinerRegisterTx, the delegate fee should not larger than params.MaxDelegateFeeLimit
+	//notice: at first stage, wo not check times of this op, at the second stage, this op should happen one time for a miner
+	if tx.TxType() == params.DelegateMinerRegisterTx{
+		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
+			return ErrDelegatedMinerRegister
+		}
+
+		if depositBalance := pool.currentState.GetDepositBalance(from); depositBalance.Cmp(new (big.Int).SetInt64(0)) != 0{
+			return ErrDelegatedMinerRegisterWithDeposit
+		}
+
+		balance := pool.currentState.GetBalance(from)
+		if balance.Sign() < 0 || balance.Sign() == 0{
+			return ErrBalanceForRegister
+		}
+		fee, err := tx.Fee()
+		if err != nil{
+			return ErrTxTypematch
+		}
+		if !common.FeeRatioValidity(fee){
+			return ErrFeeLimit
+		}
+	}
+	//for Ds-pow: if this is a DelegateStakesTx, the shareholder should not make the transaction many times,
+	//and the delegate miner should not make this transaction
+	if tx.TxType() == params.DelegateStakesTx{
+		if tx.Value().Sign() == 0 {
+			return ErrDelegateValue
+		}
+
+		to := tx.To()
+		if pool.currentState.GetAccountType(*to) != common.DelegateMiner{
+			return ErrToDelegateType
+		}
+
+		if pool.currentState.GetAccountType(from) == common.DelegateMiner{
+			return ErrMinerDelegate
+		}
+	}
+	//for Ds-pow: if this is a DelegateStakesCancel
+	if tx.TxType() == params.DelegateStakesCancel{
+		if pool.currentState.GetAccountType(from) != common.DefaultAccount{
+			return ErrWithdrawFromType
+		}
+
+		to := tx.To()
+		if pool.currentState.GetAccountType(*to) != common.DelegateMiner{
+			return ErrWithdrawToType
+		}
+
+		if tx.Value().Sign() != 0{
+			return ErrWithdrawValue
+		}
+
+		//\\check user delegate or not
+		allminers, err := pool.currentState.GetDepositMiners(from)
+		if err != nil{
+			return err
+		}
+
+		if _, ok := allminers[*(tx.To())]; !ok {
+			return ErrWithdrawFromUncorrelatedMiner
+		}
+
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network

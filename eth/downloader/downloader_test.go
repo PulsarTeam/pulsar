@@ -117,7 +117,7 @@ func (dl *downloadTester) makeChain(n int, seed byte, parent *types.Block, paren
 		// If the block number is multiple of 3, send a bonus transaction to the miner
 		if parent == dl.genesis && i%3 == 0 {
 			signer := types.MakeSigner(params.TestChainConfig, block.Number())
-			tx, err := types.SignTx(types.NewTransaction(block.TxNonce(testAddress), common.Address{seed}, big.NewInt(1000), params.TxGas, nil, nil), signer, testKey)
+			tx, err := types.SignTx(types.NewTransaction(block.TxNonce(testAddress), common.Address{seed}, big.NewInt(1000), params.TxGas, nil, nil, params.NormalTx, 0), signer, testKey)
 			if err != nil {
 				panic(err)
 			}
@@ -242,7 +242,7 @@ func (dl *downloadTester) GetBlockByHash(hash common.Hash) *types.Block {
 	return dl.ownBlocks[hash]
 }
 
-// CurrentHeader retrieves the current head header from the canonical chain.
+// CurrentHeader() retrieves the current head header from the canonical chain.
 func (dl *downloadTester) CurrentHeader() *types.Header {
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
@@ -255,7 +255,7 @@ func (dl *downloadTester) CurrentHeader() *types.Header {
 	return dl.genesis.Header()
 }
 
-// CurrentBlock retrieves the current head block from the canonical chain.
+// CurrentPivotBlock retrieves the current head block from the canonical chain.
 func (dl *downloadTester) CurrentBlock() *types.Block {
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
@@ -331,7 +331,7 @@ func (dl *downloadTester) InsertHeaderChain(headers []*types.Header, checkFreq i
 }
 
 // InsertChain injects a new batch of blocks into the simulated chain.
-func (dl *downloadTester) InsertChain(blocks types.Blocks) (int, error) {
+func (dl *downloadTester) InsertBlocks(blocks types.Blocks) (int, error) {
 	dl.lock.Lock()
 	defer dl.lock.Unlock()
 

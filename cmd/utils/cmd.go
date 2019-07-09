@@ -85,7 +85,7 @@ func StartNode(stack *node.Node) {
 	}()
 }
 
-func ImportChain(chain *core.BlockChain, fn string) error {
+func ImportChain(chain *core.DAGManager, fn string) error {
 	// Watch for Ctrl-C while the import is running.
 	// If a signal is received, the import will stop at the next batch.
 	interrupt := make(chan os.Signal, 1)
@@ -161,14 +161,14 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 			log.Info("Skipping batch as all blocks present", "batch", batch, "first", blocks[0].Hash(), "last", blocks[i-1].Hash())
 			continue
 		}
-		if _, err := chain.InsertChain(missing); err != nil {
+		if _, err := chain.InsertBlocks(missing, nil); err != nil {
 			return fmt.Errorf("invalid block %d: %v", n, err)
 		}
 	}
 	return nil
 }
 
-func missingBlocks(chain *core.BlockChain, blocks []*types.Block) []*types.Block {
+func missingBlocks(chain *core.DAGManager, blocks []*types.Block) []*types.Block {
 	head := chain.CurrentBlock()
 	for i, block := range blocks {
 		// If we're behind the chain head, only check block, state is available at head
@@ -188,7 +188,7 @@ func missingBlocks(chain *core.BlockChain, blocks []*types.Block) []*types.Block
 
 // ExportChain exports a blockchain into the specified file, truncating any data
 // already present in the file.
-func ExportChain(blockchain *core.BlockChain, fn string) error {
+func ExportChain(blockchain *core.DAGManager, fn string) error {
 	log.Info("Exporting blockchain", "file", fn)
 
 	// Open the file handle and potentially wrap with a gzip stream
@@ -214,7 +214,7 @@ func ExportChain(blockchain *core.BlockChain, fn string) error {
 
 // ExportAppendChain exports a blockchain into the specified file, appending to
 // the file if data already exists in it.
-func ExportAppendChain(blockchain *core.BlockChain, fn string, first uint64, last uint64) error {
+func ExportAppendChain(blockchain *core.DAGManager, fn string, first uint64, last uint64) error {
 	log.Info("Exporting blockchain", "file", fn)
 
 	// Open the file handle and potentially wrap with a gzip stream

@@ -424,6 +424,48 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
+			name: 'getAccountNonce',
+			call: 'eth_getAccountNonce',
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getAllDelegateMiners',
+			call: 'eth_getAllDelegateMiners',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getPowTotalSupply',
+			call: 'eth_getPowTotalSupply',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
+			outputFormatter: web3._extend.utils.toDecimal
+		}),
+		new web3._extend.Method({
+			name: 'getPosTotalSupply',
+			call: 'eth_getPosTotalSupply',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputDefaultBlockNumberFormatter]
+			outputFormatter: web3._extend.utils.toDecimal
+		}),
+		new web3._extend.Method({
+			name: 'getAllStakeHolders',
+			call: 'eth_getAllStakeHolders',
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getAllDepositMiners',
+			call: 'eth_getAllDepositMiners',
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'showPendingBlocks',
+			call: 'eth_showPendingBlocks'
+		}),
+		new web3._extend.Method({
 			name: 'getRawTransactionFromBlock',
 			call: function(args) {
 				return (web3._extend.utils.isString(args[0]) && args[0].indexOf('0x') === 0) ? 'eth_getRawTransactionByBlockHashAndIndex' : 'eth_getRawTransactionByBlockNumberAndIndex';

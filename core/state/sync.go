@@ -32,7 +32,8 @@ func NewStateSync(root common.Hash, database trie.DatabaseReader) *trie.Sync {
 		if err := rlp.Decode(bytes.NewReader(leaf), &obj); err != nil {
 			return err
 		}
-		syncer.AddSubTrie(obj.Root, 64, parent, nil)
+		syncer.AddSubTrie(obj.StorageRoot, 64, parent, nil)
+		syncer.AddSubTrie(obj.StakeRoot, 64, parent, nil)
 		syncer.AddRawEntry(common.BytesToHash(obj.CodeHash), 64, parent)
 		return nil
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // SignerFn is a signer function callback when a contract requires a method to
@@ -229,7 +230,7 @@ func (c *BoundContract) transact(opts *TransactOpts, contract *common.Address, i
 	if contract == nil {
 		rawTx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, input)
 	} else {
-		rawTx = types.NewTransaction(nonce, c.address, value, gasLimit, gasPrice, input)
+		rawTx = types.NewTransaction(nonce, c.address, value, gasLimit, gasPrice, input, params.NormalTx, 0)
 	}
 	if opts.Signer == nil {
 		return nil, errors.New("no signer to authorize the transaction with")

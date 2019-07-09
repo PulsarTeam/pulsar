@@ -28,10 +28,14 @@ import (
 type DumpAccount struct {
 	Balance  string            `json:"balance"`
 	Nonce    uint64            `json:"nonce"`
-	Root     string            `json:"root"`
+	StorageRoot string         `json:"storageRoot"`
 	CodeHash string            `json:"codeHash"`
 	Code     string            `json:"code"`
 	Storage  map[string]string `json:"storage"`
+	Type     string            `json:"type"`
+	DepositBalance string      `json:"depositBalance"`
+	FeeRatio uint32            `json:"feeRatio"`
+	StakeRoot string           `json:"stakeRoot"`
 }
 
 type Dump struct {
@@ -53,16 +57,20 @@ func (self *StateDB) RawDump() Dump {
 			panic(err)
 		}
 
-		obj := newObject(nil, common.BytesToAddress(addr), data)
+		obj := newObject(nil, common.BytesToAddress(addr), &data)
 		account := DumpAccount{
 			Balance:  data.Balance.String(),
 			Nonce:    data.Nonce,
-			Root:     common.Bytes2Hex(data.Root[:]),
+			StorageRoot: common.Bytes2Hex(data.StorageRoot[:]),
 			CodeHash: common.Bytes2Hex(data.CodeHash),
 			Code:     common.Bytes2Hex(obj.Code(self.db)),
 			Storage:  make(map[string]string),
+			Type: data.Type.String(),
+			DepositBalance: data.DepositBalance.String(),
+			FeeRatio: data.FeeRatio,
+			StakeRoot: common.Bytes2Hex(data.StakeRoot[:]),
 		}
-		storageIt := trie.NewIterator(obj.getTrie(self.db).NodeIterator(nil))
+		storageIt := trie.NewIterator(obj.getStorageTrie(self.db).NodeIterator(nil))
 		for storageIt.Next() {
 			account.Storage[common.Bytes2Hex(self.trie.GetKey(storageIt.Key))] = common.Bytes2Hex(storageIt.Value)
 		}

@@ -14,6 +14,8 @@ ee http://help.github.com/ignore-files/ for more about ignoring files.
 */**/*tx_database*
 */**/*dapps*
 build/_vendor/pkg
+build/start-full-node.sh
+build/start-ipc.sh
 
 #*
 .#*

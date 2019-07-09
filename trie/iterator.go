@@ -133,7 +133,7 @@ func (e seekError) Error() string {
 }
 
 func newNodeIterator(trie *Trie, start []byte) NodeIterator {
-	if trie.Hash() == emptyState {
+	if trie.Hash() == EmptyState {
 		return new(nodeIterator)
 	}
 	it := &nodeIterator{trie: trie}
@@ -259,7 +259,7 @@ func (it *nodeIterator) peek(descend bool) (*nodeIteratorState, *int, []byte, er
 		// Initialize the iterator if we've just started.
 		root := it.trie.Hash()
 		state := &nodeIteratorState{node: it.trie.root, index: -1}
-		if root != emptyRoot {
+		if root != EmptyRoot {
 			state.hash = root
 		}
 		err := state.resolve(it.trie, nil)

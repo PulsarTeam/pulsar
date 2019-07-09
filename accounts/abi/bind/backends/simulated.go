@@ -52,7 +52,7 @@ var errGasEstimationFailed = errors.New("gas required exceeds allowance or alway
 // the background. Its main purpose is to allow easily testing contract bindings.
 type SimulatedBackend struct {
 	database   ethdb.Database   // In memory database to store our testing data
-	blockchain *core.BlockChain // Ethereum blockchain to handle the consensus
+	blockchain *core.DAGManager // Ethereum blockchain to handle the consensus
 
 	mu           sync.Mutex
 	pendingBlock *types.Block   // Currently pending block that will be imported on request
@@ -69,7 +69,7 @@ func NewSimulatedBackend(alloc core.GenesisAlloc) *SimulatedBackend {
 	database := ethdb.NewMemDatabase()
 	genesis := core.Genesis{Config: params.AllEthashProtocolChanges, Alloc: alloc}
 	genesis.MustCommit(database)
-	blockchain, _ := core.NewBlockChain(database, nil, genesis.Config, ethash.NewFaker(), vm.Config{})
+	blockchain, _ := core.NewDAGManager(database, nil, genesis.Config, ethash.NewFaker(), vm.Config{})
 
 	backend := &SimulatedBackend{
 		database:   database,
@@ -87,7 +87,8 @@ func (b *SimulatedBackend) Commit() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
+	if _, err := b.blockchain.InsertBlocks([]*types.Block{b.pendingBlock}, nil); err != nil {
+		fmt.Println("====================>", err)
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 	b.rollback()
@@ -412,12 +413,22 @@ func (m callmsg) GasPrice() *big.Int   { return m.CallMsg.GasPrice }
 func (m callmsg) Gas() uint64          { return m.CallMsg.Gas }
 func (m callmsg) Value() *big.Int      { return m.CallMsg.Value }
 func (m callmsg) Data() []byte         { return m.CallMsg.Data }
+//for Ds-Pow
+func (m callmsg) TxType() uint8   { return m.CallMsg.TxType }
+func (m callmsg) Fee() (uint32, error) {
+	if m.CallMsg.TxType == params.DelegateMinerRegisterTx{
+		return m.CallMsg.Fee, nil
+	}
+
+	err := errors.New("this is not a Message for miner register to be a delegate one")
+	return 0, err
+}
 
 // filterBackend implements filters.Backend to support filtering for logs without
 // taking bloom-bits acceleration structures into account.
 type filterBackend struct {
 	db ethdb.Database
-	bc *core.BlockChain
+	bc *core.DAGManager
 }
 
 func (fb *filterBackend) ChainDb() ethdb.Database  { return fb.db }

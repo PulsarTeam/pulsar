@@ -391,7 +391,7 @@ func (self *LightChain) InsertHeaderChain(chain []*types.Header, checkFreq int) 
 	return i, err
 }
 
-// CurrentHeader retrieves the current head header of the canonical chain. The
+// CurrentHeader() retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
 func (self *LightChain) CurrentHeader() *types.Header {
 	return self.hc.CurrentHeader()

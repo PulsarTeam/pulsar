@@ -92,6 +92,42 @@ func WriteHeadBlockHash(db DatabaseWriter, hash common.Hash) {
 	}
 }
 
+
+// ReadTipHeadersHashes retrieves the hashes of the current tip headers.
+func ReadTipHeadersHashes(db DatabaseReader) []common.Hash {
+	data, _ := db.Get(tipHeadersKey)
+	if len(data) == 0 {
+		return []common.Hash{}
+	}
+	return common.BytesToHashArray(data)
+}
+
+// WriteTipHeadersHashes stores the hash of the current tip headers.
+func WriteTipHeadersHashes(db DatabaseWriter, hashes []common.Hash) {
+
+	 bytes := common.HashArrayToBytes(hashes)
+	if err := db.Put(tipHeadersKey, bytes); err != nil {
+		log.Crit("Failed to store tip headers's hash", "err", err)
+	}
+}
+
+// ReadTipBlocksHashes retrieves the hash of the current tip blocks.
+func ReadTipBlocksHashes(db DatabaseReader) []common.Hash {
+	data, _ := db.Get(tipBlocksKey)
+	if len(data) == 0 {
+		return []common.Hash{}
+	}
+	return common.BytesToHashArray(data)
+}
+
+// WriteTipBlocksHashes stores the hash of the current tip blocks.
+func WriteTipBlocksHashes(db DatabaseWriter, hashes []common.Hash) {
+	bytes := common.HashArrayToBytes(hashes)
+	if err := db.Put(tipBlocksKey, bytes); err != nil {
+		log.Crit("Failed to store tip blocks' hash", "err", err)
+	}
+}
+
 // ReadHeadFastBlockHash retrieves the hash of the current fast-sync head block.
 func ReadHeadFastBlockHash(db DatabaseReader) common.Hash {
 	data, _ := db.Get(headFastBlockKey)
@@ -271,10 +307,10 @@ func DeleteTd(db DatabaseDeleter, hash common.Hash, number uint64) {
 	}
 }
 
-// ReadReceipts retrieves all the transaction receipts belonging to a block.
+// ReadReceipts retrieves all the transaction receipts belonging to a epoch.
 func ReadReceipts(db DatabaseReader, hash common.Hash, number uint64) types.Receipts {
 	// Retrieve the flattened receipt slice
-	data, _ := db.Get(blockReceiptsKey(number, hash))
+	data, _ := db.Get(epochReceiptsKey(number, hash))
 	if len(data) == 0 {
 		return nil
 	}
@@ -291,7 +327,7 @@ func ReadReceipts(db DatabaseReader, hash common.Hash, number uint64) types.Rece
 	return receipts
 }
 
-// WriteReceipts stores all the transaction receipts belonging to a block.
+// WriteReceipts stores all the transaction receipts belonging to a epoch.
 func WriteReceipts(db DatabaseWriter, hash common.Hash, number uint64, receipts types.Receipts) {
 	// Convert the receipts into their storage form and serialize them
 	storageReceipts := make([]*types.ReceiptForStorage, len(receipts))
@@ -300,18 +336,18 @@ func WriteReceipts(db DatabaseWriter, hash common.Hash, number uint64, receipts 
 	}
 	bytes, err := rlp.EncodeToBytes(storageReceipts)
 	if err != nil {
-		log.Crit("Failed to encode block receipts", "err", err)
+		log.Crit("Failed to encode epoch receipts", "err", err)
 	}
 	// Store the flattened receipt slice
-	if err := db.Put(blockReceiptsKey(number, hash), bytes); err != nil {
-		log.Crit("Failed to store block receipts", "err", err)
+	if err := db.Put(epochReceiptsKey(number, hash), bytes); err != nil {
+		log.Crit("Failed to store epoch receipts", "err", err)
 	}
 }
 
 // DeleteReceipts removes all receipt data associated with a block hash.
 func DeleteReceipts(db DatabaseDeleter, hash common.Hash, number uint64) {
-	if err := db.Delete(blockReceiptsKey(number, hash)); err != nil {
-		log.Crit("Failed to delete block receipts", "err", err)
+	if err := db.Delete(epochReceiptsKey(number, hash)); err != nil {
+		log.Crit("Failed to delete epoch receipts", "err", err)
 	}
 }
 
@@ -341,7 +377,7 @@ func WriteBlock(db DatabaseWriter, block *types.Block) {
 
 // DeleteBlock removes all block data associated with a hash.
 func DeleteBlock(db DatabaseDeleter, hash common.Hash, number uint64) {
-	DeleteReceipts(db, hash, number)
+	//\\DeleteReceipts(db, hash, number)
 	DeleteHeader(db, hash, number)
 	DeleteBody(db, hash, number)
 	DeleteTd(db, hash, number)
@@ -372,4 +408,48 @@ func FindCommonAncestor(db DatabaseReader, a, b *types.Header) *types.Header {
 		}
 	}
 	return a
+}
+
+// ReadEpochRLP retrieves the epoch data in RLP encoding.
+func ReadEpochRLP(db DatabaseReader, hash common.Hash, number uint64) rlp.RawValue {
+	data, _ := db.Get(epochDataKey(number, hash))
+	return data
+}
+
+// WriteEpochRLP stores an RLP encoded epoch data into the database.
+func WriteEpochRLP(db DatabaseWriter, hash common.Hash, number uint64, rlp rlp.RawValue) {
+	if err := db.Put(epochDataKey(number, hash), rlp); err != nil {
+		log.Crit("Failed to store epoch data", "err", err)
+	}
+}
+
+// ReadEpochData retrieves the epoch data corresponding to the hash.
+func ReadEpochData(db DatabaseReader, hash common.Hash, number uint64) *types.EpochData {
+	data := ReadEpochRLP(db, hash, number)
+	if len(data) == 0 {
+		return nil
+	}
+	epochData := new(types.EpochData)
+	if err := rlp.Decode(bytes.NewReader(data), epochData); err != nil {
+		log.Error("Invalid  epoch data RLP", "hash", hash, "err", err)
+		return nil
+	}
+	return epochData
+}
+
+// WriteEpochData store a epoch data into the database.
+func WriteEpochData(db DatabaseWriter, hash common.Hash, number uint64, epochData *types.EpochData) {
+	data, err := rlp.EncodeToBytes(epochData)
+	if err != nil {
+		log.Crit("Failed to RLP encode epochData", "err", err)
+	}
+	WriteEpochRLP(db, hash, number, data)
+}
+
+// DeleteEpochData remove epoch data associated with a hash.
+func DeleteEpochData(db DatabaseDeleter, hash common.Hash, number uint64) {
+	DeleteReceipts(db, hash, number)
+	if err := db.Delete(epochDataKey(number, hash)); err != nil {
+		log.Crit("Failed to delete epoch data", "err", err)
+	}
 }

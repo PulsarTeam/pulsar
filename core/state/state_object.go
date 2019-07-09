@@ -1,4 +1,5 @@
 // Copyright 2014 The go-ethereum Authors
+// Copyright 2014 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -25,9 +26,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/log"
 )
-
-var emptyCodeHash = crypto.Keccak256(nil)
 
 type Code []byte
 
@@ -54,6 +55,54 @@ func (self Storage) Copy() Storage {
 	return cpy
 }
 
+type StakeCache map[common.Address]common.StakeData
+
+func (this StakeCache) Copy() StakeCache {
+	cpy := make(StakeCache)
+	for key, value := range this {
+		cpy[key] = value
+	}
+	return cpy
+}
+
+func checkDepositValidity(
+	miner *stateObject, user* stateObject, minerData *common.DepositData, userData *common.DepositView) {
+	if !userData.Equal(minerData) {
+		userDataBlkStr := "nil"
+		userDataBlnStr := "nil"
+		minerDataBlkStr := "nil"
+		minerDataBlnStr := "nil"
+
+		if userData.BlockNumber != nil {
+			userDataBlkStr = userData.BlockNumber.String()
+		}
+		if userData.Balance != nil {
+			userDataBlnStr = userData.Balance.String()
+		}
+		if minerData.BlockNumber != nil {
+			minerDataBlkStr = minerData.BlockNumber.String()
+		}
+		if minerData.Balance != nil {
+			minerDataBlnStr = minerData.Balance.String()
+		}
+
+		panic(fmt.Sprintf("Logical error!User account: %s,%s,%d\nDelegate miner: %s,%s,%d\n",
+			userDataBlkStr, userDataBlnStr, userData.FeeRatio,
+			minerDataBlkStr, minerDataBlnStr, miner.data.FeeRatio))
+	}
+
+	if minerData.Balance != nil && miner.data.DepositBalance.Cmp(minerData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! miner total deposit balance: %s, deposited balance: %s\n",
+			miner.data.DepositBalance.String(), minerData.Balance.String()))
+	}
+
+	if userData.Balance != nil && user.data.DepositBalance.Cmp(userData.Balance) < 0 { // whole < part
+		panic(fmt.Sprintf("Logical error! user total deposit balance: %s, deposited balance: %s\n",
+			user.data.DepositBalance.String(), userData.Balance.String()))
+	}
+}
+
+
 // stateObject represents an Ethereum account which is being modified.
 //
 // The usage pattern is as follows:
@@ -74,11 +123,13 @@ type stateObject struct {
 	dbErr error
 
 	// Write caches.
-	trie Trie // storage trie, which becomes non-nil on first access
+	storageTrie Trie // storage trie, which becomes non-nil on first access
 	code Code // contract bytecode, which gets set when code is loaded
-
 	cachedStorage Storage // Storage entry cache to avoid duplicate reads
 	dirtyStorage  Storage // Storage entries that need to be flushed to disk
+
+	stakeTrie Trie  // stake trie for delegate miner
+	dirtyStake StakeCache // stake state need to be flushed to disk
 
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
@@ -88,36 +139,58 @@ type stateObject struct {
 	deleted   bool
 }
 
-// empty returns whether the account is considered empty.
-func (s *stateObject) empty() bool {
-	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
-}
-
 // Account is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
 type Account struct {
 	Nonce    uint64
 	Balance  *big.Int
-	Root     common.Hash // merkle root of the storage trie
+	StorageRoot common.Hash // merkle root of the storage trie
 	CodeHash []byte
+	Type common.AccountType
+	DepositBalance *big.Int
+	FeeRatio uint32
+	StakeRoot common.Hash
+}
+
+func (a *Account) empty () bool {
+	return a.Nonce == 0 &&
+		   a.Balance.Sign() == 0 &&
+		   bytes.Equal(a.CodeHash, crypto.EmptyKeccak256) &&
+		   (a.Type == common.DefaultAccount || a.StakeRoot == (common.Hash{}) || a.StakeRoot == trie.EmptyRoot)
+}
+
+func createAccount(aType common.AccountType) *Account {
+	if !common.AccountTypeValidity(aType) {
+		panic(fmt.Sprintf("Account type is invalid: %d", aType))
+	}
+
+	pAccount := &Account{
+		Nonce: 0,
+		Type:  aType,
+	}
+	pAccount.Balance = new(big.Int)
+	pAccount.CodeHash = crypto.EmptyKeccak256
+	pAccount.DepositBalance = new(big.Int)
+
+	return pAccount
 }
 
 // newObject creates a state object.
-func newObject(db *StateDB, address common.Address, data Account) *stateObject {
-	if data.Balance == nil {
-		data.Balance = new(big.Int)
-	}
-	if data.CodeHash == nil {
-		data.CodeHash = emptyCodeHash
-	}
+func newObject(db *StateDB, address common.Address, account *Account) *stateObject {
 	return &stateObject{
 		db:            db,
 		address:       address,
 		addrHash:      crypto.Keccak256Hash(address[:]),
-		data:          data,
+		data:          *account,
 		cachedStorage: make(Storage),
 		dirtyStorage:  make(Storage),
+		dirtyStake:    make(StakeCache),
 	}
+}
+
+// empty returns whether the account is considered empty.
+func (s *stateObject) empty() bool {
+	return s.data.empty()
 }
 
 // EncodeRLP implements rlp.Encoder.
@@ -147,16 +220,28 @@ func (c *stateObject) touch() {
 	}
 }
 
-func (c *stateObject) getTrie(db Database) Trie {
-	if c.trie == nil {
-		var err error
-		c.trie, err = db.OpenStorageTrie(c.addrHash, c.data.Root)
-		if err != nil {
-			c.trie, _ = db.OpenStorageTrie(c.addrHash, common.Hash{})
-			c.setError(fmt.Errorf("can't create storage trie: %v", err))
-		}
+func (c *stateObject) getStorageTrie(db Database) Trie {
+	if c.storageTrie == nil {
+		c.storageTrie = c.openTrie(db, c.data.StorageRoot)
 	}
-	return c.trie
+	return c.storageTrie
+}
+
+func (c *stateObject) getStakeTrie(db Database) Trie {
+	if c.stakeTrie == nil {
+		c.stakeTrie = c.openTrie(db, c.data.StakeRoot)
+	}
+	return c.stakeTrie
+}
+
+func (c* stateObject) openTrie(db Database, root common.Hash) (result Trie) {
+	var err error
+	result, err = db.OpenAccountTrie(c.addrHash, root)
+	if err != nil {
+		result, _ = db.OpenAccountTrie(c.addrHash, common.Hash{})
+		c.setError(fmt.Errorf("can't create trie: %v", err))
+	}
+	return result
 }
 
 // GetState returns a value in account storage.
@@ -166,7 +251,7 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 		return value
 	}
 	// Load from DB in case it is missing.
-	enc, err := self.getTrie(db).TryGet(key[:])
+	enc, err := self.getStorageTrie(db).TryGet(key[:])
 	if err != nil {
 		self.setError(err)
 		return common.Hash{}
@@ -197,9 +282,9 @@ func (self *stateObject) setState(key, value common.Hash) {
 	self.dirtyStorage[key] = value
 }
 
-// updateTrie writes cached storage modifications into the object's storage trie.
-func (self *stateObject) updateTrie(db Database) Trie {
-	tr := self.getTrie(db)
+// updateStorageTrie writes cached storage modifications into the object's storage trie.
+func (self *stateObject) updateStorageTrie(db Database) Trie {
+	tr := self.getStorageTrie(db)
 	for key, value := range self.dirtyStorage {
 		delete(self.dirtyStorage, key)
 		if (value == common.Hash{}) {
@@ -213,22 +298,71 @@ func (self *stateObject) updateTrie(db Database) Trie {
 	return tr
 }
 
-// UpdateRoot sets the trie root to the current root hash of
-func (self *stateObject) updateRoot(db Database) {
-	self.updateTrie(db)
-	self.data.Root = self.trie.Hash()
+// updateStakeTrie writes cached storage modifications into the object's storage trie.
+func (self *stateObject) updateStakeTrie(db Database) Trie {
+	tr := self.getStakeTrie(db)
+	if len(self.dirtyStake) > 0 {
+		for key, value := range self.dirtyStake {
+			if value.Empty() {
+				self.setError(tr.TryDelete(key[:]))
+				continue
+			}
+			// Encoding []byte cannot fail, ok to ignore the error.
+			v, _ := rlp.EncodeToBytes(&value)
+			self.setError(tr.TryUpdate(key[:], v))
+		}
+		self.dirtyStake = make(StakeCache) // clear map
+	}
+	return tr
+}
+
+// updateStorageRoot sets the trie root to the current root hash of
+func (self *stateObject) updateStorageRoot(db Database) {
+	self.updateStorageTrie(db)
+	self.data.StorageRoot = self.storageTrie.Hash()
+}
+
+// UpdateStakeRoot sets the stake trie root to the current root hash of
+func (self *stateObject) updateStakeRoot(db Database) {
+	self.updateStakeTrie(db)
+	self.data.StakeRoot = self.stakeTrie.Hash()
+}
+
+// commitStorageTrie commit the storage trie of the object to db.
+// This updates the trie root.
+func (self *stateObject) commitStorageTrie(db Database) error {
+	self.updateStorageTrie(db)
+	if self.dbErr != nil {
+		return self.dbErr
+	}
+	root, err := self.storageTrie.Commit(nil)
+	if err == nil {
+		self.data.StorageRoot = root
+	}
+	return err
+}
+
+// commitStakeTrie commit the stake trie of the object to db.
+// This updates the trie root.
+func (self *stateObject) commitStakeTrie(db Database) error {
+	self.updateStakeTrie(db)
+	if self.dbErr != nil {
+		return self.dbErr
+	}
+	root, err := self.stakeTrie.Commit(nil)
+	if err == nil {
+		self.data.StakeRoot = root
+	}
+	return err
 }
 
 // CommitTrie the storage trie of the object to db.
 // This updates the trie root.
 func (self *stateObject) CommitTrie(db Database) error {
-	self.updateTrie(db)
-	if self.dbErr != nil {
-		return self.dbErr
-	}
-	root, err := self.trie.Commit(nil)
+	err := self.commitStorageTrie(db)
+	err1 := self.commitStakeTrie(db)
 	if err == nil {
-		self.data.Root = root
+		err = err1
 	}
 	return err
 }
@@ -273,17 +407,184 @@ func (self *stateObject) setBalance(amount *big.Int) {
 func (c *stateObject) ReturnGas(gas *big.Int) {}
 
 func (self *stateObject) deepCopy(db *StateDB) *stateObject {
-	stateObject := newObject(db, self.address, self.data)
-	if self.trie != nil {
-		stateObject.trie = db.db.CopyTrie(self.trie)
+	stateObject := newObject(db, self.address, &self.data)
+	if self.storageTrie != nil {
+		stateObject.storageTrie = db.db.CopyTrie(self.storageTrie)
+	}
+	if self.stakeTrie != nil {
+		stateObject.stakeTrie = db.db.CopyTrie(self.stakeTrie)
 	}
 	stateObject.code = self.code
 	stateObject.dirtyStorage = self.dirtyStorage.Copy()
 	stateObject.cachedStorage = self.dirtyStorage.Copy()
+	stateObject.dirtyStake = self.dirtyStake.Copy()
 	stateObject.suicided = self.suicided
 	stateObject.dirtyCode = self.dirtyCode
 	stateObject.deleted = self.deleted
 	return stateObject
+}
+
+func (self *stateObject) setType(aType common.AccountType, feeRatio uint32) {
+	if self.data.Type != aType {
+		if aType == common.DelegateMiner {
+			if !common.FeeRatioValidity(feeRatio) {
+				panic(fmt.Sprintf("Wrong fee ratio for delegate miner: %d\n", feeRatio))
+			}
+			self.data.FeeRatio = feeRatio
+		} else {
+			self.data.FeeRatio = 0
+		}
+		self.data.Type = aType
+
+		self.db.journal.append(typeChange{
+			account: &self.address,
+			prevType: self.data.Type,
+		})
+	}
+}
+
+func (self *stateObject) getType() common.AccountType {
+	return self.data.Type
+}
+
+func (self *stateObject) setDeposit(db Database, from *stateObject, balance *big.Int, blockNumber *big.Int) error {
+	var err error
+	var dv common.DepositView
+	var dd common.DepositData
+
+	if dv, err = from.getDepositView(db, &self.address); err != nil {
+		return err
+	}
+	if dd, err = self.getDepositData(db, &from.address); err != nil {
+		return err
+	}
+
+	checkDepositValidity(self, from, &dd, &dv)
+	if !dv.Empty() {
+		return common.ErrRedeposit
+	}
+
+	// Delegate miner record the default account deposit information.
+	self.dirtyStake[from.address] = common.DepositData{
+		Balance: new (big.Int).Set(balance),
+		BlockNumber: new (big.Int).Set(blockNumber),
+	}
+
+	// Default account record to which delegate miner it deposited.
+	from.dirtyStake[self.address] = common.DepositView{
+		DepositData:common.DepositData{
+			Balance: new (big.Int).Set(balance),
+			BlockNumber: new (big.Int).Set(blockNumber),
+		},
+		FeeRatio: self.data.FeeRatio,
+	}
+
+	// Delegate miner update deposit balance.
+	prevMinerDeposit := new (big.Int).Set(self.data.DepositBalance)
+	self.data.DepositBalance.Add(self.data.DepositBalance, balance)
+	self.db.journal.append(depositSinkChange{
+		account: &self.address,
+		from: &from.address,
+		prev: prevMinerDeposit,
+	})
+
+	// Customer account update deposit balance
+	from.data.Balance.Sub(from.data.Balance, balance)
+	from.data.DepositBalance.Add(from.data.DepositBalance, balance)
+	self.db.journal.append(depositUp{
+		account: &from.address,
+		deltaBalance: new (big.Int).Set(balance),
+	})
+
+	return nil
+}
+
+func (self *stateObject) rmDeposit(db Database, from *stateObject) error {
+	var err error
+	var dv common.DepositView
+	var dd common.DepositData
+
+	if dv, err = from.getDepositView(db, &self.address); err != nil {
+		return err
+	}
+	if dd, err = self.getDepositData(db, &from.address); err != nil {
+		return err
+	}
+
+	checkDepositValidity(self, from, &dd, &dv)
+	if dv.Empty() {
+		return common.ErrNoDepositBalance
+	}
+
+	// Delegate miner remove the record.
+	self.dirtyStake[from.address] = common.DepositData{
+		Balance: nil,
+		BlockNumber: nil,
+	}
+
+	// Default account remove the record
+	from.dirtyStake[self.address] = common.DepositView{
+		DepositData:common.DepositData{
+			Balance: nil,
+			BlockNumber: nil,
+		},
+		FeeRatio: 0,
+	}
+
+	// Delegate miner update deposit balance.
+	prevDeposit := new (big.Int).Set(self.data.DepositBalance)
+	self.data.DepositBalance.Sub(self.data.DepositBalance, dv.Balance)
+	self.db.journal.append(depositSinkChange{
+		account: &self.address,
+		from: &from.address,
+		prev: prevDeposit,
+	})
+
+	// Default account update deposit balance
+	from.data.Balance.Add(from.data.Balance, dv.Balance)
+	from.data.DepositBalance.Sub(from.data.DepositBalance, dv.Balance)
+	self.db.journal.append(depositDown{
+		account: &from.address,
+		deltaBalance: new (big.Int).Set(dv.Balance),
+	})
+
+	return nil
+}
+
+func (self *stateObject) getDepositData(db Database, pAddr *common.Address) (common.DepositData, error) {
+	if data, exist := self.dirtyStake[*pAddr]; exist {
+		log.Warn(fmt.Sprintf("Get deposit data from dirty for miner: %s\n", pAddr.String()))
+		return data.(common.DepositData), nil
+	}
+
+	var dataBytes []byte
+	var err error
+	var data common.DepositData
+	if dataBytes, err = self.getStakeTrie(db).TryGet(pAddr[:]); err == nil {
+		if len(dataBytes) > 0 {
+			// Found
+			err = rlp.DecodeBytes(dataBytes, &data)
+		}
+	}
+	return data, err
+}
+
+func (self *stateObject) getDepositView(db Database, pAddr *common.Address) (common.DepositView, error) {
+	if data, exist := self.dirtyStake[*pAddr]; exist {
+		log.Warn(fmt.Sprintf("Get deposit view from dirty for user: %s\n", pAddr.String()))
+		return data.(common.DepositView), nil
+	}
+
+	var dataBytes []byte
+	var err error
+	var data common.DepositView
+	if dataBytes, err = self.getStakeTrie(db).TryGet(pAddr[:]); err == nil {
+		if len(dataBytes) > 0 {
+			// Found
+			err = rlp.DecodeBytes(dataBytes, &data)
+		}
+	}
+	return data, err
 }
 
 //
@@ -300,7 +601,7 @@ func (self *stateObject) Code(db Database) []byte {
 	if self.code != nil {
 		return self.code
 	}
-	if bytes.Equal(self.CodeHash(), emptyCodeHash) {
+	if bytes.Equal(self.CodeHash(), crypto.EmptyKeccak256) {
 		return nil
 	}
 	code, err := db.ContractCode(self.addrHash, common.BytesToHash(self.CodeHash()))
@@ -345,6 +646,10 @@ func (self *stateObject) CodeHash() []byte {
 
 func (self *stateObject) Balance() *big.Int {
 	return self.data.Balance
+}
+
+func (self *stateObject) DepositBalance() *big.Int {
+	return self.data.DepositBalance
 }
 
 func (self *stateObject) Nonce() uint64 {

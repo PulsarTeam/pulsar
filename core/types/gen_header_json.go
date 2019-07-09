@@ -15,22 +15,31 @@ var _ = (*headerMarshaling)(nil)
 
 func (h Header) MarshalJSON() ([]byte, error) {
 	type Header struct {
-		ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
-		UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
-		Coinbase    common.Address `json:"miner"            gencodec:"required"`
-		Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
-		TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
-		ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-		Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
-		Difficulty  *hexutil.Big   `json:"difficulty"       gencodec:"required"`
-		Number      *hexutil.Big   `json:"number"           gencodec:"required"`
-		GasLimit    hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
-		GasUsed     hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
-		Time        *hexutil.Big   `json:"timestamp"        gencodec:"required"`
-		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
-		MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
-		Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
-		Hash        common.Hash    `json:"hash"`
+		ParentHash               common.Hash    `json:"parentHash"       gencodec:"required"`
+		UncleHash                common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+		Coinbase                 common.Address `json:"miner"            gencodec:"required"`
+		Root                     common.Hash    `json:"stateRoot"        gencodec:"required"`
+		TxHash                   common.Hash    `json:"transactionsRoot" gencodec:"required"`
+		ReceiptHash              common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+		Bloom                    Bloom          `json:"logsBloom"        gencodec:"required"`
+		Difficulty               *hexutil.Big   `json:"difficulty"       gencodec:"required"`
+		Number                   *hexutil.Big   `json:"number"           gencodec:"required"`
+		GasLimit                 hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
+		GasUsed                  hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
+		Time                     *hexutil.Big   `json:"timestamp"        gencodec:"required"`
+		Extra                    hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		MixDigest                common.Hash    `json:"mixHash"          gencodec:"required"`
+		Nonce                    BlockNonce     `json:"nonce"            gencodec:"required"`
+		PosWeight                uint32         `json:"posWeight"        gencodec:"required"`
+		PosOldMatureSupply       *hexutil.Big   `json:"posOldMatureSupply"    gencodec:"required"`
+		PosLastMatureCycleSupply *hexutil.Big   `json:"posLastMatureCycleSupply"    gencodec:"required"`
+		PosLastCycleSupply       *hexutil.Big   `json:"posLastCycleSupply"    gencodec:"required"`
+		PowOldMatureSupply       *hexutil.Big   `json:"powOldMatureSupply"    gencodec:"required"`
+		PowLastMatureCycleSupply *hexutil.Big   `json:"powLastMatureCycleSupply"    gencodec:"required"`
+		PowLastCycleSupply       *hexutil.Big   `json:"powLastCycleSupply"    gencodec:"required"`
+		PosProduction            *hexutil.Big   `json:"posProduction"    gencodec:"required"`
+		PowProduction            *hexutil.Big   `json:"powProduction"    gencodec:"required"`
+		Hash                     common.Hash    `json:"hash"`
 	}
 	var enc Header
 	enc.ParentHash = h.ParentHash
@@ -48,27 +57,45 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Extra = h.Extra
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
+	enc.PosWeight = h.PosWeight
+	enc.PosOldMatureSupply = (*hexutil.Big)(h.PosOldMatureSupply)
+	enc.PosLastMatureCycleSupply = (*hexutil.Big)(h.PosLastMatureCycleSupply)
+	enc.PosLastCycleSupply = (*hexutil.Big)(h.PosLastCycleSupply)
+	enc.PowOldMatureSupply = (*hexutil.Big)(h.PowOldMatureSupply)
+	enc.PowLastMatureCycleSupply = (*hexutil.Big)(h.PowLastMatureCycleSupply)
+	enc.PowLastCycleSupply = (*hexutil.Big)(h.PowLastCycleSupply)
+	enc.PosProduction = (*hexutil.Big)(h.PosProduction)
+	enc.PowProduction = (*hexutil.Big)(h.PowProduction)
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
 
 func (h *Header) UnmarshalJSON(input []byte) error {
 	type Header struct {
-		ParentHash  *common.Hash    `json:"parentHash"       gencodec:"required"`
-		UncleHash   *common.Hash    `json:"sha3Uncles"       gencodec:"required"`
-		Coinbase    *common.Address `json:"miner"            gencodec:"required"`
-		Root        *common.Hash    `json:"stateRoot"        gencodec:"required"`
-		TxHash      *common.Hash    `json:"transactionsRoot" gencodec:"required"`
-		ReceiptHash *common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-		Bloom       *Bloom          `json:"logsBloom"        gencodec:"required"`
-		Difficulty  *hexutil.Big    `json:"difficulty"       gencodec:"required"`
-		Number      *hexutil.Big    `json:"number"           gencodec:"required"`
-		GasLimit    *hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
-		GasUsed     *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
-		Time        *hexutil.Big    `json:"timestamp"        gencodec:"required"`
-		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
-		MixDigest   *common.Hash    `json:"mixHash"          gencodec:"required"`
-		Nonce       *BlockNonce     `json:"nonce"            gencodec:"required"`
+		ParentHash               *common.Hash    `json:"parentHash"       gencodec:"required"`
+		UncleHash                *common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+		Coinbase                 *common.Address `json:"miner"            gencodec:"required"`
+		Root                     *common.Hash    `json:"stateRoot"        gencodec:"required"`
+		TxHash                   *common.Hash    `json:"transactionsRoot" gencodec:"required"`
+		ReceiptHash              *common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+		Bloom                    *Bloom          `json:"logsBloom"        gencodec:"required"`
+		Difficulty               *hexutil.Big    `json:"difficulty"       gencodec:"required"`
+		Number                   *hexutil.Big    `json:"number"           gencodec:"required"`
+		GasLimit                 *hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
+		GasUsed                  *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
+		Time                     *hexutil.Big    `json:"timestamp"        gencodec:"required"`
+		Extra                    *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		MixDigest                *common.Hash    `json:"mixHash"          gencodec:"required"`
+		Nonce                    *BlockNonce     `json:"nonce"            gencodec:"required"`
+		PosWeight                uint32          `json:"posWeight"        gencodec:"required"`
+		PosOldMatureSupply       *hexutil.Big    `json:"posOldMatureSupply"    gencodec:"required"`
+		PosLastMatureCycleSupply *hexutil.Big    `json:"posLastMatureCycleSupply"    gencodec:"required"`
+		PosLastCycleSupply       *hexutil.Big    `json:"posLastCycleSupply"    gencodec:"required"`
+		PowOldMatureSupply       *hexutil.Big    `json:"powOldMatureSupply"    gencodec:"required"`
+		PowLastMatureCycleSupply *hexutil.Big    `json:"powLastMatureCycleSupply"    gencodec:"required"`
+		PowLastCycleSupply       *hexutil.Big    `json:"powLastCycleSupply"    gencodec:"required"`
+		PosProduction            *hexutil.Big    `json:"posProduction"    gencodec:"required"`
+		PowProduction            *hexutil.Big    `json:"powProduction"    gencodec:"required"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -134,5 +161,38 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'nonce' for Header")
 	}
 	h.Nonce = *dec.Nonce
+	h.PosWeight = dec.PosWeight
+	if dec.PosOldMatureSupply == nil {
+		return errors.New("missing required field 'posOldMatureSupply' for Header")
+	}
+	h.PosOldMatureSupply = (*big.Int)(dec.PosOldMatureSupply)
+	if dec.PosLastMatureCycleSupply == nil {
+		return errors.New("missing required field 'posLastMatureCycleSupply' for Header")
+	}
+	h.PosLastMatureCycleSupply = (*big.Int)(dec.PosLastMatureCycleSupply)
+	if dec.PosLastCycleSupply == nil {
+		return errors.New("missing required field 'posLastCycleSupply' for Header")
+	}
+	h.PosLastCycleSupply = (*big.Int)(dec.PosLastCycleSupply)
+	if dec.PowOldMatureSupply == nil {
+		return errors.New("missing required field 'powOldMatureSupply' for Header")
+	}
+	h.PowOldMatureSupply = (*big.Int)(dec.PowOldMatureSupply)
+	if dec.PowLastMatureCycleSupply == nil {
+		return errors.New("missing required field 'powLastMatureCycleSupply' for Header")
+	}
+	h.PowLastMatureCycleSupply = (*big.Int)(dec.PowLastMatureCycleSupply)
+	if dec.PowLastCycleSupply == nil {
+		return errors.New("missing required field 'powLastCycleSupply' for Header")
+	}
+	h.PowLastCycleSupply = (*big.Int)(dec.PowLastCycleSupply)
+	if dec.PosProduction == nil {
+		return errors.New("missing required field 'posProduction' for Header")
+	}
+	h.PosProduction = (*big.Int)(dec.PosProduction)
+	if dec.PowProduction == nil {
+		return errors.New("missing required field 'powProduction' for Header")
+	}
+	h.PowProduction = (*big.Int)(dec.PowProduction)
 	return nil
 }

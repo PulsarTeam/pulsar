@@ -38,7 +38,7 @@ var (
 
 const (
 	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
-	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
+	maxKnownBlocks = 4096  // Maximum block hashes to keep in the known list (prevent DOS)
 
 	// maxQueuedTxs is the maximum number of transaction lists to queue up before
 	// dropping broadcasts. This is a sensitive number as a transaction list might
@@ -85,8 +85,9 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    *set.Set                  // Set of transaction hashes known to be known by this peer
-	knownBlocks *set.Set                  // Set of block hashes known to be known by this peer
+	knownTxs    *set.Set // Set of transaction hashes known to be known by this peer
+	knownBlocks *set.Set // Set of block hashes known to be known by this peer
+	maybeBlocks *set.Set
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
@@ -101,6 +102,7 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
 		knownTxs:    set.New(),
 		knownBlocks: set.New(),
+		maybeBlocks: set.New(),
 		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
 		queuedProps: make(chan *propEvent, maxQueuedProps),
 		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
@@ -178,9 +180,21 @@ func (p *peer) SetHead(hash common.Hash, td *big.Int) {
 func (p *peer) MarkBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	for p.knownBlocks.Size() >= maxKnownBlocks {
+		//fmt.Printf("pop MarkBlock %s %v\n",hash.String(),p.id)
 		p.knownBlocks.Pop()
 	}
+	fmt.Printf("MarkBlock %s %v\n", hash.String(), p.id)
 	p.knownBlocks.Add(hash)
+}
+
+func (p *peer) MarkMaybeBlock(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known block hash
+	for p.maybeBlocks.Size() >= maxKnownBlocks {
+		//fmt.Printf("pop MarkMaybeBlock %s %v\n",hash.String(),p.id)
+		p.maybeBlocks.Pop()
+	}
+	fmt.Printf("MarkMaybeBlock %s %v\n", hash.String(), p.id)
+	p.maybeBlocks.Add(hash)
 }
 
 // MarkTransaction marks a transaction as known for the peer, ensuring that it
@@ -241,6 +255,13 @@ func (p *peer) AsyncSendNewBlockHash(block *types.Block) {
 	}
 }
 
+// NotifyHeaderAndTd announces the header hash and td through
+// a hash notification.
+func (p *peer) NotifyHeadAndTd(head common.Hash, parent common.Hash, difficulty *big.Int, td *big.Int) error {
+	p.knownBlocks.Add(head)
+	return p2p.Send(p.rw, NotifyHeadAndTdMsg, []interface{}{head, parent, difficulty, td})
+}
+
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	p.knownBlocks.Add(block.Hash())
@@ -272,6 +293,17 @@ func (p *peer) SendBlockBodies(bodies []*blockBody) error {
 // an already RLP encoded format.
 func (p *peer) SendBlockBodiesRLP(bodies []rlp.RawValue) error {
 	return p2p.Send(p.rw, BlockBodiesMsg, bodies)
+}
+
+// SendReferenceBodiesRLP sends a batch of reference blocks to the remote peer from
+// an already RLP encoded format.
+func (p *peer) SendReferenceBodiesRLP(blocks []rlp.RawValue) error {
+	return p2p.Send(p.rw, ReferenceBodiesMsg, blocks)
+}
+
+// SendBlockBodies sends a batch of block contents to the remote peer.
+func (p *peer) SendReferenceBody(resp *refResp) error {
+	return p2p.Send(p.rw, ReferenceBodyMsg, resp)
 }
 
 // SendNodeDataRLP sends a batch of arbitrary internal data, corresponding to the
@@ -312,6 +344,21 @@ func (p *peer) RequestHeadersByNumber(origin uint64, amount int, skip int, rever
 func (p *peer) RequestBodies(hashes []common.Hash) error {
 	p.Log().Debug("Fetching batch of block bodies", "count", len(hashes))
 	return p2p.Send(p.rw, GetBlockBodiesMsg, hashes)
+}
+
+// RequestReferenceBodies fetches a batch of reference blocks' bodies corresponding to the hashes
+// specified.
+func (p *peer) RequestReferenceBodies(hashes []common.Hash) error {
+	p.Log().Debug("Fetching batch of reference block bodies", "count", len(hashes))
+
+	//return p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
+	err := p2p.Send(p.rw, GetReferenceBodiesMsg, hashes)
+	return err
+}
+
+func (p *peer) RequestReferenceBody(hash common.Hash) error {
+	err := p2p.Send(p.rw, GetReferenceBodyMsg, hash)
+	return err
 }
 
 // RequestNodeData fetches a batch of arbitrary data from a node's known state
@@ -392,7 +439,8 @@ func (p *peer) readStatus(network uint64, status *statusData, genesis common.Has
 // String implements fmt.Stringer.
 func (p *peer) String() string {
 	return fmt.Sprintf("Peer %s [%s]", p.id,
-		fmt.Sprintf("eth/%2d", p.version),
+
+		fmt.Sprintf("bcw/%2d", p.version),
 	)
 }
 
@@ -418,6 +466,8 @@ func (ps *peerSet) Register(p *peer) error {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
 
+	fmt.Printf("Regist %v %v\n", p, p.id)
+
 	if ps.closed {
 		return errClosed
 	}
@@ -438,8 +488,11 @@ func (ps *peerSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
+		fmt.Printf("not Unregister %v %v\n", id, ps.peers)
 		return errNotRegistered
 	}
+	fmt.Printf("Unregister %v %v\n", p, p.id)
+
 	delete(ps.peers, id)
 	p.close()
 
@@ -477,6 +530,32 @@ func (ps *peerSet) PeersWithoutBlock(hash common.Hash) []*peer {
 	return list
 }
 
+func (ps *peerSet) PeersWithBlock(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.knownBlocks.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) PeersMayWithBlock(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.maybeBlocks.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
 // PeersWithoutTx retrieves a list of peers that do not have a given transaction
 // in their set of known hashes.
 func (ps *peerSet) PeersWithoutTx(hash common.Hash) []*peer {
@@ -507,6 +586,13 @@ func (ps *peerSet) BestPeer() *peer {
 		}
 	}
 	return bestPeer
+}
+
+// Notify the current header and td to each peer
+func (ps *peerSet) NotifyHeadAndTd(head common.Hash, parent common.Hash, difficulty *big.Int, td *big.Int) {
+	for _, p := range ps.peers {
+		p.NotifyHeadAndTd(head, parent, difficulty, td)
+	}
 }
 
 // Close disconnects all peers.

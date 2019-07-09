@@ -44,14 +44,14 @@ type Subscription interface {
 	Err() <-chan error
 }
 
-// ChainReader provides access to the blockchain. The methods in this interface access raw
+// BlockReader provides access to the blockchain. The methods in this interface access raw
 // data from either the canonical chain (when requesting by block number) or any
 // blockchain fork that was previously downloaded and processed by the node. The block
 // number argument can be nil to select the latest canonical block. Reading block headers
 // should be preferred over full blocks whenever possible.
 //
 // The returned error is NotFound if the requested item does not exist.
-type ChainReader interface {
+type BlockReader interface {
 	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 	BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error)
 	HeaderByHash(ctx context.Context, hash common.Hash) (*types.Header, error)
@@ -119,6 +119,9 @@ type CallMsg struct {
 	GasPrice *big.Int        // wei <-> gas exchange ratio
 	Value    *big.Int        // amount of wei sent along with the call
 	Data     []byte          // input data, usually an ABI-encoded contract method invocation
+	//for Ds-Pow
+	TxType   uint8
+	Fee      uint32
 }
 
 // A ContractCaller provides contract calls, essentially transactions that are executed by

@@ -48,8 +48,8 @@ func (db *odrDatabase) OpenTrie(root common.Hash) (state.Trie, error) {
 	return &odrTrie{db: db, id: db.id}, nil
 }
 
-func (db *odrDatabase) OpenStorageTrie(addrHash, root common.Hash) (state.Trie, error) {
-	return &odrTrie{db: db, id: StorageTrieID(db.id, addrHash, root)}, nil
+func (db *odrDatabase) OpenAccountTrie(addrHash, root common.Hash) (state.Trie, error) {
+	return &odrTrie{db: db, id: AccountTrieID(db.id, addrHash, root)}, nil
 }
 
 func (db *odrDatabase) CopyTrie(t state.Trie) state.Trie {

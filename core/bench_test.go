@@ -86,7 +86,7 @@ func genValueTx(nbytes int) func(int, *BlockGen) {
 		toaddr := common.Address{}
 		data := make([]byte, nbytes)
 		gas, _ := IntrinsicGas(data, false, false)
-		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, nil, data), types.HomesteadSigner{}, benchRootKey)
+		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, nil, data, params.NormalTx, 0), types.HomesteadSigner{}, benchRootKey)
 		gen.AddTx(tx)
 	}
 }
@@ -125,6 +125,8 @@ func genTxRing(naccounts int) func(int, *BlockGen) {
 				params.TxGas,
 				nil,
 				nil,
+				params.NormalTx,
+				0,
 			)
 			tx, _ = types.SignTx(tx, types.HomesteadSigner{}, ringKeys[from])
 			gen.AddTx(tx)
@@ -174,11 +176,11 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 
 	// Time the insertion of the new chain.
 	// State and blocks are stored in the same DB.
-	chainman, _ := NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{})
+	chainman, _ := NewDAGManager(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{})
 	defer chainman.Stop()
 	b.ReportAllocs()
 	b.ResetTimer()
-	if i, err := chainman.InsertChain(chain); err != nil {
+	if i, err := chainman.InsertBlocks(chain); err != nil {
 		b.Fatalf("insert error (block %d): %v\n", i, err)
 	}
 }
@@ -286,7 +288,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 		if err != nil {
 			b.Fatalf("error opening database at %v: %v", dir, err)
 		}
-		chain, err := NewBlockChain(db, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{})
+		chain, err := NewDAGManager(db, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{})
 		if err != nil {
 			b.Fatalf("error creating chain: %v", err)
 		}

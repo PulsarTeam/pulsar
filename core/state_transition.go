@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"fmt"
 )
 
 var (
@@ -73,6 +74,10 @@ type Message interface {
 	Nonce() uint64
 	CheckNonce() bool
 	Data() []byte
+
+	//for ds-pow
+	TxType() uint8
+	Fee() (uint32, error)
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
@@ -168,9 +173,12 @@ func (st *StateTransition) preCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
 		nonce := st.state.GetNonce(st.msg.From())
+		fmt.Printf("msg.hash = %s, nonce = %v, st.msg.Nonce() = %v\n", st.msg.From().String(), nonce, st.msg.Nonce())
 		if nonce < st.msg.Nonce() {
+			fmt.Printf("ErrNonceTooHigh\n")
 			return ErrNonceTooHigh
 		} else if nonce > st.msg.Nonce() {
+			fmt.Printf("ErrNonceTooLow\n")
 			return ErrNonceTooLow
 		}
 	}
@@ -188,9 +196,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	sender := vm.AccountRef(msg.From())
 	homestead := st.evm.ChainConfig().IsHomestead(st.evm.BlockNumber)
 	contractCreation := msg.To() == nil
+	txType := msg.TxType()
 
 	// Pay intrinsic gas
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
+
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -205,13 +215,20 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		// error.
 		vmerr error
 	)
-	if contractCreation {
-		ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
-	} else {
-		// Increment the nonce for the next transaction
+
+	if txType != params.NormalTx{
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		ret, st.gas, vmerr = evm.DsPowCall(sender, st.to(), st.data, st.gas, st.value, msg)
+	}else{
+		if contractCreation {
+			ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+		} else {
+			// Increment the nonce for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		}
 	}
+
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)
 		// The only possible consensus-error would be if there wasn't

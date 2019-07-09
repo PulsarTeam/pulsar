@@ -31,6 +31,54 @@ type StateDB interface {
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
 
+	/**
+	 * @brief Default account deposit balance to a delegate miner
+	 * @param from: the deposit balance account
+	 * @param to: the delegate miner account who accept the deposit
+	 * @param balance: the deposit amount.
+	 * @param blockNumber: the future mature block.
+	 */
+	Deposit(from common.Address, to common.Address, balance *big.Int, blockNumber *big.Int) error
+
+	/**
+	 * @brief Default account withdraw balance from the delegate miner
+	 * @param from: the withdraw issue account (default account)
+	 * @param to: the delegate miner account who store the deposit
+	 */
+	Withdraw(from common.Address, to common.Address) error
+
+	/**
+	 * @brief Set Account type
+	 * @param account: the account to be set
+	 * @param aType: state.DefaultAccount, state.DelegateMiner, defined in dspow_defs.go
+	 * @param feeRatio: make sense only if the type is DelegateMiner. feeRatio/1,000,000
+	 */
+	SetAccountType(account common.Address, aType common.AccountType, feeRatio uint32) error
+
+	GetAccountType(common.Address) common.AccountType
+
+	/**
+	 * @brief Get all registered delegate miners
+	 * @return The map of all delegate miners address and view.
+	 */
+	GetAllDelegateMiners() map[common.Address]common.DMView
+
+	GetDelegateMiner(common.Address) (common.DMView, error)
+
+	/**
+	 * @brief Get the delegate miners that the (default) account deposited shares.
+	 * @param account: the account who deposit shares.
+	 * @return The map of the delegate miners address and view.
+	 */
+	GetDepositMiners(account common.Address) (map[common.Address]common.DepositView, error)
+
+	/**
+	 * @brief Get the users of which account deposited shares to the delegate miner.
+	 * @param: the delegate miner address.
+	 * @return The map of the user (default account) address and its deposit data.
+	 */
+	GetDepositUsers(common.Address) (map[common.Address]common.DepositData, error)
+
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)
 

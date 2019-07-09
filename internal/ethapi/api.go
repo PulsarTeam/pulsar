@@ -17,7 +17,6 @@
 package ethapi
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,13 +24,13 @@ import (
 	"strings"
 	"time"
 
+	"bytes"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -70,6 +69,144 @@ func (s *PublicEthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) 
 // ProtocolVersion returns the current Ethereum protocol version this node supports
 func (s *PublicEthereumAPI) ProtocolVersion() hexutil.Uint {
 	return hexutil.Uint(s.b.ProtocolVersion())
+}
+
+//get address tx nonce
+func (s *PublicBlockChainAPI) GetAccountNonce(ctx context.Context, address common.Address, blockNr rpc.BlockNumber) (hexutil.Uint64, error) {
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return 0, err
+	}
+
+	return (hexutil.Uint64)(state.GetNonce(address)), state.Error()
+}
+
+//For Ds-pow: GetAllDelegateMiners return a list of all delegate miners
+func (s *PublicEthereumAPI) GetAllDelegateMiners(ctx context.Context, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	fields := map[common.Address]interface{}{}
+	minerList := state.GetAllDelegateMiners()
+
+	for addr, miner := range minerList {
+		fields[addr] = miner
+	}
+
+	return fields, state.Error()
+}
+
+//For Ds-pow: GetPowTotalSupply return the total supply of pow
+func (s *PublicEthereumAPI) GetPowTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error) {
+	header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header == nil || err != nil {
+		return nil, err
+	}
+	sumPow := big.NewInt(0)
+	sumPow.Add(sumPow, header.PowProduction)
+	_, end := core.LastCycleRange(header.Number.Uint64())
+	log.Debug("#DEBUG#  GetPowTotalSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "LastCycleEnd", end)
+	hash := header.ParentHash
+	var b *types.Block = nil
+	for {
+		b, _ = s.b.GetBlock(ctx, hash)
+		if b == nil {
+			return (*hexutil.Big)(sumPow), fmt.Errorf("ERROR! GetPowTotalSupply can not get block", "hash", hash)
+		}
+		hash = b.ParentHash()
+		if b.NumberU64() >= end {
+			sumPow.Add(sumPow, b.Header().PowProduction)
+			continue
+		} else {
+			break
+		}
+	}
+	sumPow.Add(sumPow, header.PowLastCycleSupply)
+	sumPow.Add(sumPow, header.PowLastMatureCycleSupply)
+	sumPow.Add(sumPow, header.PowOldMatureSupply)
+	return (*hexutil.Big)(sumPow), nil
+}
+
+//For Ds-pow: GetPosTotalSupply return the total supply of pos
+func (s *PublicEthereumAPI) GetPosTotalSupply(ctx context.Context, blockNr rpc.BlockNumber) (*hexutil.Big, error) {
+	header, err := s.b.HeaderByNumber(ctx, blockNr)
+	if header == nil || err != nil {
+		return nil, err
+	}
+	sumPos := big.NewInt(0)
+	sumPos.Add(sumPos, header.PosProduction)
+	_, end := core.LastCycleRange(header.Number.Uint64())
+	log.Debug("#DEBUG#  GetPosTotalSupply ", "header.Number", header.Number.String(), "header.hash", header.Hash().String(), "LastCycleEnd", end)
+	hash := header.ParentHash
+	var b *types.Block = nil
+	for {
+		b, _ = s.b.GetBlock(ctx, hash)
+		if b == nil {
+			return (*hexutil.Big)(sumPos), fmt.Errorf("ERROR! GetPosTotalSupply can not get block", "hash", hash)
+		}
+		hash = b.ParentHash()
+		if b.NumberU64() >= end {
+			sumPos.Add(sumPos, b.Header().PosProduction)
+			continue
+		} else {
+			break
+		}
+	}
+	sumPos.Add(sumPos, header.PosLastCycleSupply)
+	sumPos.Add(sumPos, header.PosLastMatureCycleSupply)
+	sumPos.Add(sumPos, header.PosOldMatureSupply)
+	return (*hexutil.Big)(sumPos), nil
+}
+
+//For Ds-pow: GetAllStakeHolders return a stake holders list of a delegate miner
+func (s *PublicEthereumAPI) GetAllStakeHolders(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	var stakeHoldersList map[common.Address]common.DepositData
+	var err1 error
+	if stakeHoldersList, err1 = state.GetDepositUsers(addr); err1 != nil {
+		return nil, err1
+	}
+
+	fields := map[common.Address]interface{}{}
+	for addr, stakeholder := range stakeHoldersList {
+		fields[addr] = stakeholder
+	}
+	return fields, state.Error()
+}
+
+//for Ds-pow: GetAllDepositMiners return deposit miners's message of a stockholder
+func (s *PublicEthereumAPI) GetAllDepositMiners(ctx context.Context, addr common.Address, blockNr rpc.BlockNumber) (map[common.Address]interface{}, error) {
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	var delegateMinersList map[common.Address]common.DepositView
+	var err1 error
+	if delegateMinersList, err1 = state.GetDepositMiners(addr); err1 != nil {
+		return nil, err1
+	}
+
+	fields := map[common.Address]interface{}{}
+	for addr, miner := range delegateMinersList {
+		fields[addr] = miner
+	}
+
+	return fields, state.Error()
+}
+
+func (s *PublicEthereumAPI) ShowPendingBlocks(ctx context.Context) ([]interface{}, error) {
+	var result []interface{}
+	if dag := s.b.DAGManager(); dag != nil {
+		result = dag.GetPendingBlocks()
+	}
+	return result, nil
 }
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
@@ -609,6 +746,9 @@ type CallArgs struct {
 	GasPrice hexutil.Big     `json:"gasPrice"`
 	Value    hexutil.Big     `json:"value"`
 	Data     hexutil.Bytes   `json:"data"`
+	//for Ds-Pow
+	TxType byte         `json:"txType"`
+	Fee    hexutil.Uint `json:"delegateFee"`
 }
 
 func (s *PublicBlockChainAPI) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
@@ -637,7 +777,7 @@ func (s *PublicBlockChainAPI) doCall(ctx context.Context, args CallArgs, blockNr
 	}
 
 	// Create new call message
-	msg := types.NewMessage(addr, args.To, 0, args.Value.ToInt(), gas, gasPrice, args.Data, false)
+	msg := types.NewMessage(addr, args.To, 0, args.Value.ToInt(), gas, gasPrice, args.Data, false, args.TxType, (uint32)(args.Fee))
 
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
@@ -796,23 +936,33 @@ func FormatLogs(logs []vm.StructLog) []StructLogRes {
 func RPCMarshalBlock(b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
 	head := b.Header() // copies the header once
 	fields := map[string]interface{}{
-		"number":           (*hexutil.Big)(head.Number),
-		"hash":             b.Hash(),
-		"parentHash":       head.ParentHash,
-		"nonce":            head.Nonce,
-		"mixHash":          head.MixDigest,
-		"sha3Uncles":       head.UncleHash,
-		"logsBloom":        head.Bloom,
-		"stateRoot":        head.Root,
-		"miner":            head.Coinbase,
-		"difficulty":       (*hexutil.Big)(head.Difficulty),
-		"extraData":        hexutil.Bytes(head.Extra),
-		"size":             hexutil.Uint64(b.Size()),
-		"gasLimit":         hexutil.Uint64(head.GasLimit),
-		"gasUsed":          hexutil.Uint64(head.GasUsed),
-		"timestamp":        (*hexutil.Big)(head.Time),
-		"transactionsRoot": head.TxHash,
-		"receiptsRoot":     head.ReceiptHash,
+		"number":                   (*hexutil.Big)(head.Number),
+		"hash":                     b.Hash(),
+		"parentHash":               head.ParentHash,
+		"nonce":                    head.Nonce,
+		"mixHash":                  head.MixDigest,
+		"sha3Uncles":               head.UncleHash,
+		"logsBloom":                head.Bloom,
+		"stateRoot":                head.Root,
+		"miner":                    head.Coinbase,
+		"difficulty":               (*hexutil.Big)(head.Difficulty),
+		"posWeight":                head.PosWeight,
+		"posOldMatureSupply":       (*hexutil.Big)(head.PosOldMatureSupply),
+		"posLastMatureCycleSupply": (*hexutil.Big)(head.PosLastMatureCycleSupply),
+		"posLastCycleSupply":       (*hexutil.Big)(head.PosLastCycleSupply),
+		"powOldMatureSupply":       (*hexutil.Big)(head.PowOldMatureSupply),
+		"powLastMatureCycleSupply": (*hexutil.Big)(head.PowLastMatureCycleSupply),
+		"powLastCycleSupply":       (*hexutil.Big)(head.PowLastCycleSupply),
+		"posProduction":            (*hexutil.Big)(head.PosProduction),
+		"powProduction":            (*hexutil.Big)(head.PowProduction),
+		"extraData":                hexutil.Bytes(head.Extra),
+		"size":                     hexutil.Uint64(b.Size()),
+		"gasLimit":                 hexutil.Uint64(head.GasLimit),
+		"gasLimitPivot":            hexutil.Uint64(head.GasLimitPivot),
+		"gasUsed":                  hexutil.Uint64(head.GasUsed),
+		"timestamp":                (*hexutil.Big)(head.Time),
+		"transactionsRoot":         head.TxHash,
+		"receiptsRoot":             head.ReceiptHash,
 	}
 
 	if inclTx {
@@ -872,6 +1022,9 @@ type RPCTransaction struct {
 	V                *hexutil.Big    `json:"v"`
 	R                *hexutil.Big    `json:"r"`
 	S                *hexutil.Big    `json:"s"`
+	//for Ds-Pow
+	TxType hexutil.Uint `json:"txType"`
+	Fee    hexutil.Uint `json:"delegateFee"`
 }
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
@@ -884,6 +1037,12 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 	from, _ := types.Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
 
+	var fee uint32
+	if tx.TxType() == params.DelegateMinerRegisterTx {
+		fee, _ = tx.Fee()
+	} else {
+		fee = 0
+	}
 	result := &RPCTransaction{
 		From:     from,
 		Gas:      hexutil.Uint64(tx.Gas()),
@@ -896,6 +1055,9 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		V:        (*hexutil.Big)(v),
 		R:        (*hexutil.Big)(r),
 		S:        (*hexutil.Big)(s),
+		//for ds-pow
+		TxType: (hexutil.Uint)(tx.TxType()),
+		Fee:    (hexutil.Uint)(fee),
 	}
 	if blockHash != (common.Hash{}) {
 		result.BlockHash = blockHash
@@ -1121,8 +1283,8 @@ type SendTxArgs struct {
 	Input *hexutil.Bytes `json:"input"`
 
 	//add options for Ds-Pow
-	TxType  uint8     `json:"txType"`
-	Fee     uint32   `json:"delegateFee"`
+	TxType uint8  `json:"txType"`
+	Fee    uint32 `json:"delegateFee"`
 }
 
 // setDefaults is a helper function that fills in default values for unspecified tx fields.
@@ -1152,6 +1314,11 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 		return errors.New(`Both "data" and "input" are set and not equal. Please use "input" to pass transaction call data.`)
 	}
 	if args.To == nil {
+		//for delegate miner register
+		if args.TxType == params.DelegateMinerRegisterTx {
+			return nil
+		}
+
 		// Contract creation
 		var input []byte
 		if args.Data != nil {
@@ -1174,9 +1341,13 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 		input = *args.Input
 	}
 	if args.To == nil {
-		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+		if args.TxType != params.DelegateMinerRegisterTx {
+			args.Fee = 0
+		}
+		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, args.TxType, args.Fee)
 	}
-	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+
+	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, args.TxType, args.Fee)
 }
 
 // submitTransaction is a helper function that submits tx to txPool and logs a message.
@@ -1201,6 +1372,19 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
+	if args.TxType == 1 {
+		//look up account balance is accord with condition
+		header, _ := s.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
+		state, _, err := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(header.Number.Int64()))
+		if state == nil || err != nil {
+			return common.Hash{}, err
+		}
+		accoutBalance := state.GetBalance(args.From)
+
+		if accoutBalance.Cmp(vm.DelegateMinnerMinBalance) < 0 {
+			return common.Hash{}, vm.ErrNotEnoughBalanceRegisterDelegateMiner
+		}
+	}
 
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
@@ -1406,15 +1590,6 @@ func (api *PublicDebugAPI) PrintBlock(ctx context.Context, number uint64) (strin
 		return "", fmt.Errorf("block #%d not found", number)
 	}
 	return spew.Sdump(block), nil
-}
-
-// SeedHash retrieves the seed hash of a block.
-func (api *PublicDebugAPI) SeedHash(ctx context.Context, number uint64) (string, error) {
-	block, _ := api.b.BlockByNumber(ctx, rpc.BlockNumber(number))
-	if block == nil {
-		return "", fmt.Errorf("block #%d not found", number)
-	}
-	return fmt.Sprintf("0x%x", ethash.SeedHash(number)), nil
 }
 
 // PrivateDebugAPI is the collection of Ethereum APIs exposed over the private

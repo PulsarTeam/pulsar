@@ -49,7 +49,7 @@ type ChainIndexerBackend interface {
 
 // ChainIndexerChain interface is used for connecting the indexer to a blockchain
 type ChainIndexerChain interface {
-	// CurrentHeader retrieves the latest locally known header.
+	// CurrentHeader() retrieves the latest locally known header.
 	CurrentHeader() *types.Header
 
 	// SubscribeChainEvent subscribes to new head header notifications.

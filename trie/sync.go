@@ -93,7 +93,7 @@ func NewSync(root common.Hash, database DatabaseReader, callback LeafCallback) *
 // AddSubTrie registers a new trie to the sync code, rooted at the designated parent.
 func (s *Sync) AddSubTrie(root common.Hash, depth int, parent common.Hash, callback LeafCallback) {
 	// Short circuit if the trie is empty or already known
-	if root == emptyRoot {
+	if root == EmptyRoot {
 		return
 	}
 	if _, ok := s.membatch.batch[root]; ok {
@@ -128,7 +128,7 @@ func (s *Sync) AddSubTrie(root common.Hash, depth int, parent common.Hash, callb
 // contract code).
 func (s *Sync) AddRawEntry(hash common.Hash, depth int, parent common.Hash) {
 	// Short circuit if the entry is empty or already known
-	if hash == emptyState {
+	if hash == EmptyState {
 		return
 	}
 	if _, ok := s.membatch.batch[hash]; ok {

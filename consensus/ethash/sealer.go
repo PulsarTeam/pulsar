@@ -28,11 +28,12 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error) {
+func (ethash *Ethash) Seal(chain consensus.BlockReader, block *types.Block, stop <-chan struct{}) (*types.Block, error) {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
@@ -69,7 +70,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ethash.mine(block, id, nonce, abort, found)
+			ethash.mine(chain, block, id, nonce, abort, found)
 		}(i, uint64(ethash.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
@@ -94,19 +95,12 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
-func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
-	// Extract some data from the header
-	var (
-		header  = block.Header()
-		hash    = header.HashNoNonce().Bytes()
-		target  = new(big.Int).Div(maxUint256, header.Difficulty)
-//		dataset = ethash.dataset(number)
-	)
-	// Start generating random nonces until we abort or find a good one
-	var (
-		attempts = int64(0)
-		nonce    = seed
-	)
+func (ethash *Ethash) mine(chain consensus.BlockReader, block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+	header := block.Header()
+	target := ethash.CalcTarget(chain, header, nil)
+	attempts := int64(0)
+	nonce := seed
+
 	logger := log.New("miner", id)
 	logger.Trace("Started ethash search for new nonces", "seed", seed)
 search:
@@ -119,22 +113,19 @@ search:
 			break search
 
 		default:
-			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			attempts++
 			if (attempts % (1 << 15)) == 0 {
 				ethash.hashrate.Mark(attempts)
 				attempts = 0
 			}
-			// Compute the PoW value of this nonce
-//			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
-			result := hashimotoFull(hash, nonce)
-
+			header.Nonce = types.EncodeNonce(nonce)
+			headerRlp, err := rlp.EncodeToBytes(&header)
+			if err != nil {
+				logger.Warn("Ethash prepare failed", "encode error", err)
+				break search
+			}
+			result := GHash(headerRlp)
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
-				// Correct nonce found, create a new header with it
-				header = types.CopyHeader(header)
-				header.Nonce = types.EncodeNonce(nonce)
-//				header.MixDigest = common.BytesToHash(digest)
-
 				// Seal and return a block (if still needed)
 				select {
 				case found <- block.WithSeal(header):
@@ -147,7 +138,4 @@ search:
 			nonce++
 		}
 	}
-	// Datasets are unmapped in a finalizer. Ensure that the dataset stays live
-	// during sealing so it's not unmapped while being read.
-//	runtime.KeepAlive(dataset)
 }
