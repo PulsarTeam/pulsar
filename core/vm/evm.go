@@ -27,7 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
+var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(1000000), big.NewInt(1e18))
 
 // Message represents a message sent to a contract.
 
