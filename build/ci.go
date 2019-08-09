@@ -62,19 +62,19 @@ import (
 )
 
 var (
-	// Files that end up in the bcw*.zip archive.
+	// Files that end up in the pulsar*.zip archive.
 	gethArchiveFiles = []string{
 		"COPYING",
-		executablePath("bcw"),
+		executablePath("pulsar"),
 	}
 
-	// Files that end up in the bcw-alltools*.zip archive.
+	// Files that end up in the pulsar-alltools*.zip archive.
 	allToolsArchiveFiles = []string{
 		"COPYING",
 		executablePath("abigen"),
 		executablePath("bootnode"),
 		executablePath("evm"),
-		executablePath("bcw"),
+		executablePath("pulsar"),
 		executablePath("puppeth"),
 		executablePath("rlpdump"),
 		executablePath("swarm"),
@@ -96,7 +96,7 @@ var (
 			Description: "Developer utility version of the EVM (Ethereum Virtual Machine) that is capable of running bytecode snippets within a configurable environment and execution mode.",
 		},
 		{
-			Name:        "bcw",
+			Name:        "pulsar",
 			Description: "Ethereum CLI client.",
 		},
 		{
@@ -372,17 +372,17 @@ func doArchive(cmdline []string) {
 	var (
 		env      = build.Env()
 		base     = archiveBasename(*arch, env)
-		bcw      = "bcw-" + base + ext
-		alltools = "bcw-alltools-" + base + ext
+		pulsar   = "pulsar-" + base + ext
+		alltools = "pulsar-alltools-" + base + ext
 	)
 	maybeSkipArchive(env)
-	if err := build.WriteArchive(bcw, gethArchiveFiles); err != nil {
+	if err := build.WriteArchive(pulsar, gethArchiveFiles); err != nil {
 		log.Fatal(err)
 	}
 	if err := build.WriteArchive(alltools, allToolsArchiveFiles); err != nil {
 		log.Fatal(err)
 	}
-	for _, archive := range []string{bcw, alltools} {
+	for _, archive := range []string{pulsar, alltools} {
 		if err := archiveUpload(archive, *upload, *signer); err != nil {
 			log.Fatal(err)
 		}
@@ -509,7 +509,7 @@ func makeWorkdir(wdflag string) string {
 	if wdflag != "" {
 		err = os.MkdirAll(wdflag, 0744)
 	} else {
-		wdflag, err = ioutil.TempDir("", "bcw-build-")
+		wdflag, err = ioutil.TempDir("", "pulsar-build-")
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -665,7 +665,7 @@ func doWindowsInstaller(cmdline []string) {
 			continue
 		}
 		allTools = append(allTools, filepath.Base(file))
-		if filepath.Base(file) == "bcw.exe" {
+		if filepath.Base(file) == "pulsar.exe" {
 			gethTool = file
 		} else {
 			devTools = append(devTools, file)
@@ -673,13 +673,13 @@ func doWindowsInstaller(cmdline []string) {
 	}
 
 	// Render NSIS scripts: Installer NSIS contains two installer sections,
-	// first section contains the bcw binary, second section holds the dev tools.
+	// first section contains the pulsar binary, second section holds the dev tools.
 	templateData := map[string]interface{}{
 		"License":  "COPYING",
-		"bcw":      gethTool,
+		"pulsar":   gethTool,
 		"DevTools": devTools,
 	}
-	build.Render("build/nsis.bcw.nsi", filepath.Join(*workdir, "bcw.nsi"), 0644, nil)
+	build.Render("build/nsis.pulsar.nsi", filepath.Join(*workdir, "pulsar.nsi"), 0644, nil)
 	build.Render("build/nsis.install.nsh", filepath.Join(*workdir, "install.nsh"), 0644, templateData)
 	build.Render("build/nsis.uninstall.nsh", filepath.Join(*workdir, "uninstall.nsh"), 0644, allTools)
 	build.Render("build/nsis.pathupdate.nsh", filepath.Join(*workdir, "PathUpdate.nsh"), 0644, nil)
@@ -694,14 +694,14 @@ func doWindowsInstaller(cmdline []string) {
 	if env.Commit != "" {
 		version[2] += "-" + env.Commit[:8]
 	}
-	installer, _ := filepath.Abs("bcw-" + archiveBasename(*arch, env) + ".exe")
+	installer, _ := filepath.Abs("pulsar-" + archiveBasename(*arch, env) + ".exe")
 	build.MustRunCommand("makensis.exe",
 		"/DOUTPUTFILE="+installer,
 		"/DMAJORVERSION="+version[0],
 		"/DMINORVERSION="+version[1],
 		"/DBUILDVERSION="+version[2],
 		"/DARCH="+*arch,
-		filepath.Join(*workdir, "bcw.nsi"),
+		filepath.Join(*workdir, "pulsar.nsi"),
 	)
 
 	// Sign and publish installer.
@@ -736,7 +736,7 @@ func doAndroidArchive(cmdline []string) {
 
 	if *local {
 		// If we're building locally, copy bundle to build dir and skip Maven
-		os.Rename("bcw.aar", filepath.Join(GOBIN, "bcw.aar"))
+		os.Rename("pulsar.aar", filepath.Join(GOBIN, "pulsar.aar"))
 		return
 	}
 	meta := newMavenMetadata(env)
@@ -746,8 +746,8 @@ func doAndroidArchive(cmdline []string) {
 	maybeSkipArchive(env)
 
 	// Sign and upload the archive to Azure
-	archive := "bcw-" + archiveBasename("android", env) + ".aar"
-	os.Rename("bcw.aar", archive)
+	archive := "pulsar-" + archiveBasename("android", env) + ".aar"
+	os.Rename("pulsar.aar", archive)
 
 	if err := archiveUpload(archive, *upload, *signer); err != nil {
 		log.Fatal(err)
@@ -837,7 +837,7 @@ func newMavenMetadata(env build.Environment) mavenMetadata {
 	}
 	return mavenMetadata{
 		Version:      version,
-		Package:      "bcw-" + version,
+		Package:      "pulsar-" + version,
 		Develop:      isUnstableBuild(env),
 		Contributors: contribs,
 	}
@@ -866,7 +866,7 @@ func doXCodeFramework(cmdline []string) {
 		build.MustRun(bind)
 		return
 	}
-	archive := "bcw-" + archiveBasename("ios", env)
+	archive := "pulsar-" + archiveBasename("ios", env)
 	if err := os.Mkdir(archive, os.ModePerm); err != nil {
 		log.Fatal(err)
 	}
@@ -884,8 +884,8 @@ func doXCodeFramework(cmdline []string) {
 	// Prepare and upload a PodSpec to CocoaPods
 	if *deploy != "" {
 		meta := newPodMetadata(env, archive)
-		build.Render("build/pod.podspec", "bcw.podspec", 0755, meta)
-		build.MustRunCommand("pod", *deploy, "push", "bcw.podspec", "--allow-warnings", "--verbose")
+		build.Render("build/pod.podspec", "pulsar.podspec", 0755, meta)
+		build.MustRunCommand("pod", *deploy, "push", "pulsar.podspec", "--allow-warnings", "--verbose")
 	}
 }
 
