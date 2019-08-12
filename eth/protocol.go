@@ -30,16 +30,16 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
-	bcw62 = 62
-	bcw63 = 63
-	bcw64 = 64
+	pulsar62 = 62
+	pulsar63 = 63
+	pulsar64 = 64
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
-var ProtocolName = "bcw"
+var ProtocolName = "pulsar"
 
 // ProtocolVersions are the upported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{bcw64, bcw63, bcw62}
+var ProtocolVersions = []uint{pulsar64, pulsar63, pulsar62}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
 var ProtocolLengths = []uint64{22, 17, 8}

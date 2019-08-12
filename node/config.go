@@ -48,7 +48,7 @@ const (
 // all registered services.
 type Config struct {
 	// Name sets the instance name of the node. It must not contain the / character and is
-	// used in the devp2p node identifier. The instance name of bcw is "bcw". If no
+	// used in the devp2p node identifier. The instance name of pulsar is "pulsar". If no
 	// value is specified, the basename of the current executable is used.
 	Name string `toml:"-"`
 
@@ -228,7 +228,7 @@ func DefaultWSEndpoint() string {
 func (c *Config) NodeName() string {
 	name := c.name()
 	// Backwards compatibility: previous versions used title-cased "Geth", keep that.
-	if name == "bcw" || name == "bcw-testnet" {
+	if name == "pulsar" || name == "pulsar-testnet" {
 		name = "Geth"
 	}
 	if c.UserIdent != "" {
@@ -253,7 +253,7 @@ func (c *Config) name() string {
 	return c.Name
 }
 
-// These resources are resolved differently for "bcw" instances.
+// These resources are resolved differently for "pulsar" instances.
 var isOldGethResource = map[string]bool{
 	"chaindata":          true,
 	"nodes":              true,
@@ -271,10 +271,10 @@ func (c *Config) resolvePath(path string) string {
 		return ""
 	}
 	// Backwards-compatibility: ensure that data directory files created
-	// by bcw 1.4 are used if they exist.
-	if c.name() == "bcw" && isOldGethResource[path] {
+	// by pulsar 1.4 are used if they exist.
+	if c.name() == "pulsar" && isOldGethResource[path] {
 		oldpath := ""
-		if c.Name == "bcw" {
+		if c.Name == "pulsar" {
 			oldpath = filepath.Join(c.DataDir, path)
 		}
 		if oldpath != "" && common.FileExist(oldpath) {
