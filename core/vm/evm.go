@@ -27,7 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
+var DelegateMinnerMinBalance = new(big.Int).Mul(big.NewInt(1000000), big.NewInt(1e18))
 
 // Message represents a message sent to a contract.
 
@@ -446,14 +446,13 @@ func (evm *EVM) DsPowCall(caller ContractRef, addr common.Address, input []byte,
 		snapshot = evm.StateDB.Snapshot()
 	)
 
-	switch msg.TxType() {
+	switch msg.TxType(){
 	case params.DelegateMinerRegisterTx:
 		//register to be a delegateMiner
 		accoutBalance := evm.StateDB.GetBalance(msg.From())
 		if accoutBalance.Cmp(DelegateMinnerMinBalance) < 0 {
 			return nil, gas, ErrNotEnoughBalanceRegisterDelegateMiner
 		}
-
 		fee, _ := msg.Fee()
 		err = evm.StateDB.SetAccountType(msg.From(), common.DelegateMiner, fee)
 	case params.DelegateStakesTx:

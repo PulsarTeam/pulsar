@@ -427,8 +427,8 @@ const tmplSourceJava = `
 
 package {{.Package}};
 
-import org.ethereum.bcw.*;
-import org.ethereum.bcw.internal.*;
+import org.ethereum.pulsar.*;
+import org.ethereum.pulsar.internal.*;
 
 {{range $contract := .Contracts}}
 	public class {{.Type}} {
