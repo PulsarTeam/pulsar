@@ -39,8 +39,8 @@ var (
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
-		CheckPoint1Block:    big.NewInt(53436),
-		CheckPoint1Hash:     common.HexToHash("0x7b4b40594f5d91e5a2ec4a798bee91def46b35db33f5800445543ebef436eb65"),
+		CheckPoint1Block:    big.NewInt(57250),
+		CheckPoint1Hash:     common.HexToHash("0xe5920f389cb5c2bbb07cc66355f3076b1135a69979ef5937a3f307dbc03ca9df"),
 		ConstantinopleBlock: nil,
 		Ethash:              new(EthashConfig),
 	}
