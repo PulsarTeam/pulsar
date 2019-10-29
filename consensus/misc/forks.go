@@ -38,6 +38,13 @@ func VerifyForkHashes(config *params.ChainConfig, header *types.Header, uncle bo
 			return fmt.Errorf("homestead gas reprice fork: have 0x%x, want 0x%x", header.Hash(), config.EIP150Hash)
 		}
 	}
+
+	if config.CheckPoint1Block != nil && config.CheckPoint1Block.Cmp(header.Number) == 0 {
+		if config.CheckPoint1Hash != (common.Hash{}) && config.CheckPoint1Hash != header.Hash() {
+			return fmt.Errorf("checkpoint1 gas reprice  fork: have 0x%x, want 0x%x", header.Hash(), config.CheckPoint1Hash)
+		}
+	}
+
 	// All ok, return
 	return nil
 }
